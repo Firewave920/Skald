@@ -1,0 +1,18 @@
+# Node
+node_modules/
+dist/
+.pnpm-store/
+
+# Rust
+src-tauri/target/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Tauri
+src-tauri/WixTools/
