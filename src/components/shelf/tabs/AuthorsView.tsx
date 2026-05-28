@@ -1,5 +1,5 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
-import { LIBRARY, parseDur } from '../../../state/onyx';
+import { bookTitle, bookAuthor, bookGenre, bookDurSecs } from '../../../state/onyx';
 import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
 import CoverMosaic from '../CoverMosaic';
@@ -20,9 +20,10 @@ export interface AuthorsViewProps {
 
 export default function AuthorsView({ st, inline = false }: AuthorsViewProps) {
   const groups: Record<string, LibraryItem[]> = {};
-  for (const b of LIBRARY) {
-    if (!groups[b.author]) groups[b.author] = [];
-    groups[b.author].push(b);
+  for (const b of st.library) {
+    const author = bookAuthor(b);
+    if (!groups[author]) groups[author] = [];
+    groups[author].push(b);
   }
 
   let list: AuthorGroup[] = Object.entries(groups)
@@ -33,7 +34,7 @@ export default function AuthorsView({ st, inline = false }: AuthorsViewProps) {
     const q = st.search.toLowerCase();
     list = list.filter(a =>
       a.name.toLowerCase().includes(q) ||
-      a.books.some(b => b.title.toLowerCase().includes(q))
+      a.books.some(b => bookTitle(b).toLowerCase().includes(q))
     );
   }
 
@@ -48,7 +49,7 @@ export default function AuthorsView({ st, inline = false }: AuthorsViewProps) {
       {st.libraryView === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 22 }}>
           {list.map(a => {
-            const genres = [...new Set(a.books.map(b => b.genre).filter(Boolean))];
+            const genres = [...new Set(a.books.map(b => bookGenre(b)).filter(Boolean))];
             return (
               <button key={a.name} onClick={() => open(a.name)} className="onyx-poster" style={posterTile()}>
                 <CoverMosaic books={a.books} />
@@ -79,7 +80,7 @@ export default function AuthorsView({ st, inline = false }: AuthorsViewProps) {
             sort: {
               name:   a.name,
               titles: a.books.length,
-              dur:    a.books.reduce((acc, b) => acc + parseDur(b.dur), 0),
+              dur:    a.books.reduce((acc, b) => acc + bookDurSecs(b), 0),
             },
             cells: {
               name:   <div style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 500 }}>{a.name}</div>,

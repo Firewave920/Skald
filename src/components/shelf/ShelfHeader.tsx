@@ -1,5 +1,7 @@
 import type { OnyxState } from '../../state/onyx';
-import { LIBRARY } from '../../state/onyx';
+import {
+  bookTitle, bookAuthor, bookSeries, bookNarrator, bookProgress,
+} from '../../state/onyx';
 import ViewModeToggle from './ViewModeToggle';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
@@ -35,45 +37,45 @@ export interface ShelfHeaderProps {
 }
 
 export default function ShelfHeader({ st }: ShelfHeaderProps) {
-  // Compute filtered + shelfBooks counts for the library-tab subtitle.
-  const filtered = LIBRARY.filter(b => {
+  const filtered = st.library.filter(b => {
     if (st.contextFilter) {
       const { kind, value, bookIds } = st.contextFilter;
-      if (kind === 'series'     && seriesNameOf(b.series) !== value)         return false;
-      if (kind === 'author'     && b.author   !== value)                      return false;
-      if (kind === 'narrator'   && b.narrator !== value)                      return false;
-      if (kind === 'collection' && !(bookIds ?? []).includes(b.id))           return false;
+      if (kind === 'series'     && seriesNameOf(bookSeries(b)) !== value)       return false;
+      if (kind === 'author'     && bookAuthor(b)   !== value)                    return false;
+      if (kind === 'narrator'   && bookNarrator(b) !== value)                    return false;
+      if (kind === 'collection' && !(bookIds ?? []).includes(b.id))              return false;
     }
-    if (!st.showFinished && b.progress >= 0.98 && st.filter !== 'finished')  return false;
-    if (st.filter === 'reading'  && !b.progress)   return false;
-    if (st.filter === 'unread'   &&  b.progress)   return false;
-    if (st.filter === 'finished' &&  b.progress < 0.98) return false;
+    const prog = bookProgress(b, st.mediaProgress);
+    if (!st.showFinished && prog >= 0.98 && st.filter !== 'finished') return false;
+    if (st.filter === 'reading'  && !prog)      return false;
+    if (st.filter === 'unread'   &&  prog)      return false;
+    if (st.filter === 'finished' &&  prog < 0.98) return false;
     if (st.search) {
       const q = st.search.toLowerCase();
       if (
-        !b.title.toLowerCase().includes(q) &&
-        !b.author.toLowerCase().includes(q) &&
-        !(b.series || '').toLowerCase().includes(q)
+        !bookTitle(b).toLowerCase().includes(q) &&
+        !bookAuthor(b).toLowerCase().includes(q) &&
+        !(bookSeries(b) || '').toLowerCase().includes(q)
       ) return false;
     }
     return true;
   });
 
   if (st.contextFilter?.kind === 'series') {
-    filtered.sort((a, b) => seriesVolOf(a.series) - seriesVolOf(b.series));
+    filtered.sort((a, b) => seriesVolOf(bookSeries(a)) - seriesVolOf(bookSeries(b)));
   } else if (st.librarySort === 'title') {
-    filtered.sort((a, b) => a.title.localeCompare(b.title));
+    filtered.sort((a, b) => bookTitle(a).localeCompare(bookTitle(b)));
   } else if (st.librarySort === 'author') {
-    filtered.sort((a, b) => a.author.localeCompare(b.author) || a.title.localeCompare(b.title));
+    filtered.sort((a, b) => bookAuthor(a).localeCompare(bookAuthor(b)) || bookTitle(a).localeCompare(bookTitle(b)));
   } else if (st.librarySort === 'most-listened') {
-    filtered.sort((a, b) => (b.progress || 0) - (a.progress || 0));
+    filtered.sort((a, b) => bookProgress(b, st.mediaProgress) - bookProgress(a, st.mediaProgress));
   }
 
   let shelfCount = filtered.length;
   if (st.groupBySeries && st.contextFilter?.kind !== 'series') {
     const seen = new Set<string>();
     shelfCount = filtered.filter(b => {
-      const name = seriesNameOf(b.series);
+      const name = seriesNameOf(bookSeries(b));
       if (!name) return true;
       if (seen.has(name)) return false;
       seen.add(name);
@@ -100,7 +102,6 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '8px 4px 14px' }}>
 
-      {/* Left — title + count + context filter pill (library tab only) */}
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, minWidth: 0, flexShrink: 0 }}>
         {isLibrary && (
           <>
@@ -126,7 +127,6 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
         )}
       </div>
 
-      {/* Center — ShelfTabs (always visible) */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0 }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 4, padding: '4px',
@@ -150,7 +150,6 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
         </div>
       </div>
 
-      {/* Right — ViewModeToggle + filter pills (library tab only) */}
       {isLibrary && (
         <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
           <div style={{ marginRight: 6 }}>

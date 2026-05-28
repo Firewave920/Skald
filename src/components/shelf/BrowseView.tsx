@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import type { OnyxState } from '../../state/onyx';
-import { parseDur } from '../../state/onyx';
+import { bookDurSecs } from '../../state/onyx';
 import type { LibraryItem } from '../../state/onyx';
 import TopNav from '../chrome/TopNav';
 import ViewModeToggle from './ViewModeToggle';
@@ -87,7 +87,7 @@ export function browseTile(): CSSProperties {
 
 export function seriesTotalDur(books: LibraryItem[]): string {
   let total = 0;
-  for (const b of books) total += parseDur(b.dur);
+  for (const b of books) total += bookDurSecs(b);
   const h = Math.floor(total / 3600);
   return `${h}H`;
 }

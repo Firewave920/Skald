@@ -1,5 +1,8 @@
 import type { OnyxState } from '../state/onyx';
-import { LIBRARY, CHAPTERS, chapterAt, fmtRemaining, parseDur } from '../state/onyx';
+import {
+  CHAPTERS, chapterAt, fmtRemaining,
+  bookTitle, bookAuthor, bookSeries, bookNarrator, bookProgress, bookCurrentTime,
+} from '../state/onyx';
 import Cover from '../components/Cover';
 import Icon from '../components/Icon';
 import Section from '../components/shelf/Section';
@@ -20,19 +23,21 @@ export interface HomeProps {
 }
 
 export default function Home({ st }: HomeProps) {
-  const focus  = st.currentBook;
-  const inProg = LIBRARY.filter(b => b.progress > 0);
-  const recent = LIBRARY.slice(0, 6);
+  const focus = st.currentBook;
+  if (!focus) return null;
 
-  const focusProgress = st.position / st.bookSecs;
+  const inProg = st.library.filter(b => bookProgress(b, st.mediaProgress) > 0);
+  const recent = st.library.slice(0, 6);
+
+  const focusProgress = st.position / (st.bookSecs || 1);
   const remaining     = st.bookSecs - st.position;
   const { idx: chIdx } = chapterAt(CHAPTERS, st.position);
 
   const openBook = (id: string) => {
     st.setCurrentBookId(id);
     if (id !== st.currentBookId) {
-      const b = LIBRARY.find(x => x.id === id);
-      st.setPosition((b?.progress ?? 0) * parseDur(b?.dur ?? '0h 0m'));
+      const b = st.library.find(x => x.id === id);
+      if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
     }
     st.setScreen('player');
   };
@@ -40,13 +45,11 @@ export default function Home({ st }: HomeProps) {
   return (
     <div style={{ flex: 1, overflow: 'auto', padding: '0 24px 24px', minHeight: 0 }}>
 
-      {/* Page header */}
       <div style={{ padding: '12px 4px 20px' }}>
         <div style={{ fontFamily: SERIF, fontSize: 30, fontWeight: 500, letterSpacing: '-0.015em' }}>Welcome back, Jordan</div>
         <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 4 }}>Pick up where you left off, or start something new.</div>
       </div>
 
-      {/* Hero — Continue listening */}
       <div style={{
         display: 'flex', gap: 28, padding: 28,
         background: 'var(--onyx-glass)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 16,
@@ -60,9 +63,9 @@ export default function Home({ st }: HomeProps) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.18em', color: 'var(--onyx-text-mute)', textTransform: 'uppercase' }}>Continue listening</div>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-accent)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 12 }}>{focus.series}</div>
-          <div style={{ fontFamily: SERIF, fontSize: 38, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.015em', marginTop: 4 }}>{focus.title}</div>
-          <div style={{ fontSize: 13.5, color: 'var(--onyx-text-dim)', marginTop: 6 }}>by {focus.author} · narrated by {focus.narrator}</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-accent)', letterSpacing: '0.12em', textTransform: 'uppercase', marginTop: 12 }}>{bookSeries(focus)}</div>
+          <div style={{ fontFamily: SERIF, fontSize: 38, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.015em', marginTop: 4 }}>{bookTitle(focus)}</div>
+          <div style={{ fontSize: 13.5, color: 'var(--onyx-text-dim)', marginTop: 6 }}>by {bookAuthor(focus)} · narrated by {bookNarrator(focus)}</div>
           <div style={{ marginTop: 16, height: 3, background: 'rgba(255,255,255,0.1)', borderRadius: 2, overflow: 'hidden', maxWidth: 320 }}>
             <div style={{ width: `${focusProgress * 100}%`, height: '100%', background: 'var(--onyx-accent)' }} />
           </div>
@@ -86,7 +89,6 @@ export default function Home({ st }: HomeProps) {
         </div>
       </div>
 
-      {/* Other books in progress */}
       {inProg.length > 1 && (
         <Section title="Other books in progress">
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 14 }}>
@@ -97,20 +99,18 @@ export default function Home({ st }: HomeProps) {
         </Section>
       )}
 
-      {/* Recently added */}
       <Section title="Recently added">
         <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
           {recent.map(b => (
             <button key={b.id} onClick={() => openBook(b.id)} style={{ background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', color: 'inherit', width: 120 }}>
               <Cover item={b} size={120} />
-              <div style={{ marginTop: 7, fontSize: 12, fontWeight: 500, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>
-              <div style={{ marginTop: 1, fontSize: 11, color: 'var(--onyx-text-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.author}</div>
+              <div style={{ marginTop: 7, fontSize: 12, fontWeight: 500, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bookTitle(b)}</div>
+              <div style={{ marginTop: 1, fontSize: 11, color: 'var(--onyx-text-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bookAuthor(b)}</div>
             </button>
           ))}
         </div>
       </Section>
 
-      {/* Stats */}
       <Section title="Stats">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
           {STATS.map(s => (

@@ -16,7 +16,10 @@
         "width": 1280,
         "height": 800,
         "minWidth": 1024,
-        "minHeight": 640
+        "minHeight": 640,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true
       }
     ],
     "security": {
@@ -32,6 +35,10 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "resources": {
+      "vlc-dist/libvlc.dll": "libvlc.dll",
+      "vlc-dist/libvlccore.dll": "libvlccore.dll"
+    }
   }
 }

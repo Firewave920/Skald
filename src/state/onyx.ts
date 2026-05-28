@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import type { LibraryItem, MediaProgress } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, saveToken } from '../api/abs';
 import {
   applyTheme,
   ONYX_DARK_BASE,
@@ -6,22 +9,11 @@ import {
   Theme,
 } from './theme';
 
-// ─── Interfaces ───────────────────────────────────────────────────────────────
+// ─── Re-exported API types ────────────────────────────────────────────────────
 
-export interface LibraryItem {
-  id: string;
-  title: string;
-  author: string;
-  series?: string;
-  dur: string;
-  progress: number;
-  narrator: string;
-  genre: string;
-  chapters?: number;
-  palette: [string, string, string];
-  tpl: 'split' | 'rule' | 'numeral' | 'pattern';
-  synopsis: string;
-}
+export type { LibraryItem, MediaProgress };
+
+// ─── Local-only interfaces ────────────────────────────────────────────────────
 
 export interface Chapter {
   n: number;
@@ -56,10 +48,143 @@ export interface ChapterPosition {
   chapter: Chapter;
 }
 
+// ─── Display helpers for real LibraryItem ─────────────────────────────────────
+
+export function bookTitle(b: LibraryItem): string {
+  return b.media.metadata.title ?? b.id;
+}
+
+export function bookAuthor(b: LibraryItem): string {
+  const a = b.media.metadata.authorName;
+  if (!a) return 'Unknown Author';
+  if (typeof a === 'string') return a;
+  if (Array.isArray(a)) return a.map(x => x.name).join(', ');
+  return a.name;
+}
+
+export function bookSeries(b: LibraryItem): string | undefined {
+  return b.media.metadata.seriesName ?? undefined;
+}
+
+export function bookNarrator(b: LibraryItem): string {
+  return b.media.metadata.narratorName ?? '';
+}
+
+export function bookGenre(b: LibraryItem): string {
+  return b.media.metadata.genres[0] ?? '';
+}
+
+export function bookDurSecs(b: LibraryItem): number {
+  return b.media.duration;
+}
+
+export function bookDur(b: LibraryItem): string {
+  return fmtRemaining(b.media.duration);
+}
+
+export function bookProgress(b: LibraryItem, mediaProgress: MediaProgress[]): number {
+  const mp = mediaProgress.find(p => p.libraryItemId === b.id);
+  return mp?.progress ?? 0;
+}
+
+export function bookCurrentTime(b: LibraryItem, mediaProgress: MediaProgress[]): number {
+  const mp = mediaProgress.find(p => p.libraryItemId === b.id);
+  return mp?.currentTime ?? 0;
+}
+
+export function bookSynopsis(_b: LibraryItem): string | undefined {
+  return undefined;
+}
+
+const PALETTES: [string, string, string][] = [
+  ['#0a0a0e', '#2a2a36', '#c9a35a'],
+  ['#1a1612', '#3a2f24', '#d4a14a'],
+  ['#3d4a5c', '#9eb4c4', '#f1e8d8'],
+  ['#2a0808', '#7a1a1a', '#ffd84a'],
+  ['#3a2418', '#c4642a', '#f0d088'],
+  ['#1a0a0a', '#7a1a2a', '#f8d850'],
+  ['#0a1a18', '#1a6a5a', '#9ad8c8'],
+  ['#2a1a1a', '#7a2a2a', '#f0a868'],
+];
+const TPLS: ('split' | 'rule' | 'numeral' | 'pattern')[] = ['split', 'rule', 'numeral', 'pattern'];
+
+function hashId(id: string): number {
+  let h = 0;
+  for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h;
+}
+
+export function bookPalette(b: LibraryItem): [string, string, string] {
+  return PALETTES[hashId(b.id) % PALETTES.length];
+}
+
+export function bookTpl(b: LibraryItem): 'split' | 'rule' | 'numeral' | 'pattern' {
+  return TPLS[(hashId(b.id) >> 2) % TPLS.length];
+}
+
+// ─── Static mock data (chapters, bookmarks, devices) ─────────────────────────
+
+export const CHAPTERS: Chapter[] = [
+  { n: 1,  t: 'A Letter from the South',   dur: 2810 },
+  { n: 2,  t: 'The Inn at Harndon',         dur: 3014 },
+  { n: 3,  t: 'On the Road',               dur: 2780 },
+  { n: 4,  t: 'The First Skirmish',         dur: 3340 },
+  { n: 5,  t: 'Captain and Squire',         dur: 2950 },
+  { n: 6,  t: 'Pilgrims and Saints',        dur: 3120 },
+  { n: 7,  t: 'A Council of Knights',       dur: 2890 },
+  { n: 8,  t: 'Through the Forest',         dur: 3210 },
+  { n: 9,  t: 'The River Crossing',         dur: 2670 },
+  { n: 10, t: 'An Unexpected Embassy',      dur: 3450 },
+  { n: 11, t: 'The Wolves of Adrian',       dur: 3080 },
+  { n: 12, t: 'A Question of Honor',        dur: 3134 },
+  { n: 13, t: 'Through the Mist',           dur: 4462 },
+  { n: 14, t: 'The Long March Begins',      dur: 5887 },
+  { n: 15, t: 'Banners over Liviapolis',    dur: 3768 },
+  { n: 16, t: 'A Council of Wolves',        dur: 2853 },
+  { n: 17, t: "The Emperor's Gambit",       dur: 4869 },
+  { n: 18, t: 'Cold Iron',                  dur: 3527 },
+];
+
+export const BOOKMARKS: Bookmark[] = [
+  { ts: '0:38:17', secs: 38 * 60 + 17,             ch: 14, label: 'Cairn imagery again',               date: 'Today'     },
+  { ts: '1:12:04', secs: 60 * 60 + 12 * 60 + 4,   ch: 13, label: '"half a salute, half a question"',  date: 'Yesterday' },
+  { ts: '0:21:47', secs: 21 * 60 + 47,             ch: 11, label: 'First mention of the wolves',       date: 'Mon'       },
+];
+
+export const AUDIO_DEVICES: AudioDevice[] = [
+  { id: 'sennheiser', name: 'Sennheiser HD 660S',      sub: 'USB · 48 kHz · 24-bit',      icon: 'headphones' },
+  { id: 'system',     name: 'System default',           sub: 'Realtek Audio',              icon: 'speaker'    },
+  { id: 'sonos',      name: 'Living Room — Sonos',      sub: 'AirPlay · 192.168.1.42',     icon: 'airplay'    },
+  { id: 'airpods',    name: 'AirPods Pro',              sub: 'Bluetooth · AAC',            icon: 'bluetooth'  },
+  { id: 'monitors',   name: 'Studio Monitors',          sub: 'Focusrite Scarlett 2i2',     icon: 'monitor'    },
+];
+
+export const SPEEDS = ['0.8', '1.0', '1.25', '1.5', '2.0'];
+
+// ─── OnyxState interface ──────────────────────────────────────────────────────
+
 export interface OnyxState {
+  // Server connection
+  serverUrl: string;
+  setServerUrl: (url: string) => void;
+  sessionId: string;
+  setSessionId: (id: string) => void;
+  username: string;
+  setUsername: (u: string) => void;
+  password: string;
+  setPassword: (p: string) => void;
+  userId: string;
+  setUserId: (id: string) => void;
+  authToken: string;
+  setAuthToken: (token: string) => void;
+  // Library
+  library: LibraryItem[];
+  libraryLoading: boolean;
+  mediaProgress: MediaProgress[];
+  // Playback
   screen: string;
   setScreen: (screen: string) => void;
-  currentBook: LibraryItem;
+  currentBook: LibraryItem | undefined;
   currentBookId: string;
   setCurrentBookId: (id: string) => void;
   playing: boolean;
@@ -113,84 +238,6 @@ export interface OnyxState {
   setScale: (scale: number) => void;
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-
-export const LIBRARY: LibraryItem[] = [
-  { id: 'cold-iron', title: 'Cold Iron', author: 'Miles Cameron', series: 'Masters & Mages · 1', dur: '24h 12m', progress: 0.42, narrator: 'Mark Meadows', genre: 'Epic Fantasy', chapters: 38, palette: ['#0a0a0e', '#2a2a36', '#c9a35a'], tpl: 'split',
-    synopsis: "Aranthur is a student, a swordsman, and an accidental hero — caught between a war he doesn't understand and a magic he can barely control. A sweeping coming-of-age fantasy from a historian who actually knows how a sword fight ends." },
-  { id: 'fell-sword', title: 'The Fell Sword', author: 'Miles Cameron', series: 'Traitor Son · 2', dur: '32h 04m', progress: 0.18, narrator: 'Mark Meadows', genre: 'Epic Fantasy', chapters: 44, palette: ['#1a1612', '#3a2f24', '#d4a14a'], tpl: 'rule',
-    synopsis: "The Red Knight's company rides east, into the steppes and into someone else's war. Cameron's grimy, glittering medieval fantasy gets bigger, weirder, and far more political in its second volume." },
-  { id: 'sam', title: 'Sufficiently Advanced Magic', author: 'Andrew Rowe', series: 'Arcane Ascension · 1', dur: '27h 20m', progress: 0.71, narrator: 'Nick Podehl', genre: 'Progression Fantasy', chapters: 33, palette: ['#3d4a5c', '#9eb4c4', '#f1e8d8'], tpl: 'numeral',
-    synopsis: "Corin Cadence enters the Serpent Spire — a tower of trials that grants a single magical attunement to those who survive. He wants answers about his missing brother. The tower wants something else entirely." },
-  { id: 'burning-white', title: 'The Burning White', author: 'Brent Weeks', series: 'Lightbringer · 5', dur: '37h 51m', progress: 0, narrator: 'Simon Vance', genre: 'Epic Fantasy', palette: ['#2a0808', '#7a1a1a', '#ffd84a'], tpl: 'split',
-    synopsis: "The conclusion of Lightbringer. Empires fall, gods stir, and Kip Guile gets one last impossible task. Weeks closes the saga with everything cranked: betrayal, theology, and a great deal of color magic." },
-  { id: 'parade', title: 'A Parade of Horribles', author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 7', dur: '24h 02m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#3a2418', '#c4642a', '#f0d088'], tpl: 'pattern',
-    synopsis: "Carl and Princess Donut hit the seventh floor and the producers of the dungeon are running out of patience. The series' sharpest satire yet — a deadly carnival of corporate cruelty and small kindnesses." },
-  { id: 'inevitable', title: 'This Inevitable Ruin', author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 6', dur: '22h 41m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#2a1a0a', '#a83a18', '#f4c860'], tpl: 'split',
-    synopsis: "PvP arrives on the sixth floor and the survivors of the dungeon turn on each other. Carl tries to hold a fragile alliance together while the system invents new ways to make that impossible." },
-  { id: 'bedlam', title: 'The Eye of the Bedlam Bride', author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 5', dur: '24h 18m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#1a1a2a', '#5a4a8a', '#e8d460'], tpl: 'rule',
-    synopsis: "A wedding, an heirloom, and a fifth floor full of consequences. The Bedlam Bride wants something Carl has — and the dungeon wants to watch them all dance for it." },
-  { id: 'butcher', title: "The Butcher's Masquerade", author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 4', dur: '23h 50m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#4a1a1a', '#a02828', '#f0e0a0'], tpl: 'numeral',
-    synopsis: "The Hunting Grounds open on the fourth floor — a season of teams, ambushes, and lavish, televised bloodshed. Carl learns who really watches the dungeon, and the cost of being watched back." },
-  { id: 'feral', title: 'The Gate of the Feral Gods', author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 3', dur: '20h 15m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#2a1a0a', '#8a3a18', '#f0c860'], tpl: 'split',
-    synopsis: "Snow, gods, and a city that doesn't want to be saved. The third floor lifts the lid on what the dungeon really is, and gives Carl a glimpse of who's profiting from it." },
-  { id: 'anarchist', title: "The Dungeon Anarchist's Cookbook", author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 2', dur: '19h 38m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#0a1a2a', '#1a5a8a', '#f4e088'], tpl: 'pattern',
-    synopsis: "A subway turned slaughterhouse, a rebellion you weren't invited to, and a cat with opinions about explosives. Carl & Donut get political." },
-  { id: 'doomsday', title: "Carl's Doomsday Scenario", author: 'Matt Dinniman', series: 'Dungeon Crawler Carl · 1', dur: '14h 12m', progress: 0, narrator: 'Jeff Hays', genre: 'LitRPG', palette: ['#1a0a0a', '#7a1a2a', '#f8d850'], tpl: 'rule',
-    synopsis: "Earth's buildings come down. Carl, his ex-girlfriend's cat, and a cosmic game show are all that's left. The first floor of a dungeon that bills itself as the greatest reality entertainment in the galaxy." },
-  { id: 'black-prism', title: 'The Black Prism', author: 'Brent Weeks', series: 'Lightbringer · 1', dur: '23h 36m', progress: 0, narrator: 'Simon Vance', genre: 'Epic Fantasy', palette: ['#0a1a18', '#1a6a5a', '#9ad8c8'], tpl: 'split',
-    synopsis: "Gavin Guile is the Prism — the most powerful drafter alive, and the man who keeps the Seven Satrapies from tearing themselves apart. He has five great purposes, five years to live, and a son he never knew." },
-  { id: 'broken-eye', title: 'The Broken Eye', author: 'Brent Weeks', series: 'Lightbringer · 3', dur: '32h 04m', progress: 0, narrator: 'Simon Vance', genre: 'Epic Fantasy', palette: ['#3a1a08', '#a04828', '#f0c878'], tpl: 'numeral',
-    synopsis: "Gavin loses his colors. Kip gets one. An assassins' guild long thought dead crawls back to the surface, and the Chromeria's neat theology starts coming apart at the seams." },
-  { id: 'blood-mirror', title: 'The Blood Mirror', author: 'Brent Weeks', series: 'Lightbringer · 4', dur: '30h 17m', progress: 0, narrator: 'Simon Vance', genre: 'Epic Fantasy', palette: ['#0a0828', '#1a1a6a', '#a8b8f0'], tpl: 'split',
-    synopsis: "A White King is rising. Old gods are listed in the kill order. Karris becomes White, and Gavin discovers the bottom of the world." },
-  { id: 'blinding', title: 'The Blinding Knife', author: 'Brent Weeks', series: 'Lightbringer · 2', dur: '30h 36m', progress: 0, narrator: 'Simon Vance', genre: 'Epic Fantasy', palette: ['#1a1a28', '#3a3a4a', '#e84a4a'], tpl: 'rule',
-    synopsis: "Gavin Guile only has four years left to live, and a war on his hands. Kip Guile only wants to survive the Blackguard tryouts. Neither will get what they bargained for." },
-  { id: 'darkdawn', title: 'Darkdawn', author: 'Jay Kristoff', series: 'Nevernight · 3', dur: '21h 04m', progress: 0, narrator: 'Holter Graham', genre: 'Grimdark', palette: ['#0a0a0a', '#2a2a2a', '#c8b888'], tpl: 'pattern',
-    synopsis: "Mia Corvere's vengeance comes to its blood-soaked finale. Kristoff's footnotes get filthier, his prose more luxurious, and his body count climbs to the obscene." },
-  { id: 'light-falls', title: 'The Light of All That Falls', author: 'James Islington', series: 'Licanius · 3', dur: '32h 12m', progress: 0, narrator: 'Michael Kramer', genre: 'Epic Fantasy', palette: ['#2a1a1a', '#7a2a2a', '#f0a868'], tpl: 'split',
-    synopsis: "Time, prophecy, and the long-game cost of every choice come due. Islington pays off the puzzle-box of the trilogy with patience and one of the cleanest closings in modern epic fantasy." },
-  { id: 'emberdark', title: 'Isles of the Emberdark', author: 'Brandon Sanderson', series: 'Cosmere', dur: '21h 47m', progress: 0, narrator: 'Michael Kramer', genre: 'Epic Fantasy', palette: ['#1a0808', '#3a1a0a', '#f0c050'], tpl: 'numeral',
-    synopsis: "A standalone Cosmere voyage to the edge of the dark. Sanderson at his most adventure-pulp — sky-ships, ancient threats, and a magic system that doesn't quite play by the rules you know." },
-];
-
-export const CHAPTERS: Chapter[] = [
-  { n: 1,  t: 'A Letter from the South',   dur: 2810 },
-  { n: 2,  t: 'The Inn at Harndon',         dur: 3014 },
-  { n: 3,  t: 'On the Road',               dur: 2780 },
-  { n: 4,  t: 'The First Skirmish',         dur: 3340 },
-  { n: 5,  t: 'Captain and Squire',         dur: 2950 },
-  { n: 6,  t: 'Pilgrims and Saints',        dur: 3120 },
-  { n: 7,  t: 'A Council of Knights',       dur: 2890 },
-  { n: 8,  t: 'Through the Forest',         dur: 3210 },
-  { n: 9,  t: 'The River Crossing',         dur: 2670 },
-  { n: 10, t: 'An Unexpected Embassy',      dur: 3450 },
-  { n: 11, t: 'The Wolves of Adrian',       dur: 3080 },
-  { n: 12, t: 'A Question of Honor',        dur: 3134 },
-  { n: 13, t: 'Through the Mist',           dur: 4462 },
-  { n: 14, t: 'The Long March Begins',      dur: 5887 },
-  { n: 15, t: 'Banners over Liviapolis',    dur: 3768 },
-  { n: 16, t: 'A Council of Wolves',        dur: 2853 },
-  { n: 17, t: "The Emperor's Gambit",       dur: 4869 },
-  { n: 18, t: 'Cold Iron',                  dur: 3527 },
-];
-
-export const BOOKMARKS: Bookmark[] = [
-  { ts: '0:38:17', secs: 38 * 60 + 17,             ch: 14, label: 'Cairn imagery again',               date: 'Today'     },
-  { ts: '1:12:04', secs: 60 * 60 + 12 * 60 + 4,   ch: 13, label: '"half a salute, half a question"',  date: 'Yesterday' },
-  { ts: '0:21:47', secs: 21 * 60 + 47,             ch: 11, label: 'First mention of the wolves',       date: 'Mon'       },
-];
-
-export const AUDIO_DEVICES: AudioDevice[] = [
-  { id: 'sennheiser', name: 'Sennheiser HD 660S',      sub: 'USB · 48 kHz · 24-bit',      icon: 'headphones' },
-  { id: 'system',     name: 'System default',           sub: 'Realtek Audio',              icon: 'speaker'    },
-  { id: 'sonos',      name: 'Living Room — Sonos',      sub: 'AirPlay · 192.168.1.42',     icon: 'airplay'    },
-  { id: 'airpods',    name: 'AirPods Pro',              sub: 'Bluetooth · AAC',            icon: 'bluetooth'  },
-  { id: 'monitors',   name: 'Studio Monitors',          sub: 'Focusrite Scarlett 2i2',     icon: 'monitor'    },
-];
-
-export const SPEEDS = ['0.8', '1.0', '1.25', '1.5', '2.0'];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 export function parseDur(str: string): number {
@@ -216,10 +263,6 @@ export function fmtRemaining(secs: number): string {
   return `${m}m`;
 }
 
-// Returns the chapter containing `pos` plus the local offset within that chapter.
-// Note: the task spec lists the return type as Chapter, but the prototype returns
-// { idx, local, chapter } — the richer form is preserved so component code can
-// read idx and local without a second lookup.
 export function chapterAt(chapters: Chapter[], pos: number): ChapterPosition {
   let acc = 0;
   for (let i = 0; i < chapters.length; i++) {
@@ -232,11 +275,6 @@ export function chapterAt(chapters: Chapter[], pos: number): ChapterPosition {
   return { idx: chapters.length - 1, local: last.dur, chapter: last };
 }
 
-// Returns the start time (in seconds) of the chapter with the given index.
-// The task spec lists the parameter as `title: string`; the prototype uses a
-// numeric index. The index form is kept here because every call site in the
-// prototype passes an index, and a title-based lookup would require an extra
-// find() at every call site.
 export function chapterStart(chapters: Chapter[], idx: number): number {
   let acc = 0;
   for (let i = 0; i < idx; i++) acc += chapters[i].dur;
@@ -259,13 +297,91 @@ function resolveToBase(mode: string): Theme {
 const DEFAULT_ACCENT = '#d4a64a';
 
 export function useOnyxState(): OnyxState {
-  const [screen, setScreen] = useState('library');
-  const [currentBookId, setCurrentBookId] = useState('cold-iron');
-  const [playing, setPlaying] = useState(false);
-
-  const [position, setPosition] = useState(
-    () => LIBRARY[0].progress * (24 * 3600 + 12 * 60),
+  // ── Server connection (localStorage-persisted) ──────────────────────────────
+  const [serverUrl, setServerUrlRaw] = useState(
+    () => localStorage.getItem('skald.serverUrl') ?? '',
   );
+  const [sessionId, setSessionIdRaw] = useState(
+    () => localStorage.getItem('skald.sessionId') ?? '',
+  );
+  const [username, setUsernameRaw] = useState(
+    () => localStorage.getItem('skald.username') ?? '',
+  );
+  const [password, setPasswordRaw] = useState(
+    () => localStorage.getItem('skald.password') ?? '',
+  );
+  const [userId, setUserIdRaw] = useState(
+    () => localStorage.getItem('skald.userId') ?? '',
+  );
+  const [authToken, setAuthTokenRaw] = useState(
+    () => localStorage.getItem('skald.authToken') ?? '',
+  );
+
+  const setServerUrl = useCallback((v: string) => {
+    localStorage.setItem('skald.serverUrl', v); setServerUrlRaw(v);
+  }, []);
+  const setSessionId = useCallback((v: string) => {
+    localStorage.setItem('skald.sessionId', v); setSessionIdRaw(v);
+  }, []);
+  const setUsername = useCallback((v: string) => {
+    localStorage.setItem('skald.username', v); setUsernameRaw(v);
+  }, []);
+  const setPassword = useCallback((v: string) => {
+    localStorage.setItem('skald.password', v); setPasswordRaw(v);
+  }, []);
+  const setUserId = useCallback((v: string) => {
+    localStorage.setItem('skald.userId', v); setUserIdRaw(v);
+  }, []);
+  const setAuthToken = useCallback((v: string) => {
+    localStorage.setItem('skald.authToken', v); setAuthTokenRaw(v);
+  }, []);
+
+  // ── Library ─────────────────────────────────────────────────────────────────
+  const [library, setLibraryRaw] = useState<LibraryItem[]>([]);
+  const [libraryLoading, setLibraryLoadingRaw] = useState(
+    () => Boolean(localStorage.getItem('skald.serverUrl') && localStorage.getItem('skald.authToken')),
+  );
+  const [mediaProgress] = useState<MediaProgress[]>([]);
+
+  useEffect(() => {
+    if (!serverUrl || (!authToken && !(username && password))) {
+      setLibraryLoadingRaw(false);
+      return;
+    }
+    let cancelled = false;
+    setLibraryLoadingRaw(true);
+    (async () => {
+      try {
+        let token = authToken;
+        if (!token && username && password) {
+          const user = await login(serverUrl, username, password);
+          token = user.token;
+          setAuthToken(user.token);
+          setUserId(user.id);
+        } else {
+          await saveToken(token);
+        }
+        const libs = await fetchLibraries(serverUrl);
+        if (cancelled) return;
+        const audiobookLib = libs.find(l => l.mediaType === 'book') ?? libs[0];
+        if (!audiobookLib) { setLibraryLoadingRaw(false); return; }
+        const items = await fetchLibraryItems(serverUrl, audiobookLib.id);
+        if (cancelled) return;
+        setLibraryRaw(items);
+      } catch (e) {
+        console.error('Library fetch failed', e);
+      } finally {
+        if (!cancelled) setLibraryLoadingRaw(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [serverUrl, authToken, username, password]);
+
+  // ── Playback ─────────────────────────────────────────────────────────────────
+  const [screen, setScreen] = useState('library');
+  const [currentBookId, setCurrentBookId] = useState('');
+  const [playing, setPlaying] = useState(false);
+  const [position, setPosition] = useState(0);
   const [volume, setVolume] = useState(0.68);
   const [muted, setMuted] = useState(false);
   const [speed, setSpeed] = useState('1.25');
@@ -286,7 +402,6 @@ export function useOnyxState(): OnyxState {
     return v === null ? true : v === 'true';
   });
 
-  // Library preferences
   const [librarySort, setLibrarySortRaw] = useState(
     () => localStorage.getItem('onyx.lib.sort') ?? 'recently',
   );
@@ -358,11 +473,9 @@ export function useOnyxState(): OnyxState {
     localStorage.setItem('onyx.uiScale', String(v)); setScaleRaw(v);
   }, []);
 
-  // Refs so setters read current values without stale closures
   const accentRef = useRef(accentColor);
   const themeRef  = useRef(theme);
 
-  // Apply theme on mount; attach system-pref listener when mode is 'system'
   useEffect(() => {
     applyTheme(resolveToBase(themeRef.current), accentRef.current);
     if (themeRef.current !== 'system') return;
@@ -394,24 +507,28 @@ export function useOnyxState(): OnyxState {
     setAccentColorRaw(hex);
   }, []);
 
-  const currentBook = LIBRARY.find(b => b.id === currentBookId) ?? LIBRARY[0];
-  const bookSecs = parseDur(currentBook.dur);
-
-  // Playback tick
+  // When library first loads, seed currentBookId to the first item.
   useEffect(() => {
-    if (!playing) return;
-    const sp = parseFloat(speed);
-    const t = setInterval(() => {
-      setPosition(p => {
-        const n = p + sp;
-        if (n >= bookSecs) { setPlaying(false); return bookSecs; }
-        return n;
-      });
-    }, 1000);
-    return () => clearInterval(t);
-  }, [playing, speed, bookSecs]);
+    if (library.length > 0 && !currentBookId) {
+      setCurrentBookId(library[0].id);
+    }
+  }, [library, currentBookId]);
 
-  // Keyboard shortcuts: space=play/pause, ←/→=skip ±30s, Ctrl/⌘+K=focus search
+  const currentBook = library.find(b => b.id === currentBookId) ?? library[0];
+  const bookSecs = currentBook?.media.duration ?? 0;
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen<{ currentTime: number; duration: number; isPlaying: boolean }>(
+      'playback-tick',
+      ({ payload }) => {
+        setPosition(payload.currentTime);
+        setPlaying(payload.isPlaying);
+      },
+    ).then(fn => { unlisten = fn; });
+    return () => { unlisten?.(); };
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
@@ -428,6 +545,13 @@ export function useOnyxState(): OnyxState {
   }, [bookSecs]);
 
   return {
+    serverUrl, setServerUrl,
+    sessionId, setSessionId,
+    username, setUsername,
+    password, setPassword,
+    userId, setUserId,
+    authToken, setAuthToken,
+    library, libraryLoading, mediaProgress,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId,
     playing, setPlaying,

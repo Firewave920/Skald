@@ -26,7 +26,6 @@ export default function App() {
     }}>
       <OnyxWash isDark={isDark} />
       <Titlebar isDark={isDark} />
-      {/* Content area — sits below the 44px absolute Titlebar */}
       <div style={{
         flex: 1,
         display: 'flex',
@@ -36,11 +35,19 @@ export default function App() {
         zIndex: 1,
         minHeight: 0,
       }}>
-        {showNav && <TopNav st={st} />}
-        {st.screen === 'home'     && <Home     st={st} />}
-        {st.screen === 'library'  && <Library  st={st} />}
-        {st.screen === 'player'   && <Player   st={st} />}
-        {st.screen === 'settings' && <Settings st={st} />}
+        {st.libraryLoading ? (
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--onyx-text-mute)', fontSize: 14, fontFamily: "'JetBrains Mono', ui-monospace, monospace", letterSpacing: '0.08em' }}>
+            Loading library…
+          </div>
+        ) : (
+          <>
+            {showNav && <TopNav st={st} />}
+            {st.screen === 'home'     && <Home     st={st} />}
+            {st.screen === 'library'  && <Library  st={st} />}
+            {st.screen === 'player'   && <Player   st={st} />}
+            {st.screen === 'settings' && <Settings st={st} />}
+          </>
+        )}
       </div>
     </div>
   );

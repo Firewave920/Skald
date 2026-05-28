@@ -1,5 +1,5 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
-import { LIBRARY, parseDur } from '../../../state/onyx';
+import { bookTitle, bookAuthor, bookSeries, bookDurSecs } from '../../../state/onyx';
 import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
 import CoverFan from '../CoverFan';
@@ -28,8 +28,8 @@ export interface SeriesViewProps {
 
 export default function SeriesView({ st, inline = false }: SeriesViewProps) {
   const groups: Record<string, LibraryItem[]> = {};
-  for (const b of LIBRARY) {
-    const name = seriesNameOf(b.series);
+  for (const b of st.library) {
+    const name = seriesNameOf(bookSeries(b));
     if (!name) continue;
     if (!groups[name]) groups[name] = [];
     groups[name].push(b);
@@ -38,7 +38,7 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
   let seriesList: SeriesGroup[] = Object.entries(groups)
     .map(([name, books]) => ({
       name,
-      books: books.slice().sort((a, b) => seriesVolOf(a.series) - seriesVolOf(b.series)),
+      books: books.slice().sort((a, b) => seriesVolOf(bookSeries(a)) - seriesVolOf(bookSeries(b))),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
@@ -46,7 +46,7 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
     const q = st.search.toLowerCase();
     seriesList = seriesList.filter(s =>
       s.name.toLowerCase().includes(q) ||
-      s.books.some(b => b.author.toLowerCase().includes(q) || b.title.toLowerCase().includes(q))
+      s.books.some(b => bookAuthor(b).toLowerCase().includes(q) || bookTitle(b).toLowerCase().includes(q))
     );
   }
 
@@ -65,7 +65,7 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
               <CoverFan books={s.books.slice(0, 5)} />
               <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
                 <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, color: 'var(--onyx-text)', letterSpacing: '-0.01em' }}>{s.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{s.books[0].author}</div>
+                <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{bookAuthor(s.books[0])}</div>
                 <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
                   {s.books.length} {s.books.length === 1 ? 'VOLUME' : 'VOLUMES'}{' '}
                   <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
@@ -89,13 +89,13 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
             leading: <Cover item={s.books[0]} size={28} />,
             sort: {
               name:   s.name,
-              author: s.books[0].author,
+              author: bookAuthor(s.books[0]),
               vols:   s.books.length,
-              dur:    s.books.reduce((acc, b) => acc + parseDur(b.dur), 0),
+              dur:    s.books.reduce((acc, b) => acc + bookDurSecs(b), 0),
             },
             cells: {
               name:   <div style={{ fontFamily: SERIF, fontSize: 14, fontWeight: 500, color: 'var(--onyx-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</div>,
-              author: <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)' }}>{s.books[0].author}</div>,
+              author: <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)' }}>{bookAuthor(s.books[0])}</div>,
               vols:   <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)' }}>{s.books.length}</div>,
               dur:    <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)' }}>{seriesTotalDur(s.books)}</div>,
             },

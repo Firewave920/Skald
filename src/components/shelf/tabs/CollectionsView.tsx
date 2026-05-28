@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
-import { LIBRARY } from '../../../state/onyx';
+import { bookTitle, bookAuthor } from '../../../state/onyx';
 import BrowseView, { posterTile } from '../BrowseView';
 import BrowseList from '../BrowseList';
 import CoverMosaic from '../CoverMosaic';
@@ -17,10 +17,9 @@ interface Collection {
 }
 
 const SEED_COLLECTIONS: Collection[] = [
-  { name: 'Sword & Sorcery',    subtitle: 'High fantasy with knightly leads',         bookIds: ['cold-iron', 'fell-sword', 'burning-white', 'broken-eye', 'light-falls'] },
-  { name: 'LitRPG Marathon',    subtitle: 'Long-running progression epics',            bookIds: ['doomsday', 'anarchist', 'feral', 'butcher', 'bedlam', 'inevitable', 'parade'] },
-  { name: 'Sanderson Cosmere',  subtitle: 'The whole interconnected universe',         bookIds: ['emberdark'] },
-  { name: 'Listening Comfort',  subtitle: 'Re-listen anytime',                         bookIds: ['cold-iron', 'sam', 'black-prism'] },
+  { name: 'Sword & Sorcery',    subtitle: 'High fantasy with knightly leads',         bookIds: [] },
+  { name: 'LitRPG Marathon',    subtitle: 'Long-running progression epics',            bookIds: [] },
+  { name: 'Listening Comfort',  subtitle: 'Re-listen anytime',                         bookIds: [] },
 ];
 
 export interface CollectionsViewProps {
@@ -32,14 +31,17 @@ export default function CollectionsView({ st, inline = false }: CollectionsViewP
   const [userCollections, setUserCollections] = useState<Collection[]>([]);
   let allCollections = [...SEED_COLLECTIONS, ...userCollections];
 
+  const booksFor = (c: Collection): LibraryItem[] =>
+    c.bookIds.map(id => st.library.find(b => b.id === id)).filter((b): b is LibraryItem => Boolean(b));
+
   if (st.search) {
     const q = st.search.toLowerCase();
     allCollections = allCollections.filter(c =>
       c.name.toLowerCase().includes(q) ||
       c.subtitle.toLowerCase().includes(q) ||
       c.bookIds.some(id => {
-        const b = LIBRARY.find(x => x.id === id);
-        return b && (b.title.toLowerCase().includes(q) || b.author.toLowerCase().includes(q));
+        const b = st.library.find(x => x.id === id);
+        return b && (bookTitle(b).toLowerCase().includes(q) || bookAuthor(b).toLowerCase().includes(q));
       })
     );
   }
@@ -56,9 +58,6 @@ export default function CollectionsView({ st, inline = false }: CollectionsViewP
     const subtitle = window.prompt('A short description (optional):') || 'Empty — add books from the shelf.';
     setUserCollections(prev => [...prev, { name: name.trim(), subtitle, bookIds: [] }]);
   };
-
-  const booksFor = (c: Collection): LibraryItem[] =>
-    c.bookIds.map(id => LIBRARY.find(b => b.id === id)).filter((b): b is LibraryItem => Boolean(b));
 
   return (
     <BrowseView
