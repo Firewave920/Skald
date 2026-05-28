@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import type { OnyxState } from '../../state/onyx';
-import { LIBRARY } from '../../state/onyx';
 import Glass from './Glass';
 import Icon from '../Icon';
 
@@ -43,7 +42,7 @@ export default function TopNav({ st }: TopNavProps) {
         <input
           id="onyx-search"
           type="text"
-          placeholder={`Search ${LIBRARY.length} titles…`}
+          placeholder={`Search ${st.library.length} titles…`}
           value={st.search}
           onChange={(e) => st.setSearch(e.target.value)}
           style={{

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { LibraryItem } from '../state/onyx';
+import { bookPalette, bookTpl, bookTitle, bookAuthor, bookSeries } from '../state/onyx';
 
 export interface CoverProps {
   item: LibraryItem;
@@ -11,8 +12,11 @@ export interface CoverProps {
 }
 
 export default function Cover({ item, size = 180, scale = 1, className, style, onClick }: CoverProps) {
-  const [bg, mid, accent] = item.palette;
-  const tpl = item.tpl || 'split';
+  const [bg, mid, accent] = bookPalette(item);
+  const tpl = bookTpl(item);
+  const title = bookTitle(item);
+  const author = bookAuthor(item);
+  const series = bookSeries(item);
   const base: CSSProperties = {
     width: size,
     height: size,
@@ -34,8 +38,8 @@ export default function Cover({ item, size = 180, scale = 1, className, style, o
     return (
       <div style={base} className={className} onClick={onClick}>
         <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(155deg, ${mid} 0%, ${bg} 70%)` }} />
-        <div style={{ position: 'absolute', left: '8%', right: '8%', top: '10%', fontSize: authorSize, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.75, fontFamily: 'ui-sans-serif, system-ui' }}>{item.author}</div>
-        <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '12%', fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{item.title}</div>
+        <div style={{ position: 'absolute', left: '8%', right: '8%', top: '10%', fontSize: authorSize, letterSpacing: '0.12em', textTransform: 'uppercase', opacity: 0.75, fontFamily: 'ui-sans-serif, system-ui' }}>{author}</div>
+        <div style={{ position: 'absolute', left: '8%', right: '8%', bottom: '12%', fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{title}</div>
         <div style={{ position: 'absolute', left: '8%', bottom: '8%', width: '20%', height: 2, background: accent, opacity: 0.8 }} />
       </div>
     );
@@ -44,20 +48,20 @@ export default function Cover({ item, size = 180, scale = 1, className, style, o
     return (
       <div style={base} className={className} onClick={onClick}>
         <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(120% 80% at 50% 0%, ${mid} 0%, ${bg} 75%)` }} />
-        <div style={{ position: 'absolute', left: '10%', right: '10%', top: '15%', fontSize: titleSize * 1.05, fontWeight: 700, lineHeight: 1.0, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.01em' }}>{item.title}</div>
+        <div style={{ position: 'absolute', left: '10%', right: '10%', top: '15%', fontSize: titleSize * 1.05, fontWeight: 700, lineHeight: 1.0, textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.01em' }}>{title}</div>
         <div style={{ position: 'absolute', left: '30%', right: '30%', top: '58%', height: 1, background: accent }} />
-        <div style={{ position: 'absolute', left: '10%', right: '10%', top: '62%', fontSize: authorSize, textAlign: 'center', letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.85, fontFamily: 'ui-sans-serif, system-ui' }}>{item.author}</div>
+        <div style={{ position: 'absolute', left: '10%', right: '10%', top: '62%', fontSize: authorSize, textAlign: 'center', letterSpacing: '0.18em', textTransform: 'uppercase', opacity: 0.85, fontFamily: 'ui-sans-serif, system-ui' }}>{author}</div>
       </div>
     );
   }
   if (tpl === 'numeral') {
-    const num = (item.series?.match(/\d+/) ?? ['I'])[0];
+    const num = (series?.match(/\d+/) ?? ['I'])[0];
     return (
       <div style={base} className={className} onClick={onClick}>
         <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${bg} 0%, ${mid} 100%)` }} />
         <div style={{ position: 'absolute', left: '-5%', top: '-8%', fontSize: size * 0.95, fontWeight: 900, color: accent, opacity: 0.25, fontFamily: 'Georgia, serif', lineHeight: 0.85 }}>{num}</div>
-        <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: '18%', fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{item.title}</div>
-        <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: '10%', fontSize: authorSize, opacity: 0.7, fontFamily: 'ui-sans-serif, system-ui', letterSpacing: '0.06em' }}>{item.author}</div>
+        <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: '18%', fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{title}</div>
+        <div style={{ position: 'absolute', left: '10%', right: '10%', bottom: '10%', fontSize: authorSize, opacity: 0.7, fontFamily: 'ui-sans-serif, system-ui', letterSpacing: '0.06em' }}>{author}</div>
       </div>
     );
   }
@@ -67,8 +71,8 @@ export default function Cover({ item, size = 180, scale = 1, className, style, o
       <div style={base} className={className} onClick={onClick}>
         <div style={{ position: 'absolute', inset: 0, background: stripes, opacity: 0.7 }} />
         <div style={{ position: 'absolute', left: '8%', right: '8%', top: '40%', bottom: '20%', background: bg, border: `1.5px solid ${accent}`, padding: '6%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{item.title}</div>
-          <div style={{ fontSize: authorSize, fontFamily: 'ui-sans-serif, system-ui', opacity: 0.75, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{item.author}</div>
+          <div style={{ fontSize: titleSize, fontWeight: 700, lineHeight: 1.05 }}>{title}</div>
+          <div style={{ fontSize: authorSize, fontFamily: 'ui-sans-serif, system-ui', opacity: 0.75, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{author}</div>
         </div>
       </div>
     );
@@ -76,7 +80,7 @@ export default function Cover({ item, size = 180, scale = 1, className, style, o
   return (
     <div style={base} className={className} onClick={onClick}>
       <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(155deg, ${mid}, ${bg})` }} />
-      <div style={{ position: 'absolute', left: '10%', right: '10%', top: '40%', fontSize: titleSize, fontWeight: 600 }}>{item.title}</div>
+      <div style={{ position: 'absolute', left: '10%', right: '10%', top: '40%', fontSize: titleSize, fontWeight: 600 }}>{title}</div>
     </div>
   );
 }

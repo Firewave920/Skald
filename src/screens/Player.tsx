@@ -1,7 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
+import {
+  openPlaybackSession, playAudio, pauseAudio,
+  seekAudio, setSpeed as setAudioSpeed, setVolume as setAudioVolume,
+} from '../api/abs';
 import type { CSSProperties } from 'react';
 import type { OnyxState, Bookmark } from '../state/onyx';
-import { CHAPTERS, BOOKMARKS, SPEEDS, chapterAt, chapterStart, fmtTime } from '../state/onyx';
+import {
+  CHAPTERS, BOOKMARKS, SPEEDS, chapterAt, chapterStart, fmtTime,
+  bookTitle, bookAuthor, bookSeries, bookNarrator, bookDur,
+} from '../state/onyx';
 import Glass from '../components/chrome/Glass';
 import Cover from '../components/Cover';
 import Icon from '../components/Icon';
@@ -45,9 +52,10 @@ export interface PlayerProps {
 
 export default function Player({ st }: PlayerProps) {
   const b = st.currentBook;
+  if (!b) return null;
+
   const { idx: chIdx, local: chLocal, chapter: curCh } = chapterAt(CHAPTERS, st.position);
 
-  // ── Bookmarks ──────────────────────────────────────────────────────────────
   const [userBookmarks, setUserBookmarks] = useState<SessionBookmark[]>([]);
   const addBookmarkHere = () => {
     setUserBookmarks(prev => [{
@@ -61,20 +69,17 @@ export default function Player({ st }: PlayerProps) {
   };
   const allBookmarks: (SessionBookmark | Bookmark)[] = [...userBookmarks, ...BOOKMARKS];
 
-  // ── Sleep timer ────────────────────────────────────────────────────────────
   const [sleepMode, setSleepMode] = useState<SleepMode>(null);
   const [sleepRemain, setSleepRemain] = useState(0);
   const [sleepOpen, setSleepOpen] = useState(false);
   const sleepRef = useRef<HTMLDivElement>(null);
   const chapterAtStart = useRef(chIdx);
 
-  // Seed countdown when mode changes.
   useEffect(() => {
     if (typeof sleepMode === 'number') setSleepRemain(sleepMode * 60);
     if (sleepMode === 'chapter') chapterAtStart.current = chIdx;
-  }, [sleepMode]); // chIdx intentionally excluded — captured only at mode-set time
+  }, [sleepMode]); // chIdx intentionally excluded
 
-  // Tick down fixed-minutes timer while playing.
   useEffect(() => {
     if (typeof sleepMode !== 'number' || !st.playing) return;
     const t = setInterval(() => {
@@ -84,9 +89,8 @@ export default function Player({ st }: PlayerProps) {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [sleepMode, st.playing]); // st.setPlaying is stable; excluded intentionally
+  }, [sleepMode, st.playing]);
 
-  // End-of-chapter mode — pause when chapter changes.
   useEffect(() => {
     if (sleepMode === 'chapter' && chIdx !== chapterAtStart.current) {
       st.setPlaying(false);
@@ -94,7 +98,6 @@ export default function Player({ st }: PlayerProps) {
     }
   }, [chIdx]); // sleepMode/setPlaying excluded intentionally
 
-  // Close sleep popover on outside click.
   useEffect(() => {
     if (!sleepOpen) return;
     const onDown = (e: MouseEvent) => {
@@ -104,30 +107,43 @@ export default function Player({ st }: PlayerProps) {
     return () => window.removeEventListener('mousedown', onDown);
   }, [sleepOpen]);
 
+  // Open a playback session and start audio when the book changes.
+  useEffect(() => {
+    if (!st.currentBookId || !st.serverUrl) return;
+    openPlaybackSession(st.serverUrl, st.currentBookId)
+      .then(sid => { st.setSessionId(sid); return playAudio(); })
+      .catch(err => console.error('open session failed:', err));
+  }, [st.currentBookId, st.serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep backend volume in sync with the UI slider.
+  useEffect(() => {
+    setAudioVolume(Math.round(st.volume * 100)).catch(() => {});
+  }, [st.volume]);
+
   const sleepLabel: string | null = sleepMode == null
     ? null
     : sleepMode === 'chapter'
       ? 'End of chapter'
       : `${Math.floor(sleepRemain / 60)}:${String(sleepRemain % 60).padStart(2, '0')}`;
 
-  // ── Waveform scrub ─────────────────────────────────────────────────────────
   const onScrub = (e: React.MouseEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
     const chStart = chapterStart(CHAPTERS, chIdx);
-    st.setPosition(chStart + frac * curCh.dur);
+    seekAudio(chStart + frac * curCh.dur).catch(console.error);
   };
+
+  const bSeries = bookSeries(b);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 32px 24px', minHeight: 0 }}>
 
-      {/* Breadcrumb + volume + device */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18, fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>
         <button onClick={() => st.setScreen('library')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--onyx-text-dim)', cursor: 'pointer', padding: 4, fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit', textTransform: 'inherit' }}>
           <Icon name="chevron-left" size={12} /> Library
         </button>
         <span>·</span>
-        <span>{b.series}</span>
+        <span>{bSeries}</span>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, textTransform: 'none', letterSpacing: 'normal' }}>
           <VolumeControl st={st} />
           <DeviceSelector st={st} />
@@ -136,26 +152,22 @@ export default function Player({ st }: PlayerProps) {
 
       <div style={{ flex: 1, display: 'flex', gap: 32, alignItems: 'stretch', minHeight: 0 }}>
 
-        {/* Cover stage */}
         <div style={{ width: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', flexShrink: 0 }}>
           <div style={{ position: 'absolute', inset: '5% 5% 0 5%', borderRadius: 24, background: 'radial-gradient(50% 50% at 50% 50%, rgba(212,166,74,0.28), transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
           <div style={{ position: 'relative', zIndex: 1 }}>
             <Cover item={b} size={420} />
           </div>
           <div style={{ marginTop: 32, textAlign: 'center', position: 'relative', zIndex: 1 }}>
-            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 8 }}>{b.series}</div>
-            <div style={{ fontFamily: SERIF, fontSize: 48, fontWeight: 500, lineHeight: 1, letterSpacing: '-0.02em' }}>{b.title}</div>
-            <div style={{ marginTop: 10, fontSize: 16, color: 'var(--onyx-text-dim)' }}>by {b.author}</div>
-            <div style={{ marginTop: 2, fontSize: 13, color: 'var(--onyx-text-mute)' }}>narrated by {b.narrator}</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 8 }}>{bSeries}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 48, fontWeight: 500, lineHeight: 1, letterSpacing: '-0.02em' }}>{bookTitle(b)}</div>
+            <div style={{ marginTop: 10, fontSize: 16, color: 'var(--onyx-text-dim)' }}>by {bookAuthor(b)}</div>
+            <div style={{ marginTop: 2, fontSize: 13, color: 'var(--onyx-text-mute)' }}>narrated by {bookNarrator(b)}</div>
           </div>
         </div>
 
-        {/* Right column */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
 
-          {/* Transport card */}
           <Glass translucent={st.translucent} style={{ padding: 26 }}>
-            {/* Now playing header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 22 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>Now playing · Ch. {curCh.n}</div>
@@ -168,18 +180,15 @@ export default function Player({ st }: PlayerProps) {
               </div>
             </div>
 
-            {/* Waveform scrubber */}
             <div onClick={onScrub} style={{ cursor: 'pointer', position: 'relative' }}>
               <Waveform width={680} height={72} progress={chLocal / curCh.dur} color="var(--onyx-accent)" dim="rgba(255,255,255,0.15)" bars={140} flat />
             </div>
 
-            {/* Controls row */}
             <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
 
-              {/* Speed pills */}
               <div style={{ display: 'flex', gap: 6 }}>
                 {SPEEDS.map(s => (
-                  <button key={s} onClick={() => st.setSpeed(s)} style={{
+                  <button key={s} onClick={() => { st.setSpeed(s); setAudioSpeed(parseFloat(s)).catch(console.error); }} style={{
                     padding: '7px 12px', borderRadius: 6, fontFamily: MONO, fontSize: 11,
                     background: s === st.speed ? 'var(--onyx-accent-dim)' : 'transparent',
                     color: s === st.speed ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
@@ -190,13 +199,12 @@ export default function Player({ st }: PlayerProps) {
                 ))}
               </div>
 
-              {/* Transport */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <button onClick={() => st.setPosition(Math.max(0, st.position - 30))} title="Back 30s" style={transportBtn()}>
+                <button onClick={() => seekAudio(Math.max(0, st.position - 30)).catch(console.error)} title="Back 30s" style={transportBtn()}>
                   <Icon name="skip-back" size={20} />
                 </button>
                 <button
-                  onClick={() => st.setPlaying(p => !p)}
+                  onClick={() => { st.playing ? pauseAudio().catch(console.error) : playAudio().catch(console.error); }}
                   title={st.playing ? 'Pause (space)' : 'Play (space)'}
                   style={{ width: 64, height: 64, borderRadius: 32, background: 'var(--onyx-accent)', color: 'var(--onyx-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', boxShadow: '0 12px 32px rgba(212,166,74,0.4)' }}
                 >
@@ -204,12 +212,11 @@ export default function Player({ st }: PlayerProps) {
                     <Icon name={st.playing ? 'pause' : 'play'} size={26} />
                   </span>
                 </button>
-                <button onClick={() => st.setPosition(Math.min(st.bookSecs, st.position + 30))} title="Forward 30s" style={transportBtn()}>
+                <button onClick={() => seekAudio(Math.min(st.bookSecs, st.position + 30)).catch(console.error)} title="Forward 30s" style={transportBtn()}>
                   <Icon name="skip-forward" size={20} />
                 </button>
               </div>
 
-              {/* Bookmark + sleep */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={addBookmarkHere} style={transportBtnSmall()} title="Bookmark this moment">
                   <Icon name="bookmark" size={15} />
@@ -252,14 +259,12 @@ export default function Player({ st }: PlayerProps) {
             </div>
           </Glass>
 
-          {/* Chapters + Bookmarks panels */}
           <div style={{ flex: 1, display: 'flex', gap: 18, minHeight: 0 }}>
 
-            {/* Chapters */}
             <Glass translucent={st.translucent} style={{ flex: 1.2, padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
                 <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500 }}>Chapters</div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.08em' }}>{CHAPTERS.length} · {b.dur} total</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.08em' }}>{CHAPTERS.length} · {bookDur(b)} total</div>
               </div>
               <div style={{ flex: 1, overflow: 'auto', marginRight: -8, paddingRight: 8 }}>
                 {CHAPTERS.map((c, i) => {
@@ -283,7 +288,6 @@ export default function Player({ st }: PlayerProps) {
               </div>
             </Glass>
 
-            {/* Bookmarks */}
             <Glass translucent={st.translucent} style={{ flex: 1, padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
                 <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500 }}>Bookmarks</div>

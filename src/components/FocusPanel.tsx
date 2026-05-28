@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type { OnyxState } from '../state/onyx';
 import {
-  LIBRARY, CHAPTERS, BOOKMARKS, SPEEDS,
-  chapterAt, chapterStart, fmtTime, fmtRemaining, parseDur,
+  CHAPTERS, BOOKMARKS, SPEEDS,
+  chapterAt, chapterStart, fmtTime, fmtRemaining,
+  bookTitle, bookAuthor, bookSeries, bookNarrator, bookDur,
+  bookProgress, bookCurrentTime, bookSynopsis,
 } from '../state/onyx';
 import Glass from './chrome/Glass';
 import Cover from './Cover';
@@ -18,13 +20,9 @@ export interface FocusPanelProps {
   st: OnyxState;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function seriesNameOf(s: string | undefined): string {
   return (s || '').split(' · ')[0];
 }
-
-// ─── Stat ─────────────────────────────────────────────────────────────────────
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
@@ -36,8 +34,6 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-
-// ─── ChaptersStat ─────────────────────────────────────────────────────────────
 
 function ChaptersStat({ st, chIdx }: { st: OnyxState; chIdx: number }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +49,6 @@ function ChaptersStat({ st, chIdx }: { st: OnyxState; chIdx: number }) {
     return () => window.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  // Scroll current chapter into view when popover opens.
   useEffect(() => {
     if (!open) return;
     const el = listRef.current?.querySelector('[data-current="true"]') as HTMLElement | null;
@@ -143,8 +138,6 @@ function ChaptersStat({ st, chIdx }: { st: OnyxState; chIdx: number }) {
   );
 }
 
-// ─── SpeedStat ────────────────────────────────────────────────────────────────
-
 function SpeedStat({ st }: { st: OnyxState }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -218,8 +211,6 @@ function SpeedStat({ st }: { st: OnyxState }) {
   );
 }
 
-// ─── CollapseHandle ───────────────────────────────────────────────────────────
-
 function CollapseHandle({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
     <button
@@ -252,19 +243,21 @@ function CollapseHandle({ collapsed, onToggle }: { collapsed: boolean; onToggle:
   );
 }
 
-// ─── FocusPanel ───────────────────────────────────────────────────────────────
-
 export default function FocusPanel({ st }: FocusPanelProps) {
   const [bookmarksOpen, setBookmarksOpen] = useState(false);
 
   const focus = st.currentBook;
+  if (!focus) return null;
+
   const totalSecs = st.bookSecs;
-  const focusProgress = st.currentBookId === focus.id ? st.position / totalSecs : focus.progress;
+  const focusProgress = st.currentBookId === focus.id
+    ? st.position / (totalSecs || 1)
+    : bookProgress(focus, st.mediaProgress);
   const remaining = st.currentBookId === focus.id
     ? totalSecs - st.position
-    : totalSecs * (1 - focus.progress);
+    : totalSecs * (1 - bookProgress(focus, st.mediaProgress));
   const { idx: chIdx } = chapterAt(CHAPTERS, st.position);
-  const seriesLabel = seriesNameOf(focus.series);
+  const seriesLabel = seriesNameOf(bookSeries(focus));
 
   const toggleContext = (kind: CtxKind, value: string) => {
     if (st.contextFilter?.kind === kind && st.contextFilter?.value === value) {
@@ -280,13 +273,11 @@ export default function FocusPanel({ st }: FocusPanelProps) {
   const openBook = (id: string) => {
     st.setCurrentBookId(id);
     if (id !== st.currentBookId) {
-      const b = LIBRARY.find(x => x.id === id);
-      st.setPosition((b?.progress ?? 0) * parseDur(b?.dur ?? '0h 0m'));
+      const b = st.library.find(x => x.id === id);
+      if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
     }
     st.setScreen('player');
   };
-
-  // ─── Collapsed strip ────────────────────────────────────────────────────────
 
   if (st.focusCollapsed) {
     return (
@@ -308,13 +299,16 @@ export default function FocusPanel({ st }: FocusPanelProps) {
           <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: `${focusProgress * 100}%`, background: 'var(--onyx-accent)' }} />
         </div>
         <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', writingMode: 'vertical-rl', transform: 'rotate(180deg)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          {focus.title}
+          {bookTitle(focus)}
         </div>
       </Glass>
     );
   }
 
-  // ─── Expanded card ──────────────────────────────────────────────────────────
+  const focusSeries = bookSeries(focus);
+  const focusAuthor = bookAuthor(focus);
+  const focusNarrator = bookNarrator(focus);
+  const focusSynopsis = bookSynopsis(focus);
 
   return (
     <Glass
@@ -331,50 +325,54 @@ export default function FocusPanel({ st }: FocusPanelProps) {
         <Cover item={focus} size={300} />
       </div>
 
-      {focus.series && (
+      {focusSeries && (
         <button
           onClick={() => toggleContext('series', seriesLabel)}
           title={ctxIs('series', seriesLabel) ? 'Clear series filter' : `Show all books in ${seriesLabel}`}
           style={{ marginTop: 22, alignSelf: 'flex-start', fontFamily: MONO, fontSize: 11, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-accent)', background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
         >
-          {focus.series}
+          {focusSeries}
           <span style={{ opacity: 0.7, display: 'inline-flex' }}>
             <Icon name={ctxIs('series', seriesLabel) ? 'chevron-down' : 'chevron-right'} size={10} />
           </span>
         </button>
       )}
 
-      <div style={{ marginTop: focus.series ? 6 : 22, fontFamily: SERIF, fontSize: 30, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.01em' }}>
-        {focus.title}
+      <div style={{ marginTop: focusSeries ? 6 : 22, fontFamily: SERIF, fontSize: 30, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.01em' }}>
+        {bookTitle(focus)}
       </div>
 
       <div style={{ marginTop: 8, fontSize: 14, color: 'var(--onyx-text-dim)', display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', gap: '0 4px' }}>
         <span>by</span>
         <button
-          onClick={() => toggleContext('author', focus.author)}
-          title={ctxIs('author', focus.author) ? 'Clear author filter' : `Show all books by ${focus.author}`}
+          onClick={() => toggleContext('author', focusAuthor)}
+          title={ctxIs('author', focusAuthor) ? 'Clear author filter' : `Show all books by ${focusAuthor}`}
           style={{
             background: 'none', border: 'none', padding: 0, cursor: 'pointer',
             fontFamily: 'inherit', fontSize: 'inherit',
-            color: ctxIs('author', focus.author) ? 'var(--onyx-accent)' : 'var(--onyx-text)',
-            borderBottom: `1px dashed ${ctxIs('author', focus.author) ? 'var(--onyx-accent)' : 'rgba(235,231,223,0.25)'}`,
+            color: ctxIs('author', focusAuthor) ? 'var(--onyx-accent)' : 'var(--onyx-text)',
+            borderBottom: `1px dashed ${ctxIs('author', focusAuthor) ? 'var(--onyx-accent)' : 'rgba(235,231,223,0.25)'}`,
           }}
         >
-          {focus.author}
+          {focusAuthor}
         </button>
-        <span style={{ color: 'var(--onyx-text-mute)' }}>·</span>
-        <button
-          onClick={() => toggleContext('narrator', focus.narrator)}
-          title={ctxIs('narrator', focus.narrator) ? 'Clear narrator filter' : `Show all books narrated by ${focus.narrator}`}
-          style={{
-            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-            fontFamily: 'inherit', fontSize: 'inherit',
-            color: ctxIs('narrator', focus.narrator) ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
-            borderBottom: `1px dashed ${ctxIs('narrator', focus.narrator) ? 'var(--onyx-accent)' : 'rgba(235,231,223,0.15)'}`,
-          }}
-        >
-          {focus.narrator}
-        </button>
+        {focusNarrator && (
+          <>
+            <span style={{ color: 'var(--onyx-text-mute)' }}>·</span>
+            <button
+              onClick={() => toggleContext('narrator', focusNarrator)}
+              title={ctxIs('narrator', focusNarrator) ? 'Clear narrator filter' : `Show all books narrated by ${focusNarrator}`}
+              style={{
+                background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                fontFamily: 'inherit', fontSize: 'inherit',
+                color: ctxIs('narrator', focusNarrator) ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
+                borderBottom: `1px dashed ${ctxIs('narrator', focusNarrator) ? 'var(--onyx-accent)' : 'rgba(235,231,223,0.15)'}`,
+              }}
+            >
+              {focusNarrator}
+            </button>
+          </>
+        )}
       </div>
 
       <div style={{ marginTop: 18, display: 'flex', gap: 10 }}>
@@ -443,19 +441,19 @@ export default function FocusPanel({ st }: FocusPanelProps) {
             </button>
           ))}
         </div>
-      ) : focus.synopsis ? (
+      ) : focusSynopsis ? (
         <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--onyx-line)' }}>
           <div style={{ fontFamily: MONO, fontSize: 9.5, color: 'var(--onyx-text-mute)', letterSpacing: '0.16em', textTransform: 'uppercase', marginBottom: 8 }}>
             Synopsis
           </div>
           <div style={{ fontFamily: SERIF, fontSize: 13.5, lineHeight: 1.55, color: 'var(--onyx-text-dim)' }}>
-            {focus.synopsis}
+            {focusSynopsis}
           </div>
         </div>
       ) : null}
 
       <div style={{ marginTop: 'auto', paddingTop: 20, borderTop: '1px solid var(--onyx-line)', display: 'flex', gap: 24 }}>
-        <Stat label="Duration" value={focus.dur} />
+        <Stat label="Duration" value={bookDur(focus)} />
         <ChaptersStat st={st} chIdx={chIdx} />
         <SpeedStat st={st} />
       </div>

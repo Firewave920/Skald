@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 
 export interface TitlebarProps {
   subtitle?: string;
@@ -14,9 +15,9 @@ const BUTTONS = [
 ] as const;
 
 const HANDLERS: Record<string, () => void> = {
-  min:   () => console.log('[titlebar] minimize'),
-  max:   () => console.log('[titlebar] maximize'),
-  close: () => console.log('[titlebar] close'),
+  min:   () => { void getCurrentWindow().minimize(); },
+  max:   () => { void getCurrentWindow().toggleMaximize(); },
+  close: () => { void getCurrentWindow().close(); },
 };
 
 export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
@@ -37,7 +38,7 @@ export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
   };
 
   return (
-    <div style={bar}>
+    <div style={bar} data-tauri-drag-region>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 18, height: 18, borderRadius: 5,
@@ -59,6 +60,7 @@ export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
             className={`onyx-winbtn onyx-winbtn-${b.kind}`}
             title={b.label}
             onClick={HANDLERS[b.kind]}
+            data-tauri-drag-region="false"
             style={{
               width: 46, height: 44, borderRadius: 0,
               background: 'transparent', border: 'none',
