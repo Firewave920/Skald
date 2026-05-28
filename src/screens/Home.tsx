@@ -11,13 +11,6 @@ import TileMini from '../components/shelf/TileMini';
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-const STATS = [
-  { l: 'Listened this week', v: '4h 38m' },
-  { l: 'Current streak',     v: '12 days' },
-  { l: 'Books finished',     v: '24'      },
-  { l: 'Bookmarks',          v: '142'     },
-];
-
 export interface HomeProps {
   st: OnyxState;
 }
@@ -113,7 +106,12 @@ export default function Home({ st }: HomeProps) {
 
       <Section title="Stats">
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
-          {STATS.map(s => (
+          {([
+            { l: 'Total listened', v: st.listeningStats ? fmtRemaining(st.listeningStats.totalTime) : '—' },
+            { l: 'Today',          v: st.listeningStats ? fmtRemaining(st.listeningStats.today)     : '—' },
+            { l: 'Books',          v: st.listeningStats ? String(Object.keys(st.listeningStats.items).length) : '—' },
+            { l: 'Days listened',  v: st.listeningStats ? String(Object.keys(st.listeningStats.days).length)  : '—' },
+          ] as { l: string; v: string }[]).map(s => (
             <div key={s.l} style={{ padding: 16, background: 'var(--onyx-glass)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 12 }}>
               <div style={{ fontFamily: MONO, fontSize: 9.5, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{s.l}</div>
               <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 500, marginTop: 6, color: 'var(--onyx-accent)' }}>{s.v}</div>

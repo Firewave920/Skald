@@ -78,12 +78,19 @@ export interface MeResponse {
   username: string;
   token: string;
   mediaProgress: MediaProgress[];
+  bookmarks: Bookmark[];
+}
+
+export interface ListeningStatItem {
+  id: string;
+  timeListening: number;
 }
 
 export interface ListeningStats {
   totalTime: number;
-  booksFinished: number;
-  daysListened: number;
+  today: number;
+  items: Record<string, ListeningStatItem>;
+  days: Record<string, number>;
 }
 
 export interface Bookmark {
@@ -152,6 +159,10 @@ export function fetchItem(serverUrl: string, itemId: string): Promise<LibraryIte
 
 export function fetchListeningStats(serverUrl: string, userId: string): Promise<ListeningStats> {
   return invoke('fetch_listening_stats', { serverUrl, userId });
+}
+
+export function getMe(serverUrl: string): Promise<MeResponse> {
+  return invoke('get_me', { serverUrl });
 }
 
 export function createBookmark(

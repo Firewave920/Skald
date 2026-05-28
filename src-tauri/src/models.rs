@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Stored server connection — url and auth token.
@@ -122,15 +123,32 @@ pub struct MeResponse {
     pub token: String,
     #[serde(default)]
     pub media_progress: Vec<MediaProgress>,
+    #[serde(default)]
+    pub bookmarks: Vec<Bookmark>,
+}
+
+/// Minimal per-book entry inside the listening-stats `items` map.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListeningStatItem {
+    pub id: String,
+    pub time_listening: f64,
 }
 
 /// Response from /api/users/{id}/listening-stats.
+/// Fields match the actual ABS 2.x response — no booksFinished/daysListened.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ListeningStats {
     pub total_time: f64,
-    pub books_finished: i64,
-    pub days_listened: i64,
+    #[serde(default)]
+    pub today: f64,
+    /// Keys are library-item IDs; we only need the count on the frontend.
+    #[serde(default)]
+    pub items: HashMap<String, ListeningStatItem>,
+    /// Keys are ISO date strings; count gives distinct listening days.
+    #[serde(default)]
+    pub days: HashMap<String, f64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
