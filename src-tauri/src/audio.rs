@@ -4,7 +4,15 @@
 // Do NOT switch to HTTP header auth — LibVLC does not reliably forward
 // custom headers on Windows (CLAUDE.md critical lesson 2).
 
-use vlc::{Instance, Media, MediaPlayer, MediaPlayerAudioEx};
+use std::ffi::{CString, c_void};
+use std::os::raw::c_char;
+use vlc::{Instance, Media, MediaPlayer, MediaPlayerAudioEx, State};
+
+// vlc-rs 0.3.0 does not wrap libvlc_media_add_option; call it directly.
+// The symbol is already present in the link graph via the vlc-rs dependency.
+extern "C" {
+    fn libvlc_media_add_option(p_md: *mut c_void, psz_options: *const c_char);
+}
 
 pub struct AudioPlayer {
     instance: Instance,
@@ -27,9 +35,18 @@ impl AudioPlayer {
 
     /// Load media from `url`. The caller must append `?token={jwt}` before
     /// calling this — do not use HTTP headers for auth (they are unreliable).
-    pub fn load(&self, url: &str) -> Result<(), String> {
+    /// If `start_time > 0.0`, the `:start-time` media option is applied via FFI
+    /// so VLC begins decoding from that position before any audio is output.
+    pub fn load(&self, url: &str, start_time: f64) -> Result<(), String> {
         let media = Media::new_location(&self.instance, url)
             .ok_or_else(|| format!("Failed to create LibVLC media from URL: {url}"))?;
+        if start_time > 0.0 {
+            let opt = CString::new(format!(":start-time={:.3}", start_time))
+                .map_err(|e| format!("CString error: {e}"))?;
+            unsafe {
+                libvlc_media_add_option(media.raw() as *mut c_void, opt.as_ptr());
+            }
+        }
         self.media_player.set_media(&media);
         Ok(())
     }
@@ -82,5 +99,20 @@ impl AudioPlayer {
 
     pub fn is_playing(&self) -> bool {
         self.media_player.is_playing()
+    }
+
+    /// Block until the player leaves the NothingSpecial/Opening states, up to
+    /// `max_iterations` × 100 ms. Returns `true` if Buffering or Playing was
+    /// reached (safe to seek), `false` on timeout or terminal error.
+    pub fn wait_until_playable(&self, max_iterations: u32) -> bool {
+        for _ in 0..max_iterations {
+            match self.media_player.state() {
+                State::Buffering | State::Playing | State::Paused => return true,
+                State::Error | State::Ended | State::Stopped => return false,
+                _ => {}
+            }
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        false
     }
 }

@@ -25,46 +25,44 @@ pub fn save_token(token: String) -> Result<(), String> {
     auth::save_token(&token)
 }
 
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenSessionResult {
+    session_id: String,
+    current_time: f64,
+}
+
 #[tauri::command]
 pub async fn open_playback_session(
     server_url: String,
     item_id: String,
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
-) -> Result<String, String> {
-    eprintln!("[open_playback_session] called with item_id: {}", item_id);
+) -> Result<OpenSessionResult, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
     // Scope the SessionManager lock so it is released before this command
     // returns — play_audio acquires the same lock and must not see it held.
-    let session_id = {
+    let result = {
         let mut mgr = state.lock().await;
         mgr.client = AbsClient::new(server_url).with_token(token);
-        let result = mgr.start_session(&item_id, app).await;
-        eprintln!("[open_playback_session] start_session returned: {:?}", result);
-        result?;
-        mgr.session_id.clone().ok_or_else(|| "Session ID not set after start".to_string())?
+        let current_time = mgr.start_session(&item_id, app).await?;
+        let session_id = mgr.session_id.clone()
+            .ok_or_else(|| "Session ID not set after start".to_string())?;
+        OpenSessionResult { session_id, current_time }
     };
-    eprintln!("[open_playback_session] completed, session_id: {}", session_id);
-    Ok(session_id)
+    Ok(result)
 }
 
 #[tauri::command]
 pub async fn play_audio(
     state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<(), String> {
-    eprintln!("[play_audio] called");
     let player_arc = Arc::clone(&state.lock().await.player);
     let guard = player_arc.lock().unwrap();
     match guard.as_ref() {
-        Some(p) => {
-            eprintln!("[play_audio] player found, calling play");
-            p.play()
-        }
-        None => {
-            eprintln!("[play_audio] player is None");
-            Err("No audio player initialized".to_string())
-        }
+        Some(p) => p.play(),
+        None => Err("No audio player initialized".to_string()),
     }
 }
 
