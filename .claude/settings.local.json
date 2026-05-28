@@ -87,7 +87,12 @@
       "PowerShell($r = Invoke-RestMethod \"https://api.github.com/repos/advplyr/audiobookshelf/contents/server/models/Book.js\"; $b64 = $r.content -replace \"`n\",\"\" -replace \"`r\",\"\"; $content = [System.Text.Encoding]::UTF8.GetString\\([System.Convert]::FromBase64String\\($b64\\)\\); $content | Select-String -Pattern \"chapter\" -Context 2,4 | Select-Object -First 20 | Format-List)",
       "PowerShell($r = Invoke-RestMethod \"https://api.github.com/repos/advplyr/audiobookshelf/contents/server/controllers/LibraryItemController.js\"; $b64 = $r.content -replace \"`n\",\"\" -replace \"`r\",\"\"; $content = [System.Text.Encoding]::UTF8.GetString\\([System.Convert]::FromBase64String\\($b64\\)\\); $lines = $content -split \"`n\"; for \\($i=0; $i -lt $lines.Count; $i++\\) { if \\($lines[$i] -match \"getLibraryItem|toOldJSON|toOldJSONExpanded|chapters\"\\) { Write-Output \"$\\($i+1\\): $\\($lines[$i]\\)\" } })",
       "PowerShell($r = Invoke-RestMethod \"https://api.github.com/repos/advplyr/audiobookshelf/contents/server/models/Book.js\"; $b64 = $r.content -replace \"`n\",\"\" -replace \"`r\",\"\"; $content = [System.Text.Encoding]::UTF8.GetString\\([System.Convert]::FromBase64String\\($b64\\)\\); $lines = $content -split \"`n\"; $idx = 0; foreach \\($l in $lines\\) { $idx++; if \\($l -match \"getTracklist|tracklist|contentUrl|startOffset|AudioTrack\"\\) { Write-Output \"${idx}: $l\" } })",
-      "PowerShell(Get-Process -Name \"skald\",\"node\" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \\(Get-Item \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\\\\src\\\\models.rs\"\\).LastWriteTime; \\(Get-Item \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\\\\target\\\\debug\\\\skald.exe\" -ErrorAction SilentlyContinue\\).LastWriteTime)"
+      "PowerShell(Get-Process -Name \"skald\",\"node\" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue; \\(Get-Item \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\\\\src\\\\models.rs\"\\).LastWriteTime; \\(Get-Item \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\\\\target\\\\debug\\\\skald.exe\" -ErrorAction SilentlyContinue\\).LastWriteTime)",
+      "Bash(Select-String -Path \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\\\\Cargo.lock\" -Pattern \"vlc\")",
+      "Bash(Select-Object -First 20)",
+      "Read(//c/Users/fireb/.cargo/registry/src/**)",
+      "Bash(xargs cat)",
+      "Read(//root/**)"
     ]
   }
 }

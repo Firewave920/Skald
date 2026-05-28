@@ -108,14 +108,6 @@ export default function Player({ st }: PlayerProps) {
     return () => window.removeEventListener('mousedown', onDown);
   }, [sleepOpen]);
 
-  // Open a playback session and start audio when the book changes.
-  useEffect(() => {
-    if (!st.currentBookId || !st.serverUrl) return;
-    openPlaybackSession(st.serverUrl, st.currentBookId)
-      .then(sid => { st.setSessionId(sid); return playAudio(); })
-      .catch(err => console.error('open session failed:', err));
-  }, [st.currentBookId, st.serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Keep backend volume in sync with the UI slider.
   useEffect(() => {
     setAudioVolume(Math.round(st.volume * 100)).catch(() => {});
@@ -135,6 +127,23 @@ export default function Player({ st }: PlayerProps) {
   };
 
   const bSeries = bookSeries(b);
+
+  const handlePlayPause = async () => {
+    try {
+      if (!st.sessionReady) {
+        const { sessionId } = await openPlaybackSession(st.serverUrl, st.currentBookId);
+        st.setSessionId(sessionId);
+        st.setSessionReady(true);
+        await playAudio();
+      } else if (st.playing) {
+        await pauseAudio();
+      } else {
+        await playAudio();
+      }
+    } catch (err) {
+      console.error('[Player] play/pause failed:', err);
+    }
+  };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 32px 24px', minHeight: 0 }}>
@@ -205,7 +214,7 @@ export default function Player({ st }: PlayerProps) {
                   <Icon name="skip-back" size={20} />
                 </button>
                 <button
-                  onClick={() => { st.playing ? pauseAudio().catch(console.error) : playAudio().catch(console.error); }}
+                  onClick={handlePlayPause}
                   title={st.playing ? 'Pause (space)' : 'Play (space)'}
                   style={{ width: 64, height: 64, borderRadius: 32, background: 'var(--onyx-accent)', color: 'var(--onyx-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', boxShadow: '0 12px 32px rgba(212,166,74,0.4)' }}
                 >
@@ -271,7 +280,7 @@ export default function Player({ st }: PlayerProps) {
                 {chapters.map((c, i) => {
                   const state = i < chIdx ? 'done' : i === chIdx ? 'playing' : 'next';
                   return (
-                    <button key={c.n} onClick={() => st.setPosition(chapterStart(chapters, i))} style={{
+                    <button key={c.n} onClick={() => { const pos = chapterStart(chapters, i); seekAudio(pos).catch(console.error); st.setPosition(pos); }} style={{
                       display: 'flex', alignItems: 'center', padding: '8px 12px', borderRadius: 8, gap: 12,
                       background: state === 'playing' ? 'var(--onyx-accent-dim)' : 'transparent',
                       border: `1px solid ${state === 'playing' ? 'var(--onyx-accent-edge)' : 'transparent'}`,

@@ -109,6 +109,11 @@ export interface PlaySession {
   audioTracks: AudioTrack[];
 }
 
+export interface OpenSessionResult {
+  sessionId: string;
+  currentTime: number;
+}
+
 // ── Command wrappers ───────────────────────────────────────────────────────
 // Command names match the Rust #[tauri::command] function names (snake_case).
 // Argument keys are camelCase; Tauri converts them to Rust snake_case params.
@@ -125,7 +130,7 @@ export function saveToken(token: string): Promise<void> {
   return invoke('save_token', { token });
 }
 
-export function openPlaybackSession(serverUrl: string, itemId: string): Promise<string> {
+export function openPlaybackSession(serverUrl: string, itemId: string): Promise<OpenSessionResult> {
   return invoke('open_playback_session', { serverUrl, itemId });
 }
 

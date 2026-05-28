@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type { OnyxState, Chapter } from '../state/onyx';
-import { openPlaybackSession, playAudio, pauseAudio } from '../api/abs';
+import { openPlaybackSession, playAudio, pauseAudio, seekAudio } from '../api/abs';
 import {
   SPEEDS,
   chapterAt, chapterStart, fmtTime, fmtRemaining,
@@ -57,7 +57,9 @@ function ChaptersStat({ st, chIdx, chapterCount, chapters }: { st: OnyxState; ch
   }, [open]);
 
   const jump = (i: number) => {
-    st.setPosition(chapterStart(chapters, i));
+    const pos = chapterStart(chapters, i);
+    seekAudio(pos).catch(console.error);
+    st.setPosition(pos);
     setOpen(false);
     st.setScreen('player');
   };
@@ -119,7 +121,6 @@ function ChaptersStat({ st, chIdx, chapterCount, chapters }: { st: OnyxState; ch
                   <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: chState === 'playing' ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: chState === 'done' ? 'var(--onyx-text-mute)' : chState === 'playing' ? 'var(--onyx-accent)' : 'var(--onyx-text)' }}>
                     {c.t}
                   </div>
-                  <div style={{ fontFamily: MONO, fontSize: 9.5, color: 'var(--onyx-text-mute)', flexShrink: 0 }}>{fmtTime(c.dur)}</div>
                   {chState === 'done' && (
                     <span style={{ color: 'var(--onyx-text-mute)', flexShrink: 0, display: 'inline-flex' }}>
                       <Icon name="check" size={10} />
@@ -287,7 +288,7 @@ export default function FocusPanel({ st }: FocusPanelProps) {
   const handleContinue = async () => {
     try {
       if (!st.sessionReady || focus.id !== st.currentBookId) {
-        const sessionId = await openPlaybackSession(st.serverUrl, focus.id);
+        const { sessionId, currentTime } = await openPlaybackSession(st.serverUrl, focus.id);
         st.setCurrentBookId(focus.id);
         st.setSessionId(sessionId);
         st.setSessionReady(true);

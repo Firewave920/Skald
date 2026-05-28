@@ -47,6 +47,9 @@ The Audiobookshelf project is the source of truth for endpoint paths, request/re
 
 Verify endpoint paths, query parameters, and response shapes against these sources **before** writing models or HTTP calls. Do not infer endpoint behavior from prior assumptions.
 
+Additionally, the github for the app is an excellent reference: 
+https://github.com/advplyr/audiobookshelf-app
+
 ### Design handoff — UI behavior
 
 The `design-handoff/` folder holds the original React/JSX prototype. **This is the visual goal.** When implementing any UI feature, open the corresponding file and match its layout, copy, spacing, and interaction behavior.

@@ -32,13 +32,13 @@ impl SessionManager {
     }
 
     /// Open a playback session for `item_id`, spawn the 1-second tick loop
-    /// (position updates + `playback-tick` events) and the 30-second sync loop.
+    /// (position updates + `playback-tick` events) and the 10-second sync loop.
+    /// Returns the server's `currentTime` so the caller can seek after play starts.
     pub async fn start_session<R: tauri::Runtime>(
         &mut self,
         item_id: &str,
         app: tauri::AppHandle<R>,
-    ) -> Result<(), String> {
-        eprintln!("[start_session] called with item_id: {}", item_id);
+    ) -> Result<f64, String> {
         // Stop any tasks from a previous session.
         self.active.store(false, Ordering::Relaxed);
 
@@ -47,7 +47,6 @@ impl SessionManager {
         {
             let mut p = self.player.lock().unwrap();
             if p.is_none() {
-                eprintln!("[start_session] storing player into Arc");
                 *p = Some(AudioPlayer::new()?);
             }
         }
@@ -70,10 +69,7 @@ impl SessionManager {
             );
             let player_guard = self.player.lock().unwrap();
             if let Some(p) = player_guard.as_ref() {
-                p.load(&url)?;
-                if session.current_time > 0.0 {
-                    p.seek(session.current_time)?;
-                }
+                p.load(&url, session.current_time)?;
             }
         }
 
@@ -116,7 +112,7 @@ impl SessionManager {
             }
         });
 
-        // ── Sync task: every 30 seconds (CLAUDE.md critical lesson 3) ────────
+        // ── Sync task: every 10 seconds (CLAUDE.md critical lesson 3) ─────────
         let ct_sync = Arc::clone(&self.current_time);
         let tl_sync = Arc::clone(&self.time_listened);
         let client_sync = self.client.clone();
@@ -124,7 +120,7 @@ impl SessionManager {
         let active_sync = Arc::clone(&active);
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(30));
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
             interval.tick().await; // skip the immediate first tick
             loop {
                 interval.tick().await;
@@ -137,7 +133,7 @@ impl SessionManager {
             }
         });
 
-        Ok(())
+        Ok(session.current_time)
     }
 
     /// Sync the current position to the server.
