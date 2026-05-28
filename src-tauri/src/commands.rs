@@ -104,6 +104,13 @@ pub async fn set_volume(
 }
 
 #[tauri::command]
+pub async fn get_me(server_url: String) -> Result<models::MeResponse, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url).with_token(token).get_me().await
+}
+
+#[tauri::command]
 pub async fn fetch_libraries(server_url: String) -> Result<Vec<models::Library>, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;

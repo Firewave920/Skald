@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
 import type { OnyxState } from '../state/onyx';
 import {
-  CHAPTERS, BOOKMARKS, SPEEDS,
+  CHAPTERS, SPEEDS,
   chapterAt, chapterStart, fmtTime, fmtRemaining,
   bookTitle, bookAuthor, bookSeries, bookNarrator, bookDur,
   bookProgress, bookCurrentTime, bookSynopsis,
@@ -249,6 +249,8 @@ export default function FocusPanel({ st }: FocusPanelProps) {
   const focus = st.currentBook;
   if (!focus) return null;
 
+  const focusBookmarks = st.bookmarks.filter(b => b.libraryItemId === st.currentBookId);
+
   const totalSecs = st.bookSecs;
   const focusProgress = st.currentBookId === focus.id
     ? st.position / (totalSecs || 1)
@@ -402,7 +404,7 @@ export default function FocusPanel({ st }: FocusPanelProps) {
           title="Show bookmarks"
           style={{ fontFamily: 'inherit', fontSize: 'inherit', letterSpacing: 'inherit', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: bookmarksOpen ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)', display: 'flex', alignItems: 'center', gap: 4 }}
         >
-          Bookmarked {BOOKMARKS.length}×
+          Bookmarked {focusBookmarks.length}×
           <span style={{ display: 'inline-flex' }}>
             <Icon name={bookmarksOpen ? 'chevron-down' : 'chevron-right'} size={9} />
           </span>
@@ -420,22 +422,19 @@ export default function FocusPanel({ st }: FocusPanelProps) {
               <Icon name="plus" size={10} /> ADD
             </button>
           </div>
-          {BOOKMARKS.map((bm, i) => (
+          {focusBookmarks.map((bm, i) => (
             <button
               key={i}
               onClick={() => {
-                st.setPosition(chapterStart(CHAPTERS, bm.ch - 1) + bm.secs);
+                st.setPosition(bm.time);
                 st.setScreen('player');
               }}
               style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', background: 'none', border: 'none', borderTop: i > 0 ? '1px solid var(--onyx-line)' : 'none', width: '100%', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}
             >
-              <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color: 'var(--onyx-accent)', paddingTop: 1, flexShrink: 0 }}>{bm.ts}</div>
+              <div style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color: 'var(--onyx-accent)', paddingTop: 1, flexShrink: 0 }}>{fmtTime(bm.time)}</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 12, color: 'var(--onyx-text)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as CSSProperties}>
-                  {bm.label}
-                </div>
-                <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em', textTransform: 'uppercase', marginTop: 2 }}>
-                  Ch. {bm.ch} · {bm.date}
+                  {bm.title}
                 </div>
               </div>
             </button>

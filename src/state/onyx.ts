@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { LibraryItem, MediaProgress } from '../api/abs';
-import { login, fetchLibraries, fetchLibraryItems, saveToken } from '../api/abs';
+import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, saveToken, fetchListeningStats, getMe } from '../api/abs';
 import {
   applyTheme,
   ONYX_DARK_BASE,
@@ -11,7 +11,8 @@ import {
 
 // ─── Re-exported API types ────────────────────────────────────────────────────
 
-export type { LibraryItem, MediaProgress };
+export type { LibraryItem, MediaProgress, ListeningStats };
+export type { AbsBookmark };
 
 // ─── Local-only interfaces ────────────────────────────────────────────────────
 
@@ -181,6 +182,8 @@ export interface OnyxState {
   library: LibraryItem[];
   libraryLoading: boolean;
   mediaProgress: MediaProgress[];
+  listeningStats: ListeningStats | null;
+  bookmarks: AbsBookmark[];
   // Playback
   screen: string;
   setScreen: (screen: string) => void;
@@ -341,7 +344,9 @@ export function useOnyxState(): OnyxState {
   const [libraryLoading, setLibraryLoadingRaw] = useState(
     () => Boolean(localStorage.getItem('skald.serverUrl') && localStorage.getItem('skald.authToken')),
   );
-  const [mediaProgress] = useState<MediaProgress[]>([]);
+  const [mediaProgress, setMediaProgress] = useState<MediaProgress[]>([]);
+  const [listeningStats, setListeningStats] = useState<ListeningStats | null>(null);
+  const [bookmarks, setBookmarks] = useState<AbsBookmark[]>([]);
 
   useEffect(() => {
     if (!serverUrl || (!authToken && !(username && password))) {
@@ -376,6 +381,31 @@ export function useOnyxState(): OnyxState {
     })();
     return () => { cancelled = true; };
   }, [serverUrl, authToken, username, password]);
+
+  // Fetch listeningStats + mediaProgress/bookmarks via /api/me once the library
+  // has loaded and we have valid credentials.
+  // getMe doesn't need userId; we derive it from the response so this works
+  // even when userId was never stored in localStorage from a prior session.
+  useEffect(() => {
+    if (!serverUrl || !authToken || library.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const me = await getMe(serverUrl);
+        if (cancelled) return;
+        setMediaProgress(me.mediaProgress);
+        setBookmarks(me.bookmarks);
+        const resolvedId = userId || me.id;
+        if (!userId && me.id) setUserId(me.id);
+        const stats = await fetchListeningStats(serverUrl, resolvedId);
+        if (cancelled) return;
+        setListeningStats(stats);
+      } catch (e) {
+        console.error('Post-library fetch failed', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [library, serverUrl, authToken]);
 
   // ── Playback ─────────────────────────────────────────────────────────────────
   const [screen, setScreen] = useState('library');
@@ -551,7 +581,7 @@ export function useOnyxState(): OnyxState {
     password, setPassword,
     userId, setUserId,
     authToken, setAuthToken,
-    library, libraryLoading, mediaProgress,
+    library, libraryLoading, mediaProgress, listeningStats, bookmarks,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId,
     playing, setPlaying,

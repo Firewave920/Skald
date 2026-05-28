@@ -71,7 +71,10 @@
       "Bash(pnpm tsc *)",
       "PowerShell(Get-Process -Name \"skald\",\"node\" -ErrorAction SilentlyContinue | Where-Object { $_.Name -eq \"skald\" -or \\($_.Name -eq \"node\" -and \\(netstat -ano | Select-String \":1420\" | Select-String $_.Id.ToString\\(\\)\\)\\) } | Stop-Process -Force -ErrorAction SilentlyContinue; Start-Sleep -Seconds 1; netstat -ano | findstr \"LISTENING\" | findstr \":1420\")",
       "PowerShell($pid1420 = \\(netstat -ano | Select-String \"LISTENING\" | Select-String \":1420\" | ForEach-Object { \\($_ -split '\\\\s+'\\)[-1] } | Select-Object -First 1\\); if \\($pid1420\\) { Stop-Process -Id $pid1420 -Force -ErrorAction SilentlyContinue }; Get-Process -Name \"skald\" -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 2; Write-Host \"Done\")",
-      "PowerShell($pid1420 = \\(netstat -ano | Select-String \"LISTENING\" | Select-String \":1420\" | ForEach-Object { \\($_ -split '\\\\s+'\\)[-1] } | Select-Object -First 1\\); if \\($pid1420\\) { Stop-Process -Id $pid1420 -Force -ErrorAction SilentlyContinue }; Get-Process -Name \"skald\" -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; Write-Host \"clear\")"
+      "PowerShell($pid1420 = \\(netstat -ano | Select-String \"LISTENING\" | Select-String \":1420\" | ForEach-Object { \\($_ -split '\\\\s+'\\)[-1] } | Select-Object -First 1\\); if \\($pid1420\\) { Stop-Process -Id $pid1420 -Force -ErrorAction SilentlyContinue }; Get-Process -Name \"skald\" -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; Write-Host \"clear\")",
+      "Bash(taskkill /F /IM skald.exe)",
+      "Bash(taskkill /F /IM \"Skald.exe\")",
+      "PowerShell(Stop-Process -Force)"
     ]
   }
 }
