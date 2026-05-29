@@ -113,6 +113,9 @@ End-of-phase deliverable: every UI control that previously manipulated mock stat
 
 ---
 
+### Interim Phase for bug corrections.
+
+
 ### Phase 6 — Login flow
 
 - **Step 43.** Build a pre-shell login screen shown when no valid token exists. Wire to the `login` Tauri command. On success, persist via keyring and proceed to the main shell.
