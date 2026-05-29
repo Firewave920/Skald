@@ -294,6 +294,29 @@ impl AbsClient {
             .map_err(|e| e.to_string())
     }
 
+    /// PATCH /api/items/{item_id}/media — writes metadata via the object-array structures
+    /// the server reads from (authors, narrators, series), not the computed flat strings.
+    pub async fn update_media(
+        &self,
+        item_id: &str,
+        metadata: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let resp = self
+            .http
+            .patch(format!("{}/api/items/{item_id}/media", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({ "metadata": metadata }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("update_media failed: HTTP {}", resp.status()));
+        }
+
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
     /// GET /api/search/books?title=…&author=…&provider=…
     pub async fn search_books(
         &self,
@@ -312,40 +335,6 @@ impl AbsClient {
 
         if !resp.status().is_success() {
             return Err(format!("search_books failed: HTTP {}", resp.status()));
-        }
-
-        resp.json().await.map_err(|e| e.to_string())
-    }
-
-    /// POST /api/items/{itemId}/match
-    pub async fn match_item(
-        &self,
-        item_id: &str,
-        provider: &str,
-        title: &str,
-        author: &str,
-        asin: Option<&str>,
-    ) -> Result<serde_json::Value, String> {
-        let mut body = serde_json::json!({
-            "provider": provider,
-            "title": title,
-            "author": author,
-            "overrideDefaults": true,
-        });
-        if let Some(a) = asin {
-            body["asin"] = serde_json::json!(a);
-        }
-        let resp = self
-            .http
-            .post(format!("{}/api/items/{item_id}/match", self.root()))
-            .header("Authorization", self.auth_header()?)
-            .json(&body)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if !resp.status().is_success() {
-            return Err(format!("match_item failed: HTTP {}", resp.status()));
         }
 
         resp.json().await.map_err(|e| e.to_string())

@@ -241,6 +241,14 @@ export function closeSession(
   return invoke('close_session', { serverUrl, sessionId, currentTime, timeListened });
 }
 
+export function updateMedia(
+  serverUrl: string,
+  itemId: string,
+  metadata: Record<string, unknown>,
+): Promise<unknown> {
+  return invoke('update_media', { serverUrl, itemId, metadata });
+}
+
 export function searchBooks(
   serverUrl: string,
   title: string,
@@ -250,14 +258,4 @@ export function searchBooks(
   return invoke('search_books', { serverUrl, title, author, provider });
 }
 
-export function matchItem(
-  serverUrl: string,
-  itemId: string,
-  provider: string,
-  title: string,
-  author: string,
-  asin?: string,
-): Promise<unknown> {
-  return invoke('match_item', { serverUrl, itemId, provider, title, author, asin: asin ?? null });
-}
 

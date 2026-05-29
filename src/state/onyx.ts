@@ -51,6 +51,24 @@ export interface ChapterPosition {
   chapter: Chapter;
 }
 
+// ─── Author/narrator normalisation ────────────────────────────────────────────
+// ABS endpoints sometimes return authorName as null with an `authors` array.
+// This guard ensures the display fields are always populated when the array data is present.
+
+function patchLibraryItems(items: LibraryItem[]): LibraryItem[] {
+  return items.map(it => {
+    const m = it.media?.metadata as unknown as Record<string, unknown>;
+    if (!m) return it;
+    if (!m.authorName && Array.isArray(m.authors)) {
+      m.authorName = (m.authors as { name: string }[]).map(a => a.name).join(', ');
+    }
+    if (!m.narratorName && Array.isArray(m.narrators)) {
+      m.narratorName = (m.narrators as string[]).join(', ');
+    }
+    return it;
+  });
+}
+
 // ─── Display helpers for real LibraryItem ─────────────────────────────────────
 
 export function bookTitle(b: LibraryItem): string {
@@ -411,7 +429,7 @@ export function useOnyxState(): OnyxState {
         if (!audiobookLib) { setLibraryLoadingRaw(false); return; }
         const items = await fetchLibraryItems(serverUrl, audiobookLib.id);
         if (cancelled) return;
-        setLibraryRaw(items);
+        setLibraryRaw(patchLibraryItems(items));
       } catch (e) {
         console.error('Library fetch failed', e);
       } finally {
