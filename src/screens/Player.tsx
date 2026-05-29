@@ -16,6 +16,8 @@ import Icon from '../components/Icon';
 import Waveform from '../components/Waveform';
 import VolumeControl from '../components/chrome/VolumeControl';
 import DeviceSelector from '../components/chrome/DeviceSelector';
+import { getCachedReview, setCachedReview } from '../api/reviewCache';
+import type { OLRatings, OLShelves } from '../api/reviewCache';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -25,6 +27,7 @@ interface GBooksInfo {
   ratingsCount?: number;
   infoLink?: string;
 }
+
 
 type SleepMode = null | number | 'chapter';
 
@@ -79,30 +82,111 @@ export default function Player({ st }: PlayerProps) {
 
   const [gBooksInfo, setGBooksInfo] = useState<GBooksInfo | null>(null);
 
+  // undefined = not fetched yet, null = fetched but not found, string = OL work key
+  const [olWorkKey, setOlWorkKey] = useState<string | null | undefined>(undefined);
+  const [olRatings, setOlRatings] = useState<OLRatings | null>(null);
+  const [olShelves, setOlShelves] = useState<OLShelves | null>(null);
+
   useEffect(() => {
+    setGBooksInfo(null);
+    setOlWorkKey(undefined);
+    setOlRatings(null);
+    setOlShelves(null);
+    if (!b) return;
+
+    // Serve from cache immediately if fresh — no network request.
+    const cached = getCachedReview(b.id);
+    if (cached) {
+      setOlWorkKey(cached.olWorkKey);
+      setOlRatings(cached.olRatings);
+      setOlShelves(cached.olShelves);
+      if (cached.googleRating != null || cached.googleCount != null || cached.googleLink != null) {
+        setGBooksInfo({
+          averageRating: cached.googleRating ?? undefined,
+          ratingsCount:  cached.googleCount  ?? undefined,
+          infoLink:      cached.googleLink   ?? undefined,
+        });
+      }
+      return;
+    }
+
+    // Cache miss — fetch Open Library and Google Books in parallel.
     const apiKey = st.googleBooksApiKey;
-    if (!apiKey || !b) { setGBooksInfo(null); return; }
     let cancelled = false;
+
     (async () => {
       try {
         const meta = b.media?.metadata;
         const isbn = meta?.isbn13 || meta?.isbn10 || meta?.isbn;
-        const q = isbn
-          ? `isbn:${isbn}`
-          : `intitle:${encodeURIComponent(bookTitle(b))}+inauthor:${encodeURIComponent(bookAuthor(b))}`;
-        const res = await fetch(
-          `https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${apiKey}`,
-        );
-        const data = await res.json();
+
+        // ── Open Library ──────────────────────────────────────────────────────
+        let rawWorkId: string | null = null;
+        if (isbn) {
+          const res = await fetch(
+            `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`,
+          );
+          const data = await res.json();
+          rawWorkId = data[`ISBN:${isbn}`]?.works?.[0]?.key ?? null;
+        }
+        if (!rawWorkId) {
+          const res = await fetch(
+            `https://openlibrary.org/search.json?title=${encodeURIComponent(bookTitle(b))}&author=${encodeURIComponent(bookAuthor(b))}&limit=1`,
+          );
+          const data = await res.json();
+          rawWorkId = data.docs?.[0]?.key ?? null;
+        }
+
+        let olKey: string | null = null;
+        let olRat: OLRatings | null = null;
+        let olSh: OLShelves | null = null;
+
+        if (rawWorkId) {
+          olKey = rawWorkId.replace(/^\/works\//, '');
+          const [ratRes, shRes] = await Promise.all([
+            fetch(`https://openlibrary.org/works/${olKey}/ratings.json`),
+            fetch(`https://openlibrary.org/works/${olKey}/bookshelves.json`),
+          ]);
+          const [ratData, shData] = await Promise.all([ratRes.json(), shRes.json()]);
+          olRat = { average: ratData.summary?.average ?? null, count: ratData.summary?.count ?? null };
+          olSh  = { wantToRead: shData.counts?.want_to_read ?? null, reading: shData.counts?.currently_reading ?? null, alreadyRead: shData.counts?.already_read ?? null };
+        }
+
+        // ── Google Books ──────────────────────────────────────────────────────
+        let googleRating: number | null = null;
+        let googleCount:  number | null = null;
+        let googleLink:   string | null = null;
+
+        if (apiKey) {
+          try {
+            const q = isbn
+              ? `isbn:${isbn}`
+              : `intitle:${encodeURIComponent(bookTitle(b))}+inauthor:${encodeURIComponent(bookAuthor(b))}`;
+            const res  = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=1&key=${apiKey}`);
+            const data = await res.json();
+            const info = data.items?.[0]?.volumeInfo ?? null;
+            if (info) {
+              googleRating = info.averageRating ?? null;
+              googleCount  = info.ratingsCount  ?? null;
+              googleLink   = info.canonicalVolumeLink ?? info.infoLink ?? null;
+            }
+          } catch (e) {
+            console.error('[gbooks] fetch failed:', e);
+          }
+        }
+
         if (cancelled) return;
-        const info = data.items?.[0]?.volumeInfo ?? null;
-        setGBooksInfo(info ? {
-          averageRating: info.averageRating,
-          ratingsCount: info.ratingsCount,
-          infoLink: info.canonicalVolumeLink ?? info.infoLink,
-        } : null);
+
+        setOlWorkKey(olKey);
+        setOlRatings(olRat);
+        setOlShelves(olSh);
+        if (googleRating != null || googleCount != null || googleLink != null) {
+          setGBooksInfo({ averageRating: googleRating ?? undefined, ratingsCount: googleCount ?? undefined, infoLink: googleLink ?? undefined });
+        }
+
+        setCachedReview(b.id, { olWorkKey: olKey, olRatings: olRat, olShelves: olSh, googleRating, googleCount, googleLink });
       } catch (e) {
-        console.error('[gbooks] fetch failed:', e);
+        console.error('[review] fetch failed:', e);
+        if (!cancelled) setOlWorkKey(null);
       }
     })();
     return () => { cancelled = true; };
@@ -373,7 +457,7 @@ export default function Player({ st }: PlayerProps) {
                           )}
                           {detailRow('Listened',   fmtTime(prog.currentTime))}
                           {detailRow('Remaining',  fmtRemaining(Math.max(0, prog.duration - prog.currentTime)))}
-                          {detailRow('Last played', new Date(prog.lastUpdate * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }))}
+                          {detailRow('Last played', new Date(prog.lastUpdate).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }))}
                         </>
                       ) : (
                         <div style={{ padding: '12px 0', fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>Not started</div>
@@ -400,6 +484,42 @@ export default function Player({ st }: PlayerProps) {
                             <a href={gBooksInfo.infoLink} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, fontFamily: MONO, fontSize: 10, color: 'var(--onyx-accent)', letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}>
                               View on Google Books ↗
                             </a>
+                          )}
+                        </>
+                      )}
+
+                      {/* Open Library */}
+                      {olWorkKey !== undefined && (
+                        <>
+                          <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginTop: 16, marginBottom: 4, paddingBottom: 4 }}>Open Library</div>
+                          {olWorkKey === null ? (
+                            <div style={{ padding: '8px 0', fontSize: 12, color: 'var(--onyx-text-mute)', fontStyle: 'italic' }}>No data found</div>
+                          ) : (
+                            <>
+                              <div style={{ padding: '8px 0', borderBottom: '1px solid var(--onyx-line)', fontSize: 12.5, color: 'var(--onyx-text-dim)' }}>
+                                {olRatings?.average != null
+                                  ? `${olRatings.average.toFixed(1)} / 5`
+                                  : '—'}
+                                {olRatings?.count != null
+                                  ? <span style={{ color: 'var(--onyx-text-mute)', fontFamily: MONO, fontSize: 10 }}>{' '}· {olRatings.count.toLocaleString()} ratings</span>
+                                  : null}
+                              </div>
+                              {olShelves && (
+                                <div style={{ padding: '8px 0', borderBottom: '1px solid var(--onyx-line)', fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em', lineHeight: 1.8 }}>
+                                  <div>Want to read: <span style={{ color: 'var(--onyx-text-dim)' }}>{olShelves.wantToRead?.toLocaleString() ?? '—'}</span></div>
+                                  <div>Reading: <span style={{ color: 'var(--onyx-text-dim)' }}>{olShelves.reading?.toLocaleString() ?? '—'}</span></div>
+                                  <div>Read: <span style={{ color: 'var(--onyx-text-dim)' }}>{olShelves.alreadyRead?.toLocaleString() ?? '—'}</span></div>
+                                </div>
+                              )}
+                              <a
+                                href={`https://openlibrary.org/works/${olWorkKey}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{ display: 'inline-block', marginTop: 10, fontFamily: MONO, fontSize: 10, color: 'var(--onyx-accent)', letterSpacing: '0.06em', textTransform: 'uppercase', textDecoration: 'none' }}
+                              >
+                                View on Open Library ↗
+                              </a>
+                            </>
                           )}
                         </>
                       )}

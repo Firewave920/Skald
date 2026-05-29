@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import type { OnyxState } from '../state/onyx';
 import FocusPanel from '../components/FocusPanel';
 import PickItUp from '../components/PickItUp';
@@ -8,12 +9,19 @@ import { SeriesView } from '../components/shelf/tabs';
 import { AuthorsView } from '../components/shelf/tabs';
 import { NarratorsView } from '../components/shelf/tabs';
 import { CollectionsView } from '../components/shelf/tabs';
+import { prefetchReviews } from '../api/reviewCache';
 
 export interface LibraryProps {
   st: OnyxState;
 }
 
 export default function Library({ st }: LibraryProps) {
+  useEffect(() => {
+    if (!st.library.length || !st.serverUrl) return;
+    const cancel = prefetchReviews(st.library, st.serverUrl);
+    return cancel;
+  }, [st.library, st.serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div style={{ flex: 1, display: 'flex', gap: 24, padding: '8px 24px 24px', minHeight: 0, width: '100%', maxWidth: '100%', overflow: 'hidden' }}>
       <FocusPanel st={st} />

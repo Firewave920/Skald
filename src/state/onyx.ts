@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark } from '../api/abs';
+import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User } from '../api/abs';
 import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe } from '../api/abs';
+
+export type { User };
 import {
   applyTheme,
   ONYX_DARK_BASE,
@@ -188,10 +190,14 @@ export interface OnyxState {
   setUserId: (id: string) => void;
   authToken: string;
   setAuthToken: (token: string) => void;
+  // Auth
+  user: User | null;
+  setUser: (user: User | null) => void;
   // Library
   library: LibraryItem[];
   libraryLoading: boolean;
   mediaProgress: MediaProgress[];
+  setMediaProgress: (progress: MediaProgress[]) => void;
   listeningStats: ListeningStats | null;
   bookmarks: AbsBookmark[];
   setBookmarks: (bookmarks: AbsBookmark[]) => void;
@@ -357,6 +363,16 @@ export function useOnyxState(): OnyxState {
     localStorage.setItem('skald.authToken', v); setAuthTokenRaw(v);
   }, []);
 
+  const [user, setUserRaw] = useState<User | null>(() => {
+    const stored = localStorage.getItem('skald.user');
+    if (!stored) return null;
+    try { return JSON.parse(stored) as User; } catch { return null; }
+  });
+  const setUser = useCallback((v: User | null) => {
+    localStorage.setItem('skald.user', v ? JSON.stringify(v) : '');
+    setUserRaw(v);
+  }, []);
+
   // ── Library ─────────────────────────────────────────────────────────────────
   const [library, setLibraryRaw] = useState<LibraryItem[]>([]);
   const [libraryLoading, setLibraryLoadingRaw] = useState(
@@ -377,10 +393,11 @@ export function useOnyxState(): OnyxState {
       try {
         let token = authToken;
         if (!token && username && password) {
-          const user = await login(serverUrl, username, password);
-          token = user.token;
-          setAuthToken(user.token);
-          setUserId(user.id);
+          const loggedInUser = await login(serverUrl, username, password);
+          token = loggedInUser.token;
+          setAuthToken(loggedInUser.token);
+          setUserId(loggedInUser.id);
+          setUser(loggedInUser);
         } else {
           await saveToken(token);
         }
@@ -413,6 +430,12 @@ export function useOnyxState(): OnyxState {
         if (cancelled) return;
         setMediaProgress(me.mediaProgress);
         setBookmarks(me.bookmarks);
+        // Refresh user type from server — merge into stored user record and persist.
+        if (me.type !== undefined) {
+          const storedRaw = localStorage.getItem('skald.user');
+          const base = storedRaw ? (JSON.parse(storedRaw) as User) : {} as User;
+          setUser({ ...base, id: me.id, username: me.username, token: me.token, type: me.type });
+        }
         const resolvedId = userId || me.id;
         if (!userId && me.id) setUserId(me.id);
         const stats = await fetchListeningStats(serverUrl, resolvedId);
@@ -620,7 +643,8 @@ export function useOnyxState(): OnyxState {
     password, setPassword,
     userId, setUserId,
     authToken, setAuthToken,
-    library, libraryLoading, mediaProgress, listeningStats, bookmarks, setBookmarks,
+    user, setUser,
+    library, libraryLoading, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId, currentBookChapters,
     playing, setPlaying,

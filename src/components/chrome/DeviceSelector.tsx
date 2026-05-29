@@ -1,17 +1,28 @@
-import { useRef, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { OnyxState } from '../../state/onyx';
-import { AUDIO_DEVICES } from '../../state/onyx';
 import Icon from '../Icon';
-import type { IconName } from '../Icon';
+import { getAudioDevices, setAudioDevice } from '../../api/abs';
+import type { AudioDevice } from '../../api/abs';
 
 export interface DeviceSelectorProps {
   st: OnyxState;
 }
 
 export default function DeviceSelector({ st }: DeviceSelectorProps) {
-  const current = AUDIO_DEVICES.find(d => d.id === st.device) ?? AUDIO_DEVICES[0];
+  const [devices, setDevices] = useState<AudioDevice[]>([]);
   const ref = useRef<HTMLDivElement>(null);
   const mono = "'JetBrains Mono', ui-monospace, monospace";
+
+  useEffect(() => {
+    getAudioDevices()
+      .then(devs => {
+        setDevices(devs);
+        if (devs.length > 0 && !devs.find(d => d.id === st.device)) {
+          st.setDevice(devs[0].id);
+        }
+      })
+      .catch(e => console.error('[DeviceSelector] getAudioDevices failed:', e));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!st.deviceOpen) return;
@@ -21,6 +32,8 @@ export default function DeviceSelector({ st }: DeviceSelectorProps) {
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
   }, [st.deviceOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const current = devices.find(d => d.id === st.device) ?? devices[0];
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
@@ -36,12 +49,9 @@ export default function DeviceSelector({ st }: DeviceSelectorProps) {
         }}
       >
         <span style={{ width: 6, height: 6, borderRadius: 3, background: '#5ac88a', boxShadow: '0 0 6px #5ac88a' }} />
-        <Icon name={current.icon as IconName} size={14} color="var(--onyx-text-dim)" />
+        <Icon name="headphones" size={14} color="var(--onyx-text-dim)" />
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1, textAlign: 'left' }}>
-          <span style={{ fontSize: 11.5, color: 'var(--onyx-text)' }}>{current.name}</span>
-          <span style={{ fontFamily: mono, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {current.sub.split(' · ').slice(0, 2).join(' · ')}
-          </span>
+          <span style={{ fontSize: 11.5, color: 'var(--onyx-text)' }}>{current?.name ?? 'Audio output'}</span>
         </div>
         <span style={{
           color: 'var(--onyx-text-dim)', marginLeft: 4,
@@ -63,10 +73,16 @@ export default function DeviceSelector({ st }: DeviceSelectorProps) {
           padding: 6, zIndex: 100,
         }}>
           <div style={{ fontFamily: mono, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', padding: '6px 8px 4px' }}>OUTPUT DEVICE</div>
-          {AUDIO_DEVICES.map(d => (
+          {devices.length === 0 ? (
+            <div style={{ padding: '8px', fontFamily: mono, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>Loading devices…</div>
+          ) : devices.map(d => (
             <button
               key={d.id}
-              onClick={() => { st.setDevice(d.id); st.setDeviceOpen(false); }}
+              onClick={() => {
+                st.setDevice(d.id);
+                setAudioDevice(d.id).catch(e => console.error('[DeviceSelector] setAudioDevice failed:', e));
+                st.setDeviceOpen(false);
+              }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10, padding: '8px 8px', borderRadius: 6,
                 background: d.id === st.device ? 'var(--onyx-accent-dim)' : 'transparent',
@@ -74,23 +90,21 @@ export default function DeviceSelector({ st }: DeviceSelectorProps) {
               }}
             >
               <Icon
-                name={d.icon as IconName}
+                name="headphones"
                 size={15}
                 color={d.id === st.device ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)'}
               />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: d.id === st.device ? 'var(--onyx-accent)' : 'var(--onyx-text)', fontWeight: d.id === st.device ? 500 : 400 }}>{d.name}</div>
-                <div style={{ fontFamily: mono, fontSize: 9.5, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em', marginTop: 1 }}>{d.sub}</div>
+                <div style={{
+                  fontSize: 12,
+                  color: d.id === st.device ? 'var(--onyx-accent)' : 'var(--onyx-text)',
+                  fontWeight: d.id === st.device ? 500 : 400,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }}>{d.name}</div>
               </div>
               {d.id === st.device && <Icon name="dot" size={10} color="var(--onyx-accent)" />}
             </button>
           ))}
-          <div style={{ borderTop: '1px solid var(--onyx-line)', marginTop: 4, padding: '8px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontFamily: mono, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Exclusive Mode</span>
-            <div style={{ width: 26, height: 14, borderRadius: 7, background: 'var(--onyx-accent)', position: 'relative' }}>
-              <div style={{ position: 'absolute', right: 2, top: 2, width: 10, height: 10, borderRadius: 5, background: 'var(--onyx-bg)' }} />
-            </div>
-          </div>
         </div>
       )}
     </div>

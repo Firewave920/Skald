@@ -4,7 +4,7 @@
 // Do NOT switch to HTTP header auth — LibVLC does not reliably forward
 // custom headers on Windows (CLAUDE.md critical lesson 2).
 
-use std::ffi::{CString, c_void};
+use std::ffi::{CStr, CString, c_void};
 use std::os::raw::c_char;
 use vlc::{Instance, Media, MediaPlayer, MediaPlayerAudioEx, State};
 
@@ -12,6 +12,17 @@ use vlc::{Instance, Media, MediaPlayer, MediaPlayerAudioEx, State};
 // The symbol is already present in the link graph via the vlc-rs dependency.
 extern "C" {
     fn libvlc_media_add_option(p_md: *mut c_void, psz_options: *const c_char);
+    fn libvlc_audio_output_device_enum(p_mi: *mut c_void) -> *mut LibVlcAudioOutputDevice;
+    fn libvlc_audio_output_device_list_release(p_list: *mut LibVlcAudioOutputDevice);
+    fn libvlc_audio_output_device_set(p_mi: *mut c_void, psz_aout: *const c_char, psz_device: *const c_char);
+}
+
+// Mirror of libvlc_audio_output_device_t (linked list node).
+#[repr(C)]
+struct LibVlcAudioOutputDevice {
+    p_next: *mut LibVlcAudioOutputDevice,
+    psz_device: *const c_char,
+    psz_description: *const c_char,
 }
 
 pub struct AudioPlayer {
@@ -99,6 +110,47 @@ impl AudioPlayer {
 
     pub fn is_playing(&self) -> bool {
         self.media_player.is_playing()
+    }
+
+    /// Returns all audio output devices reported by LibVLC for the current output module.
+    pub fn get_audio_devices(&self) -> Vec<crate::models::AudioDevice> {
+        unsafe {
+            let head = libvlc_audio_output_device_enum(self.media_player.raw() as *mut c_void);
+            if head.is_null() {
+                return Vec::new();
+            }
+            let mut devices = Vec::new();
+            let mut cur = head;
+            while !cur.is_null() {
+                let id = if (*cur).psz_device.is_null() {
+                    String::new()
+                } else {
+                    CStr::from_ptr((*cur).psz_device).to_string_lossy().into_owned()
+                };
+                let name = if (*cur).psz_description.is_null() {
+                    id.clone()
+                } else {
+                    CStr::from_ptr((*cur).psz_description).to_string_lossy().into_owned()
+                };
+                devices.push(crate::models::AudioDevice { id, name });
+                cur = (*cur).p_next;
+            }
+            libvlc_audio_output_device_list_release(head);
+            devices
+        }
+    }
+
+    /// Switch the active audio output device. Takes effect on next playback.
+    pub fn set_audio_device(&self, device_id: &str) {
+        if let Ok(id) = CString::new(device_id) {
+            unsafe {
+                libvlc_audio_output_device_set(
+                    self.media_player.raw() as *mut c_void,
+                    std::ptr::null(),
+                    id.as_ptr(),
+                );
+            }
+        }
     }
 
     /// Block until the player leaves the NothingSpecial/Opening states, up to

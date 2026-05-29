@@ -186,6 +186,19 @@ pub async fn create_bookmark(
 }
 
 #[tauri::command]
+pub async fn delete_progress(
+    server_url: String,
+    item_id: String,
+) -> Result<(), String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .delete_progress(&item_id)
+        .await
+}
+
+#[tauri::command]
 pub async fn update_progress(
     server_url: String,
     item_id: String,
@@ -214,6 +227,34 @@ pub async fn sync_session(
         .with_token(token)
         .sync_session(&session_id, current_time, time_listened)
         .await
+}
+
+#[tauri::command]
+pub async fn get_audio_devices(
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<Vec<models::AudioDevice>, String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    match guard.as_ref() {
+        Some(p) => Ok(p.get_audio_devices()),
+        None => Ok(vec![models::AudioDevice {
+            id: String::new(),
+            name: "System Default".to_string(),
+        }]),
+    }
+}
+
+#[tauri::command]
+pub async fn set_audio_device(
+    device_id: String,
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    if let Some(p) = guard.as_ref() {
+        p.set_audio_device(&device_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]

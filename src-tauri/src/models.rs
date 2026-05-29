@@ -11,6 +11,13 @@ where
     Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
 }
 
+/// An audio output device returned by LibVLC.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AudioDevice {
+    pub id: String,
+    pub name: String,
+}
+
 /// Stored server connection — url and auth token.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +35,9 @@ pub struct User {
     pub token: String,
     pub email: Option<String>,
     pub is_active: bool,
+    /// "root" | "admin" | "user" | "guest"
+    #[serde(rename = "type", default)]
+    pub user_type: Option<String>,
 }
 
 /// A single Audiobookshelf library.
@@ -97,6 +107,18 @@ pub struct BookMetadata {
     pub genres: Vec<String>,
     #[serde(default)]
     pub description: Option<String>,
+    #[serde(default)]
+    pub publisher: Option<String>,
+    #[serde(default)]
+    pub published_year: Option<String>,
+    #[serde(default)]
+    pub language: Option<String>,
+    #[serde(default)]
+    pub isbn: Option<String>,
+    #[serde(default)]
+    pub isbn10: Option<String>,
+    #[serde(default)]
+    pub isbn13: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -142,6 +164,9 @@ pub struct MeResponse {
     pub media_progress: Vec<MediaProgress>,
     #[serde(default)]
     pub bookmarks: Vec<Bookmark>,
+    /// "root" | "admin" | "user" | "guest"
+    #[serde(rename = "type", default)]
+    pub user_type: Option<String>,
 }
 
 /// Minimal per-book entry inside the listening-stats `items` map.

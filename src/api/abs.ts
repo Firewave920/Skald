@@ -8,6 +8,7 @@ export interface User {
   token: string;
   email: string | null;
   isActive: boolean;
+  type?: string;
 }
 
 export interface Library {
@@ -90,6 +91,7 @@ export interface MeResponse {
   token: string;
   mediaProgress: MediaProgress[];
   bookmarks: Bookmark[];
+  type?: string;
 }
 
 export interface ListeningStatItem {
@@ -108,6 +110,11 @@ export interface Bookmark {
   libraryItemId: string;
   title: string;
   time: number;
+}
+
+export interface AudioDevice {
+  id: string;
+  name: string;
 }
 
 export interface PlaySession {
@@ -190,6 +197,10 @@ export function createBookmark(
   return invoke('create_bookmark', { serverUrl, itemId, time, title });
 }
 
+export function deleteProgress(serverUrl: string, itemId: string): Promise<void> {
+  return invoke('delete_progress', { serverUrl, itemId });
+}
+
 export function updateProgress(
   serverUrl: string,
   itemId: string,
@@ -211,6 +222,14 @@ export function syncSession(
 
 export function getCover(serverUrl: string, itemId: string): Promise<number[]> {
   return invoke('get_cover', { serverUrl, itemId });
+}
+
+export function getAudioDevices(): Promise<AudioDevice[]> {
+  return invoke('get_audio_devices');
+}
+
+export function setAudioDevice(deviceId: string): Promise<void> {
+  return invoke('set_audio_device', { deviceId });
 }
 
 export function closeSession(

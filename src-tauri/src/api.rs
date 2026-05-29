@@ -206,6 +206,23 @@ impl AbsClient {
         Ok(())
     }
 
+    /// DELETE /api/me/progress/{id} — removes a progress record entirely.
+    pub async fn delete_progress(&self, item_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/me/progress/{item_id}", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_progress failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
     /// POST /api/session/{id}/sync  (confirmed against ApiRouter.js)
     pub async fn sync_session(
         &self,
