@@ -41,6 +41,9 @@ pub fn run() {
             commands::set_speed,
             commands::set_volume,
             commands::get_cover,
+            commands::get_audio_devices,
+            commands::set_audio_device,
+            commands::delete_progress,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

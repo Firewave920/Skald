@@ -1,15 +1,16 @@
-import type { CSSProperties, ReactNode } from 'react';
+import type { CSSProperties, MouseEvent, ReactNode } from 'react';
 
 export interface GlassProps {
   children?: ReactNode;
   style?: CSSProperties;
   onClick?: () => void;
+  onContextMenu?: (e: MouseEvent) => void;
   translucent: boolean;
 }
 
-export default function Glass({ children, style, onClick, translucent }: GlassProps) {
+export default function Glass({ children, style, onClick, onContextMenu, translucent }: GlassProps) {
   return (
-    <div onClick={onClick} style={{
+    <div onClick={onClick} onContextMenu={onContextMenu} style={{
       background: translucent ? 'var(--onyx-glass)' : 'var(--onyx-panel)',
       backdropFilter: translucent ? 'blur(40px) saturate(120%)' : 'none',
       WebkitBackdropFilter: translucent ? 'blur(40px) saturate(120%)' : 'none',

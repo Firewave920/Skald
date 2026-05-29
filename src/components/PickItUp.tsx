@@ -1,5 +1,5 @@
-import { useRef, useState, useEffect } from 'react';
-import type { OnyxState } from '../state/onyx';
+import React, { useRef, useState, useEffect } from 'react';
+import type { OnyxState, LibraryItem } from '../state/onyx';
 import {
   bookTitle, bookAuthor, bookSeries, bookDur,
   bookProgress, bookCurrentTime,
@@ -7,6 +7,8 @@ import {
 import Glass from './chrome/Glass';
 import Cover from './Cover';
 import Icon from './Icon';
+import ContextMenu from './ContextMenu';
+import { buildItemContextMenu } from './shelf/buildItemContextMenu';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -21,6 +23,12 @@ export default function PickItUp({ st }: PickItUpProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startScrollLeft: number; didDrag: boolean } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: LibraryItem } | null>(null);
+
+  const onContextMenu = (e: React.MouseEvent, item: LibraryItem) => {
+    e.preventDefault();
+    setContextMenu({ x: e.pageX, y: e.pageY, item });
+  };
 
   useEffect(() => {
     const onWindowMouseUp = () => {
@@ -112,7 +120,7 @@ export default function PickItUp({ st }: PickItUpProps) {
           {inProg.map(b => {
             const prog = bookProgress(b, st.mediaProgress);
             return (
-              <Glass key={b.id} translucent={st.translucent} onClick={() => openBook(b.id)} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 260, padding: 14, display: 'flex', gap: 14, minHeight: 110, cursor: 'pointer' }}>
+              <Glass key={b.id} translucent={st.translucent} onClick={() => openBook(b.id)} onContextMenu={e => onContextMenu(e, b)} style={{ flexGrow: 0, flexShrink: 0, flexBasis: 260, padding: 14, display: 'flex', gap: 14, minHeight: 110, cursor: 'pointer' }}>
                 <Cover item={b} size={80} serverUrl={st.serverUrl} />
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                   <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>{bookSeries(b)}</div>
@@ -130,6 +138,14 @@ export default function PickItUp({ st }: PickItUpProps) {
             );
           })}
         </div>
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={buildItemContextMenu(contextMenu.item, st)}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

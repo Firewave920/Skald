@@ -8,6 +8,8 @@ import Glass from '../chrome/Glass';
 import Cover from '../Cover';
 import Icon from '../Icon';
 import SortIndicator from './SortIndicator';
+import ContextMenu from '../ContextMenu';
+import { buildItemContextMenu } from './buildItemContextMenu';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -39,7 +41,7 @@ function getVal(b: LibraryItem, key: string): string | number {
   }
 }
 
-function ShelfList({ books, st, openBook }: { books: LibraryItem[]; st: OnyxState; openBook: (id: string) => void }) {
+function ShelfList({ books, st, openBook, onContextMenu }: { books: LibraryItem[]; st: OnyxState; openBook: (id: string) => void; onContextMenu: (e: React.MouseEvent, item: LibraryItem) => void }) {
   const [sort, setSort] = useState<SortState | null>(null);
 
   const onHeader = (col: string) => {
@@ -109,6 +111,7 @@ function ShelfList({ books, st, openBook }: { books: LibraryItem[]; st: OnyxStat
               <tr
                 key={b.id}
                 onClick={() => openBook(b.id)}
+                onContextMenu={e => onContextMenu(e, b)}
                 className="onyx-row"
                 style={{
                   background: active ? 'var(--onyx-accent-dim)' : (i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)'),
@@ -171,8 +174,16 @@ export interface LibraryShelfProps {
   st: OnyxState;
 }
 
+interface CtxMenu { x: number; y: number; item: LibraryItem }
+
 export default function LibraryShelf({ st }: LibraryShelfProps) {
   const coverW = COVER_SIZES[st.coverSize] ?? COVER_SIZES.L;
+  const [contextMenu, setContextMenu] = useState<CtxMenu | null>(null);
+
+  const onContextMenu = (e: React.MouseEvent, item: LibraryItem) => {
+    e.preventDefault();
+    setContextMenu({ x: e.pageX, y: e.pageY, item });
+  };
 
   const filtered = st.library.filter(b => {
     if (st.contextFilter) {
@@ -235,13 +246,13 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
       style={{ flex: 1, minWidth: 0, padding: st.libraryView === 'list' ? '12px 14px' : '20px 18px', overflow: 'auto' }}
     >
       {st.libraryView === 'list' ? (
-        <ShelfList books={shelfBooks} st={st} openBook={openBook} />
+        <ShelfList books={shelfBooks} st={st} openBook={openBook} onContextMenu={onContextMenu} />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${coverW}px, 1fr))`, gap: 14 }}>
           {shelfBooks.map(b => {
             const prog = bookProgress(b, st.mediaProgress);
             return (
-              <button key={b.id} onClick={() => openBook(b.id)} className="onyx-tile" style={{ position: 'relative', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
+              <button key={b.id} onClick={() => openBook(b.id)} onContextMenu={e => onContextMenu(e, b)} className="onyx-tile" style={{ position: 'relative', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
                 <div style={{
                   position: 'relative',
                   transform: b.id === st.currentBookId ? 'translateY(-4px)' : 'none',
@@ -269,6 +280,14 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
             </div>
           )}
         </div>
+      )}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={buildItemContextMenu(contextMenu.item, st)}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </Glass>
   );
