@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  openPlaybackSession, playAudio, pauseAudio,
+  openPlaybackSession, playAudio, pauseAudio, closeActiveSession,
   seekAudio, setSpeed as setAudioSpeed, setVolume as setAudioVolume,
   createBookmark, getMe, fetchItem,
 } from '../api/abs';
@@ -583,7 +583,29 @@ export default function Player({ st }: PlayerProps) {
                 {displayChapters.map((c, i) => {
                   const state = i < chIdx ? 'done' : i === chIdx ? 'playing' : 'next';
                   return (
-                    <button key={c.n} onClick={() => { const pos = chapterStart(displayChapters, i); seekAudio(pos).catch(console.error); st.setPosition(pos); }} style={{
+                    <button key={c.n} onClick={async () => {
+                      const pos = chapterStart(displayChapters, i);
+                      if (!st.focusedBookId || st.focusedBookId === st.currentBookId) {
+                        await seekAudio(pos).catch(console.error);
+                        st.setPosition(pos);
+                      } else {
+                        await closeActiveSession().catch(() => {});
+                        st.setSessionReady(false);
+                        st.setSessionId('');
+                        st.setPlaying(false);
+                        try {
+                          const { sessionId } = await openPlaybackSession(st.serverUrl, st.focusedBookId);
+                          st.setSessionId(sessionId);
+                          st.setSessionReady(true);
+                          st.setCurrentBookId(st.focusedBookId);
+                          await seekAudio(pos).catch(console.error);
+                          await playAudio().catch(console.error);
+                          st.setPosition(pos);
+                        } catch (err) {
+                          console.error('[Player] chapter-click playback failed:', err);
+                        }
+                      }
+                    }} style={{
                       display: 'flex', alignItems: 'center', padding: '8px 12px', borderRadius: 8, gap: 12,
                       background: state === 'playing' ? 'var(--onyx-accent-dim)' : 'transparent',
                       border: `1px solid ${state === 'playing' ? 'var(--onyx-accent-edge)' : 'transparent'}`,
