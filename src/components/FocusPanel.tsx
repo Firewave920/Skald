@@ -248,7 +248,7 @@ function CollapseHandle({ collapsed, onToggle }: { collapsed: boolean; onToggle:
 }
 
 export default function FocusPanel({ st }: FocusPanelProps) {
-  const [drawerTab, setDrawerTab] = useState<'bookmarks' | 'synopsis'>('bookmarks');
+  const [drawerTab, setDrawerTab] = useState<'bookmarks' | 'synopsis'>('synopsis');
 
   const focus = st.currentBook;
   if (!focus) return null;
@@ -440,6 +440,18 @@ export default function FocusPanel({ st }: FocusPanelProps) {
 
       <div style={{ marginTop: 14, display: 'flex', gap: 4 }}>
         <button
+          onClick={() => setDrawerTab('synopsis')}
+          style={{
+            fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase',
+            padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
+            background: drawerTab === 'synopsis' ? 'var(--onyx-accent-dim)' : 'transparent',
+            border: `1px solid ${drawerTab === 'synopsis' ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
+            color: drawerTab === 'synopsis' ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)',
+          }}
+        >
+          Synopsis
+        </button>
+        <button
           onClick={() => setDrawerTab('bookmarks')}
           style={{
             fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase',
@@ -452,18 +464,6 @@ export default function FocusPanel({ st }: FocusPanelProps) {
         >
           <Icon name="bookmark" size={9} />
           Bookmarks{focusBookmarks.length > 0 ? ` (${focusBookmarks.length})` : ''}
-        </button>
-        <button
-          onClick={() => setDrawerTab('synopsis')}
-          style={{
-            fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase',
-            padding: '4px 10px', borderRadius: 6, cursor: 'pointer',
-            background: drawerTab === 'synopsis' ? 'var(--onyx-accent-dim)' : 'transparent',
-            border: `1px solid ${drawerTab === 'synopsis' ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
-            color: drawerTab === 'synopsis' ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)',
-          }}
-        >
-          Synopsis
         </button>
       </div>
 

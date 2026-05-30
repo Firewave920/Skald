@@ -15,7 +15,7 @@ import MatchModal from '../MatchModal';
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-const COVER_SIZES: Record<string, number> = { S: 80, M: 96, L: 116, XL: 148 };
+const COVER_SIZES: Record<string, number> = { S: 80, M: 96, L: 116, XL: 148, XXL: 180, XXXL: 220 };
 
 function seriesNameOf(s: string | undefined) { return (s || '').split(' · ')[0]; }
 function seriesVolOf(s: string | undefined)  { return parseInt((s || '').split(' · ')[1] || '0', 10); }
@@ -257,13 +257,16 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
               <button key={b.id} onClick={() => openBook(b.id)} onContextMenu={e => onContextMenu(e, b)} className="onyx-tile" style={{ position: 'relative', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
                 <div style={{
                   position: 'relative',
+                  display: 'inline-block',
+                  overflow: 'hidden',
+                  borderRadius: 4,
                   transform: b.id === st.currentBookId ? 'translateY(-4px)' : 'none',
                   filter: b.id === st.currentBookId ? 'drop-shadow(0 12px 24px rgba(212,166,74,0.35))' : 'none',
                   transition: 'transform 0.15s, filter 0.15s',
                 }}>
                   <Cover item={b} size={coverW} serverUrl={st.serverUrl} />
                   {b.id === st.currentBookId && (
-                    <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--onyx-accent)', borderRadius: 4, pointerEvents: 'none' }} />
+                    <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--onyx-accent)', borderRadius: 4, pointerEvents: 'none', zIndex: 2 }} />
                   )}
                   {st.showProgressOverlay && prog > 0 && (
                     <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: 'rgba(0,0,0,0.4)' }}>
@@ -295,11 +298,13 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <MatchModal
           item={matchItem}
           serverUrl={st.serverUrl}
+          library={st.library}
           onClose={() => setMatchItem(null)}
           onComplete={updated => {
             st.updateLibraryItem(updated);
             setMatchItem(null);
           }}
+          onRefresh={() => { st.refreshLibrary().catch(console.error); }}
         />
       )}
     </Glass>
