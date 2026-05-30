@@ -310,6 +310,19 @@ pub async fn search_books(
 }
 
 #[tauri::command]
+pub async fn delete_item(
+    server_url: String,
+    item_id: String,
+) -> Result<(), String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .delete_item(&item_id)
+        .await
+}
+
+#[tauri::command]
 pub async fn rescan_item(
     server_url: String,
     item_id: String,

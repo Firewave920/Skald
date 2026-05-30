@@ -1,6 +1,6 @@
 import type { LibraryItem, OnyxState, MediaProgress } from '../../state/onyx';
 import type { ContextMenuItem } from '../ContextMenu';
-import { updateProgress, deleteProgress, getMe, closeActiveSession, rescanItem } from '../../api/abs';
+import { updateProgress, deleteProgress, getMe, closeActiveSession, rescanItem, deleteItem } from '../../api/abs';
 
 // Guard against double-invocation (React portal event bubbling / StrictMode).
 const pendingItems = new Set<string>();
@@ -87,7 +87,26 @@ export function buildItemContextMenu(
         },
       },
       { label: 'Match', onClick: () => setMatchItem?.(item), disabled: !setMatchItem },
-      { label: 'Delete (coming soon)',  onClick: () => {}, disabled: true, danger: true },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: () => {
+          const title = item.media?.metadata?.title ?? 'this item';
+          st.setConfirmDialog({
+            title: `Delete "${title}"`,
+            message: 'This will permanently remove the item from the server. If file deletion is enabled on the server, the audio files will also be deleted from disk. This cannot be undone.',
+            confirmLabel: 'Delete',
+            onConfirm: () => {
+              deleteItem(st.serverUrl, item.id)
+                .then(() => {
+                  st.removeLibraryItem(item.id);
+                  st.setToast({ message: `"${title}" was deleted`, type: 'success' });
+                })
+                .catch(e => st.setToast({ message: `Delete failed: ${String(e)}`, type: 'error' }));
+            },
+          });
+        },
+      },
     );
   }
 

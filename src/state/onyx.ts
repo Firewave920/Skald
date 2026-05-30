@@ -281,6 +281,9 @@ export interface OnyxState {
   setEnableOpenLibrary: (on: boolean) => void;
   toast: { message: string; type: 'success' | 'error' | 'info' } | null;
   setToast: (t: { message: string; type: 'success' | 'error' | 'info' } | null) => void;
+  confirmDialog: { title: string; message: string; confirmLabel: string; onConfirm: () => void } | null;
+  setConfirmDialog: (d: { title: string; message: string; confirmLabel: string; onConfirm: () => void } | null) => void;
+  removeLibraryItem: (id: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -399,6 +402,9 @@ export function useOnyxState(): OnyxState {
   const [library, setLibraryRaw] = useState<LibraryItem[]>([]);
   const updateLibraryItem = useCallback((item: LibraryItem) => {
     setLibraryRaw(prev => prev.map(x => x.id === item.id ? item : x));
+  }, []);
+  const removeLibraryItem = useCallback((id: string) => {
+    setLibraryRaw(prev => prev.filter(x => x.id !== id));
   }, []);
   const refreshLibrary = useCallback(async () => {
     if (!serverUrl) return;
@@ -595,6 +601,7 @@ export function useOnyxState(): OnyxState {
   }, []);
 
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{ title: string; message: string; confirmLabel: string; onConfirm: () => void } | null>(null);
 
   const [enableOpenLibrary, setEnableOpenLibraryRaw] = useState(() => {
     const v = localStorage.getItem('skald.enableOpenLibrary');
@@ -684,7 +691,7 @@ export function useOnyxState(): OnyxState {
     userId, setUserId,
     authToken, setAuthToken,
     user, setUser,
-    library, libraryLoading, updateLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks,
+    library, libraryLoading, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId, currentBookChapters,
     playing, setPlaying,
@@ -711,5 +718,6 @@ export function useOnyxState(): OnyxState {
     scale, setScale,
     enableOpenLibrary, setEnableOpenLibrary,
     toast, setToast,
+    confirmDialog, setConfirmDialog,
   };
 }
