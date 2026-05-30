@@ -346,7 +346,7 @@ export default function Player({ st }: PlayerProps) {
               <Waveform width={waveWidth} height={72} progress={chLocal / curCh.dur} color="var(--onyx-accent)" dim="rgba(255,255,255,0.15)" bars={140} flat />
             </div>
 
-            <div ref={transportRef} style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'hidden' }}>
+            <div ref={transportRef} style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'visible' }}>
 
               <div style={{ display: 'flex', gap: 6, flexShrink: 1, minWidth: 0 }}>
                 {transportWidth >= 620 ? (
@@ -407,7 +407,7 @@ export default function Player({ st }: PlayerProps) {
                 <button onClick={addBookmark} style={transportBtnSmall()} title="Bookmark this moment">
                   <Icon name="bookmark" size={15} />
                 </button>
-                <div ref={sleepRef} style={{ position: 'relative' }}>
+                <div ref={sleepRef} style={{ position: 'relative', zIndex: 200 }}>
                   <button
                     onClick={() => setSleepOpen(o => !o)}
                     title={sleepLabel ? `Sleep timer: ${sleepLabel}` : 'Sleep timer'}
@@ -429,7 +429,7 @@ export default function Player({ st }: PlayerProps) {
                     )}
                   </button>
                   {sleepOpen && (
-                    <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-line)', borderRadius: 10, boxShadow: '0 16px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,166,74,0.08)', padding: 6, zIndex: 100, minWidth: 170 }}>
+                    <div style={{ position: 'absolute', bottom: 'calc(100% + 8px)', right: 0, background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-line)', borderRadius: 10, boxShadow: '0 16px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,166,74,0.08)', padding: 6, zIndex: 300, minWidth: 170 }}>
                       <div style={{ fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', padding: '6px 8px 4px', textTransform: 'uppercase' }}>Sleep Timer</div>
                       {SLEEP_OPTIONS.map(opt => {
                         const active = sleepMode === opt.id;
