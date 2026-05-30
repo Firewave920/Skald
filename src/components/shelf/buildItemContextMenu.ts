@@ -1,6 +1,6 @@
 import type { LibraryItem, OnyxState, MediaProgress } from '../../state/onyx';
 import type { ContextMenuItem } from '../ContextMenu';
-import { updateProgress, deleteProgress, getMe, closeActiveSession } from '../../api/abs';
+import { updateProgress, deleteProgress, getMe, closeActiveSession, rescanItem } from '../../api/abs';
 
 // Guard against double-invocation (React portal event bubbling / StrictMode).
 const pendingItems = new Set<string>();
@@ -11,6 +11,7 @@ export function buildItemContextMenu(
   setMatchItem?: (item: LibraryItem) => void,
   setCollectionItem?: (item: LibraryItem) => void,
   setFilesItem?: (item: LibraryItem) => void,
+  onScanStart?: () => void,
 ): ContextMenuItem[] {
   const isAdmin = st.user?.type === 'root' || st.user?.type === 'admin';
 
@@ -77,7 +78,13 @@ export function buildItemContextMenu(
     items.push(
       { label: 'Add to Collection', onClick: () => setCollectionItem?.(item), disabled: !setCollectionItem },
       { label: 'Files',             onClick: () => setFilesItem?.(item),      disabled: !setFilesItem },
-      { label: 'Re-Scan (coming soon)', onClick: () => {}, disabled: true },
+      {
+        label: 'Re-Scan',
+        onClick: () => {
+          onScanStart?.();
+          rescanItem(st.serverUrl, item.id).catch(console.error);
+        },
+      },
       { label: 'Match', onClick: () => setMatchItem?.(item), disabled: !setMatchItem },
       { label: 'Delete (coming soon)',  onClick: () => {}, disabled: true, danger: true },
     );

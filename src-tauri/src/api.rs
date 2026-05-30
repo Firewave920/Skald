@@ -384,6 +384,23 @@ impl AbsClient {
         Ok(wrapper.results)
     }
 
+    /// POST /api/items/{item_id}/scan — server-side library rescan for one item.
+    pub async fn rescan_item(&self, item_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/items/{item_id}/scan", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("rescan_item failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
     /// POST /api/collections  body: {"libraryId", "name", "books": [book_id]}
     pub async fn create_collection(
         &self,
