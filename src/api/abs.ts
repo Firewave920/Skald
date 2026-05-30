@@ -282,6 +282,10 @@ export interface Collection {
   books?: Array<{ id: string }>;
 }
 
+export function rescanItem(serverUrl: string, itemId: string): Promise<void> {
+  return invoke('rescan_item', { serverUrl, itemId });
+}
+
 export function createCollection(serverUrl: string, libraryId: string, name: string, bookId: string): Promise<Collection> {
   return invoke('create_collection', { serverUrl, libraryId, name, bookId });
 }

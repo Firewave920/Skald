@@ -74,6 +74,7 @@ pub fn run() {
             commands::get_cache_dir,
             commands::reveal_cache_dir,
             commands::close_active_session,
+            commands::rescan_item,
             commands::get_collections,
             commands::create_collection,
             commands::add_book_to_collection,
