@@ -50,13 +50,18 @@ export function useGlobalShortcuts(st: OnyxState): void {
 
     const unlisteners: Array<() => void> = [];
 
-    function on(event: string, handler: () => void) {
+    function on(event: string, handler: (e: { payload: unknown }) => void) {
       listen(event, handler)
         .then(fn => unlisteners.push(fn))
         .catch(console.error);
     }
 
-    on('shortcut-play_pause', () => {
+    function pressed(e: { payload: unknown }): boolean {
+      return (e.payload as Record<string, unknown>)?.state === 'Pressed';
+    }
+
+    on('shortcut-play_pause', (e) => {
+      if (!pressed(e)) return;
       if (stRef.current.playing) {
         pauseAudio().catch(console.error);
       } else {
@@ -64,29 +69,34 @@ export function useGlobalShortcuts(st: OnyxState): void {
       }
     });
 
-    on('shortcut-skip_forward', () => {
+    on('shortcut-skip_forward', (e) => {
+      if (!pressed(e)) return;
       const secs = readSkipSecs();
       seekAudio(stRef.current.position + secs).catch(console.error);
     });
 
-    on('shortcut-skip_back', () => {
+    on('shortcut-skip_back', (e) => {
+      if (!pressed(e)) return;
       const secs = readSkipSecs();
       seekAudio(Math.max(0, stRef.current.position - secs)).catch(console.error);
     });
 
-    on('shortcut-volume_up', () => {
+    on('shortcut-volume_up', (e) => {
+      if (!pressed(e)) return;
       const vol = Math.min(1, stRef.current.volume + 0.1);
       stRef.current.setVolume(vol);
       setAudioVolume(Math.round(vol * 100)).catch(console.error);
     });
 
-    on('shortcut-volume_down', () => {
+    on('shortcut-volume_down', (e) => {
+      if (!pressed(e)) return;
       const vol = Math.max(0, stRef.current.volume - 0.1);
       stRef.current.setVolume(vol);
       setAudioVolume(Math.round(vol * 100)).catch(console.error);
     });
 
-    on('shortcut-mute', () => {
+    on('shortcut-mute', (e) => {
+      if (!pressed(e)) return;
       setAudioVolume(0).catch(console.error);
     });
 
