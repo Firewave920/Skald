@@ -109,7 +109,8 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:1420/)",
       "Bash(curl -s \"http://localhost:1420/src/components/settings/AccountSection.tsx\")",
       "Bash(curl -s \"http://localhost:1420/src/components/settings/AccountSection.tsx?t=$\\(date +%s\\)\")",
-      "Bash(curl -s http://localhost:1420/src/screens/Settings.tsx?t=__TRACKED_VAR__)"
+      "Bash(curl -s http://localhost:1420/src/screens/Settings.tsx?t=__TRACKED_VAR__)",
+      "Bash(curl -s http://localhost:1420/src/components/chrome/OnyxWash.tsx?t=__TRACKED_VAR__)"
     ]
   }
 }
