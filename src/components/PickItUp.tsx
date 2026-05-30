@@ -24,6 +24,7 @@ export default function PickItUp({ st }: PickItUpProps) {
   const dragRef = useRef<{ startX: number; startScrollLeft: number; didDrag: boolean } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: LibraryItem } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const onContextMenu = (e: React.MouseEvent, item: LibraryItem) => {
     e.preventDefault();
@@ -75,12 +76,16 @@ export default function PickItUp({ st }: PickItUpProps) {
   };
 
   const openBook = (id: string) => {
-    st.setCurrentBookId(id);
-    if (id !== st.currentBookId) {
-      const b = st.library.find(x => x.id === id);
-      if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+    if (selectedId === id) {
+      st.setScreen('player');
+    } else {
+      setSelectedId(id);
+      st.setCurrentBookId(id);
+      if (id !== st.currentBookId) {
+        const b = st.library.find(x => x.id === id);
+        if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+      }
     }
-    st.setScreen('player');
   };
 
   return (

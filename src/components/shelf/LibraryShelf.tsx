@@ -181,6 +181,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   const coverW = COVER_SIZES[st.coverSize] ?? COVER_SIZES.L;
   const [contextMenu, setContextMenu] = useState<CtxMenu | null>(null);
   const [matchItem, setMatchItem] = useState<LibraryItem | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const onContextMenu = (e: React.MouseEvent, item: LibraryItem) => {
     e.preventDefault();
@@ -234,12 +235,16 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   }
 
   const openBook = (id: string) => {
-    st.setCurrentBookId(id);
-    if (id !== st.currentBookId) {
-      const b = st.library.find(x => x.id === id);
-      if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+    if (selectedId === id) {
+      st.setScreen('player');
+    } else {
+      setSelectedId(id);
+      st.setCurrentBookId(id);
+      if (id !== st.currentBookId) {
+        const b = st.library.find(x => x.id === id);
+        if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+      }
     }
-    st.setScreen('player');
   };
 
   return (
@@ -260,12 +265,12 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
                   display: 'inline-block',
                   overflow: 'hidden',
                   borderRadius: 4,
-                  transform: b.id === st.currentBookId ? 'translateY(-4px)' : 'none',
-                  filter: b.id === st.currentBookId ? 'drop-shadow(0 12px 24px rgba(212,166,74,0.35))' : 'none',
+                  transform: b.id === selectedId ? 'translateY(-4px)' : 'none',
+                  filter: b.id === selectedId ? 'drop-shadow(0 12px 24px rgba(212,166,74,0.35))' : 'none',
                   transition: 'transform 0.15s, filter 0.15s',
                 }}>
                   <Cover item={b} size={coverW} serverUrl={st.serverUrl} />
-                  {b.id === st.currentBookId && (
+                  {b.id === selectedId && (
                     <div style={{ position: 'absolute', inset: 0, border: '2px solid var(--onyx-accent)', borderRadius: 4, pointerEvents: 'none', zIndex: 2 }} />
                   )}
                   {st.showProgressOverlay && prog > 0 && (
