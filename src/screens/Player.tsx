@@ -199,7 +199,10 @@ export default function Player({ st }: PlayerProps) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(900);
-  const coverSize = (isFocusedDifferent && containerHeight < 820) ? Math.round(420 * 0.65) : 420;
+  const coverSize = containerHeight >= 900 ? 420
+    : containerHeight >= 750 ? Math.round(420 * 0.80)  // 336
+    : containerHeight >= 620 ? Math.round(420 * 0.65)  // 273
+    : Math.round(420 * 0.50);                          // 210
 
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveWidth, setWaveWidth] = useState(600);
