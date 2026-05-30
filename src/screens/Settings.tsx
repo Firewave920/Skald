@@ -101,15 +101,6 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           ))}
 
           <div style={{ flex: 1 }} />
-
-          <button onClick={handleSignOut} style={{
-            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-            background: 'transparent', border: '1px solid rgba(232,113,106,0.4)', borderRadius: 8,
-            color: '#e8716a', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5,
-            justifyContent: 'center', marginTop: 12,
-          }}>
-            Sign out
-          </button>
         </Glass>
 
         {/* Content panel */}

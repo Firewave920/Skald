@@ -29,7 +29,7 @@ export default function AccountSection({ onSignOut }: AccountSectionProps) {
         <Toggle on={true} onChange={() => {}} />
       </Row>
 
-      <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--onyx-line)' }}>
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--onyx-line)', display: 'flex', justifyContent: 'flex-end' }}>
         <button
           onClick={onSignOut}
           style={{
