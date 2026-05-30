@@ -65,7 +65,8 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
             disabled={item.disabled}
             onMouseEnter={() => setHoveredIdx(i)}
             onMouseLeave={() => setHoveredIdx(null)}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (!item.disabled) {
                 item.onClick();
                 onClose();
