@@ -8,7 +8,7 @@ import type { CSSProperties } from 'react';
 import type { OnyxState } from '../state/onyx';
 import {
   SPEEDS, chapterAt, chapterStart, fmtTime, fmtRemaining,
-  bookTitle, bookAuthor, bookSeries, bookNarrator, bookDur,
+  bookTitle, bookAuthor, bookSeries, bookNarrator, bookDur, bookChapters,
 } from '../state/onyx';
 import Glass from '../components/chrome/Glass';
 import Cover from '../components/Cover';
@@ -52,17 +52,25 @@ export interface PlayerProps {
 }
 
 export default function Player({ st }: PlayerProps) {
-  const b = st.currentBook;
+  // Metadata derives from the focused book; playback position/state stays on currentBook.
+  const b = st.focusedBook ?? st.currentBook;
   if (!b) return null;
 
-  const chapters = st.currentBookChapters;
+  const isFocusedDifferent = st.focusedBookId !== null && st.focusedBookId !== st.currentBookId;
+
+  // Chapters for the chapter list come from the focused book's own media data.
+  // For the waveform scrubber we still use currentBookChapters so position maps correctly.
+  const displayChapters = isFocusedDifferent
+    ? bookChapters(b)
+    : st.currentBookChapters;
+  const chapters = st.currentBookChapters; // waveform/position only
   const { idx: chIdx, local: chLocal, chapter: curCh } = chapterAt(chapters, st.position);
 
   const autoPlayNext = localStorage.getItem('onyx.playback.autoPlayNext') !== 'false';
   const raw = localStorage.getItem('onyx.playback.sleepDefault') ?? '"Off"';
   const sleepDefault = JSON.parse(raw) as string;
 
-  const playerBookmarks = st.bookmarks.filter(bm => bm.libraryItemId === st.currentBookId);
+  const playerBookmarks = st.bookmarks.filter(bm => bm.libraryItemId === (st.focusedBookId ?? st.currentBookId));
 
   const addBookmark = async () => {
     try {
@@ -262,7 +270,15 @@ export default function Player({ st }: PlayerProps) {
 
   const handlePlayPause = async () => {
     try {
-      if (!st.sessionReady) {
+      if (isFocusedDifferent && !st.playing) {
+        // User wants to start the focused (different) book.
+        const focusedId = st.focusedBookId!;
+        const { sessionId } = await openPlaybackSession(st.serverUrl, focusedId);
+        st.setSessionId(sessionId);
+        st.setSessionReady(true);
+        st.setCurrentBookId(focusedId);
+        await playAudio();
+      } else if (!st.sessionReady) {
         const { sessionId } = await openPlaybackSession(st.serverUrl, st.currentBookId);
         st.setSessionId(sessionId);
         st.setSessionReady(true);
@@ -543,13 +559,13 @@ export default function Player({ st }: PlayerProps) {
             <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: 'flex', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
                 <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500 }}>Chapters</div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.08em' }}>{chapters.length} · {bookDur(b)} total</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.08em' }}>{displayChapters.length} · {bookDur(b)} total</div>
               </div>
               <div style={{ flex: 1, overflow: 'auto', marginRight: -8, paddingRight: 8 }}>
-                {chapters.map((c, i) => {
+                {displayChapters.map((c, i) => {
                   const state = i < chIdx ? 'done' : i === chIdx ? 'playing' : 'next';
                   return (
-                    <button key={c.n} onClick={() => { const pos = chapterStart(chapters, i); seekAudio(pos).catch(console.error); st.setPosition(pos); }} style={{
+                    <button key={c.n} onClick={() => { const pos = chapterStart(displayChapters, i); seekAudio(pos).catch(console.error); st.setPosition(pos); }} style={{
                       display: 'flex', alignItems: 'center', padding: '8px 12px', borderRadius: 8, gap: 12,
                       background: state === 'playing' ? 'var(--onyx-accent-dim)' : 'transparent',
                       border: `1px solid ${state === 'playing' ? 'var(--onyx-accent-edge)' : 'transparent'}`,

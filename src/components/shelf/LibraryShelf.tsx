@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import type { OnyxState, LibraryItem } from '../../state/onyx';
 import {
   bookTitle, bookAuthor, bookSeries, bookNarrator, bookGenre,
-  bookDur, bookDurSecs, bookProgress, bookCurrentTime,
+  bookDur, bookDurSecs, bookProgress,
 } from '../../state/onyx';
 import Glass from '../chrome/Glass';
 import Cover from '../Cover';
@@ -243,11 +243,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
       st.setScreen('player');
     } else {
       setSelectedId(id);
-      st.setCurrentBookId(id);
-      if (id !== st.currentBookId) {
-        const b = st.library.find(x => x.id === id);
-        if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
-      }
+      st.setFocusedBookId(id);
     }
   };
 
