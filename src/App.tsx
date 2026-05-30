@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react';
 import { useOnyxState } from './state/onyx';
+import { hasToken } from './api/abs';
 import OnyxWash from './components/chrome/OnyxWash';
 import Titlebar from './components/chrome/Titlebar';
 import Login from './screens/Login';
@@ -12,8 +14,28 @@ export default function App() {
   const isDark = st.theme !== 'light';
   const z = st.scale / 100;
 
-  if (!st.authToken) {
-    return <Login st={st} />;
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    hasToken()
+      .then(has => {
+        setIsAuthenticated(has);
+        setAuthChecked(true);
+      })
+      .catch(() => {
+        setIsAuthenticated(false);
+        setAuthChecked(true);
+      });
+  }, []);
+
+  // Hold a plain dark fill until the keyring check resolves — prevents any flash.
+  if (!authChecked) {
+    return <div style={{ width: '100vw', height: '100vh', background: 'var(--onyx-bg)' }} />;
+  }
+
+  if (!isAuthenticated) {
+    return <Login st={st} onLoginSuccess={() => setIsAuthenticated(true)} />;
   }
 
   return (

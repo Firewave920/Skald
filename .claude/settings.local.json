@@ -100,7 +100,12 @@
       "PowerShell(Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap $s.Width, $s.Height; $g = [System.Drawing.Graphics]::FromImage\\($bmp\\); $g.CopyFromScreen\\($s.Location, [System.Drawing.Point]::Empty, $s.Size\\); $bmp.Save\\(\"$env:TEMP\\\\skald_list.png\"\\); $g.Dispose\\(\\); $bmp.Dispose\\(\\); Write-Output \"Done\")",
       "PowerShell(Start-Sleep -Seconds 3; Add-Type -AssemblyName System.Windows.Forms; Add-Type -AssemblyName System.Drawing; $s = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; $bmp = New-Object System.Drawing.Bitmap $s.Width, $s.Height; $g = [System.Drawing.Graphics]::FromImage\\($bmp\\); $g.CopyFromScreen\\($s.Location, [System.Drawing.Point]::Empty, $s.Size\\); $bmp.Save\\(\"$env:TEMP\\\\skald_list2.png\"\\); $g.Dispose\\(\\); $bmp.Dispose\\(\\); Write-Output \"Done\")",
       "Bash(Get-Content \"C:\\\\Users\\\\fireb\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-fireb-Documents-Skald\\\\95176ce7-b904-4643-bd55-0630f0b47b60\\\\tasks\\\\bggtjjxvb.output\" -Tail 60)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(findstr \":1420 \")",
+      "Bash(tasklist /FI \"PID eq 30664\" /NH)",
+      "PowerShell(Get-Process -Id 30664 -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Id 30664 -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s \"http://localhost:1420/src/App.tsx\")"
     ]
   }
 }

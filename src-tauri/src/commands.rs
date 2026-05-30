@@ -21,6 +21,11 @@ pub fn logout() -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn has_token() -> Result<bool, String> {
+    Ok(auth::load_token()?.is_some())
+}
+
+#[tauri::command]
 pub fn save_token(token: String) -> Result<(), String> {
     auth::save_token(&token)
 }

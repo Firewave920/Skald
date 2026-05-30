@@ -144,6 +144,10 @@ export function saveToken(token: string): Promise<void> {
   return invoke('save_token', { token });
 }
 
+export function hasToken(): Promise<boolean> {
+  return invoke('has_token');
+}
+
 export function openPlaybackSession(serverUrl: string, itemId: string): Promise<OpenSessionResult> {
   return invoke('open_playback_session', { serverUrl, itemId });
 }
