@@ -327,12 +327,13 @@ pub async fn create_collection(
     server_url: String,
     library_id: String,
     name: String,
+    book_id: String,
 ) -> Result<models::Collection, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
     AbsClient::new(server_url)
         .with_token(token)
-        .create_collection(&library_id, &name)
+        .create_collection(&library_id, &name, &book_id)
         .await
 }
 

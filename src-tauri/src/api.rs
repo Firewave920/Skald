@@ -384,17 +384,22 @@ impl AbsClient {
         Ok(wrapper.results)
     }
 
-    /// POST /api/collections  body: {"libraryId", "name"}
+    /// POST /api/collections  body: {"libraryId", "name", "books": [book_id]}
     pub async fn create_collection(
         &self,
         library_id: &str,
         name: &str,
+        book_id: &str,
     ) -> Result<Collection, String> {
         let resp = self
             .http
             .post(format!("{}/api/collections", self.root()))
             .header("Authorization", self.auth_header()?)
-            .json(&serde_json::json!({ "libraryId": library_id, "name": name }))
+            .json(&serde_json::json!({
+                "libraryId": library_id,
+                "name": name,
+                "books": [book_id],
+            }))
             .send()
             .await
             .map_err(|e| e.to_string())?;

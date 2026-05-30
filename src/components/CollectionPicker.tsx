@@ -48,8 +48,7 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
     if (!name) return;
     setCreating(true);
     try {
-      const col = await createCollection(serverUrl, item.libraryId, name);
-      await addBookToCollection(serverUrl, col.id, item.id);
+      await createCollection(serverUrl, item.libraryId, name, item.id);
       onClose();
     } catch (e) {
       setError(String(e));

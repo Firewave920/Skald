@@ -267,8 +267,8 @@ export interface Collection {
   name: string;
 }
 
-export function createCollection(serverUrl: string, libraryId: string, name: string): Promise<Collection> {
-  return invoke('create_collection', { serverUrl, libraryId, name });
+export function createCollection(serverUrl: string, libraryId: string, name: string, bookId: string): Promise<Collection> {
+  return invoke('create_collection', { serverUrl, libraryId, name, bookId });
 }
 
 export function getCollections(serverUrl: string, libraryId: string): Promise<Collection[]> {
