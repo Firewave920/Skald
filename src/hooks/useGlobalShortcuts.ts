@@ -10,6 +10,10 @@ import {
 import type { OnyxState } from '../state/onyx';
 import type { ShortcutBinding } from '../api/abs';
 
+// Module-level flag prevents React StrictMode's double-mount from registering
+// duplicate Tauri event listeners, which would cause each shortcut to fire twice.
+let registered = false;
+
 export const DEFAULT_SHORTCUTS: ShortcutBinding[] = [
   { action: 'play_pause',   shortcut: 'Ctrl+Alt+Space' },
   { action: 'skip_forward', shortcut: 'Ctrl+Alt+Right' },
@@ -45,6 +49,9 @@ export function useGlobalShortcuts(st: OnyxState): void {
   });
 
   useEffect(() => {
+    if (registered) return;
+    registered = true;
+
     const bindings = loadBindings();
     registerShortcuts(bindings).catch(console.error);
 
@@ -56,13 +63,13 @@ export function useGlobalShortcuts(st: OnyxState): void {
         .catch(console.error);
     }
 
-    on('shortcut-play_pause', () => {
+    listen('shortcut-play_pause', () => {
       if (stRef.current.playing) {
         pauseAudio().catch(console.error);
       } else {
         playAudio().catch(console.error);
       }
-    });
+    }).then(fn => unlisteners.push(fn)).catch(console.error);
 
     on('shortcut-skip_forward', () => {
       seekAudio(stRef.current.position + readSkipSecs()).catch(console.error);
