@@ -28,14 +28,17 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(move |app, shortcut, _event| {
+                .with_handler(move |app, shortcut, event| {
                     use tauri::Emitter;
-                    if let Some(action) = shortcut_map_for_handler
-                        .read()
-                        .unwrap()
-                        .get(&shortcut.id())
-                    {
-                        let _ = app.emit(&format!("shortcut-{action}"), ());
+                    use tauri_plugin_global_shortcut::ShortcutState;
+                    if event.state() == ShortcutState::Pressed {
+                        if let Some(action) = shortcut_map_for_handler
+                            .read()
+                            .unwrap()
+                            .get(&shortcut.id())
+                        {
+                            let _ = app.emit(&format!("shortcut-{action}"), ());
+                        }
                     }
                 })
                 .build(),

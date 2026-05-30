@@ -50,18 +50,13 @@ export function useGlobalShortcuts(st: OnyxState): void {
 
     const unlisteners: Array<() => void> = [];
 
-    function on(event: string, handler: (e: { payload: unknown }) => void) {
+    function on(event: string, handler: () => void) {
       listen(event, handler)
         .then(fn => unlisteners.push(fn))
         .catch(console.error);
     }
 
-    function pressed(e: { payload: unknown }): boolean {
-      return (e.payload as Record<string, unknown>)?.state === 'Pressed';
-    }
-
-    on('shortcut-play_pause', (e) => {
-      if (!pressed(e)) return;
+    on('shortcut-play_pause', () => {
       if (stRef.current.playing) {
         pauseAudio().catch(console.error);
       } else {
@@ -69,34 +64,27 @@ export function useGlobalShortcuts(st: OnyxState): void {
       }
     });
 
-    on('shortcut-skip_forward', (e) => {
-      if (!pressed(e)) return;
-      const secs = readSkipSecs();
-      seekAudio(stRef.current.position + secs).catch(console.error);
+    on('shortcut-skip_forward', () => {
+      seekAudio(stRef.current.position + readSkipSecs()).catch(console.error);
     });
 
-    on('shortcut-skip_back', (e) => {
-      if (!pressed(e)) return;
-      const secs = readSkipSecs();
-      seekAudio(Math.max(0, stRef.current.position - secs)).catch(console.error);
+    on('shortcut-skip_back', () => {
+      seekAudio(Math.max(0, stRef.current.position - readSkipSecs())).catch(console.error);
     });
 
-    on('shortcut-volume_up', (e) => {
-      if (!pressed(e)) return;
+    on('shortcut-volume_up', () => {
       const vol = Math.min(1, stRef.current.volume + 0.1);
       stRef.current.setVolume(vol);
       setAudioVolume(Math.round(vol * 100)).catch(console.error);
     });
 
-    on('shortcut-volume_down', (e) => {
-      if (!pressed(e)) return;
+    on('shortcut-volume_down', () => {
       const vol = Math.max(0, stRef.current.volume - 0.1);
       stRef.current.setVolume(vol);
       setAudioVolume(Math.round(vol * 100)).catch(console.error);
     });
 
-    on('shortcut-mute', (e) => {
-      if (!pressed(e)) return;
+    on('shortcut-mute', () => {
       setAudioVolume(0).catch(console.error);
     });
 
