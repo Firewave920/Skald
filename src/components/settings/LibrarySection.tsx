@@ -10,7 +10,7 @@ export default function LibrarySection({ st }: LibrarySectionProps) {
     { id: 'author',       label: 'Author'         },
     { id: 'most-listened', label: 'Most listened' },
   ];
-  const SIZES = ['S', 'M', 'L', 'XL'];
+  const SIZES = ['S', 'M', 'L', 'XL', 'XXL', 'XXXL'];
   return (
     <div>
       <SectionHead title="Library" subtitle="How your collection is presented in the shelf." />
