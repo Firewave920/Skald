@@ -10,3 +10,10 @@
 
 # Features
 - See if we can add right click for context menus. Otherwise add a button to manage items.
+
+# Items that need claude design touches
+	- Login page
+	- match page
+	- add to collection page
+	- Context menu
+	- 

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import type { LibraryItem } from '../state/onyx';
-import { getCollections, addBookToCollection } from '../api/abs';
+import { getCollections, addBookToCollection, createCollection } from '../api/abs';
 import type { Collection } from '../api/abs';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -17,12 +17,20 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
   const [collections, setCollections] = useState<Collection[] | null>(null);
   const [adding, setAdding] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [newMode, setNewMode] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     getCollections(serverUrl, item.libraryId)
       .then(setCollections)
       .catch(e => setError(String(e)));
   }, [serverUrl, item.libraryId]);
+
+  useEffect(() => {
+    if (newMode) inputRef.current?.focus();
+  }, [newMode]);
 
   async function handleAdd(col: Collection) {
     setAdding(col.id);
@@ -33,6 +41,25 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
       setError(String(e));
       setAdding(null);
     }
+  }
+
+  async function handleCreate() {
+    const name = newName.trim();
+    if (!name) return;
+    setCreating(true);
+    try {
+      const col = await createCollection(serverUrl, item.libraryId, name);
+      await addBookToCollection(serverUrl, col.id, item.id);
+      onClose();
+    } catch (e) {
+      setError(String(e));
+      setCreating(false);
+    }
+  }
+
+  function onNewKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') handleCreate();
+    if (e.key === 'Escape') { setNewMode(false); setNewName(''); }
   }
 
   const modal = (
@@ -65,7 +92,7 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
           </div>
         </div>
 
-        {/* Content */}
+        {/* Collection list */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
           {collections === null && !error && (
             <div style={{ padding: '16px 20px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>
@@ -83,7 +110,7 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
           {collections?.map(col => (
             <button
               key={col.id}
-              disabled={adding !== null}
+              disabled={adding !== null || creating}
               onClick={() => handleAdd(col)}
               style={{
                 display: 'block', width: '100%',
@@ -92,7 +119,7 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
                 border: 'none',
                 color: adding === col.id ? 'var(--onyx-accent)' : 'var(--onyx-text)',
                 fontSize: 13.5, textAlign: 'left',
-                cursor: adding !== null ? 'default' : 'pointer',
+                cursor: (adding !== null || creating) ? 'default' : 'pointer',
                 fontFamily: 'inherit',
                 transition: 'background 0.1s',
               }}
@@ -103,7 +130,73 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '8px 20px 4px', borderTop: '1px solid var(--onyx-line)' }}>
+        <div style={{ padding: '10px 20px 6px', borderTop: '1px solid var(--onyx-line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* New Collection row */}
+          {newMode ? (
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input
+                ref={inputRef}
+                type="text"
+                value={newName}
+                onChange={e => setNewName(e.target.value)}
+                onKeyDown={onNewKeyDown}
+                placeholder="Collection name…"
+                disabled={creating}
+                style={{
+                  flex: 1,
+                  padding: '7px 10px',
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid var(--onyx-accent-edge)',
+                  borderRadius: 6,
+                  color: 'var(--onyx-text)',
+                  fontFamily: 'inherit',
+                  fontSize: 13,
+                  outline: 'none',
+                }}
+              />
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim() || creating}
+                style={{
+                  padding: '7px 12px',
+                  background: newName.trim() && !creating ? 'var(--onyx-accent)' : 'var(--onyx-accent-dim)',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: newName.trim() && !creating ? '#0b0b0e' : 'var(--onyx-text-mute)',
+                  fontFamily: MONO,
+                  fontSize: 10,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase' as const,
+                  cursor: newName.trim() && !creating ? 'pointer' : 'default',
+                  whiteSpace: 'nowrap' as const,
+                }}
+              >
+                {creating ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setNewMode(true)}
+              disabled={adding !== null}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--onyx-accent-edge)',
+                borderRadius: 6,
+                color: 'var(--onyx-accent)',
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase' as const,
+                padding: '6px 14px',
+                cursor: 'pointer',
+                alignSelf: 'flex-start',
+              }}
+            >
+              + New Collection
+            </button>
+          )}
+
+          {/* Cancel */}
           <button
             onClick={onClose}
             style={{
@@ -114,9 +207,10 @@ export default function CollectionPicker({ item, serverUrl, onClose }: Collectio
               fontFamily: MONO,
               fontSize: 10,
               letterSpacing: '0.08em',
-              textTransform: 'uppercase',
+              textTransform: 'uppercase' as const,
               padding: '6px 14px',
               cursor: 'pointer',
+              alignSelf: 'flex-start',
             }}
           >
             Cancel
