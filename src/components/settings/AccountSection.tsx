@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { SectionHead, Row, Toggle, TextInput, SERIF, MONO } from './shared';
 
-export default function AccountSection() {
+export interface AccountSectionProps {
+  onSignOut: () => void;
+}
+
+export default function AccountSection({ onSignOut }: AccountSectionProps) {
   const [name, setName] = useState('Jordan');
   const [email] = useState('jordan@home.lan');
   return (
@@ -24,6 +28,26 @@ export default function AccountSection() {
       <Row label="Listening stats" hint="Share anonymous listening time + streak with the server.">
         <Toggle on={true} onChange={() => {}} />
       </Row>
+
+      <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--onyx-line)' }}>
+        <button
+          onClick={onSignOut}
+          style={{
+            padding: '9px 20px',
+            background: 'transparent',
+            border: '1px solid rgba(232,113,106,0.4)',
+            borderRadius: 8,
+            color: '#e8716a',
+            cursor: 'pointer',
+            fontFamily: MONO,
+            fontSize: 11.5,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase' as const,
+          }}
+        >
+          Sign out
+        </button>
+      </div>
     </div>
   );
 }
