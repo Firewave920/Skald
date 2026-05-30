@@ -59,6 +59,7 @@ export default function Player({ st }: PlayerProps) {
   const { idx: chIdx, local: chLocal, chapter: curCh } = chapterAt(chapters, st.position);
 
   const autoPlayNext = localStorage.getItem('onyx.playback.autoPlayNext') !== 'false';
+  const sleepDefault = localStorage.getItem('onyx.playback.sleepDefault') ?? 'Off';
 
   const playerBookmarks = st.bookmarks.filter(bm => bm.libraryItemId === st.currentBookId);
 
@@ -154,7 +155,14 @@ export default function Player({ st }: PlayerProps) {
     return () => { cancelled = true; };
   }, [st.currentBookId, st.enableOpenLibrary]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const [sleepMode, setSleepMode] = useState<SleepMode>(null);
+  function parseSleepDefault(raw: string): SleepMode {
+    if (raw === '15m') return 15;
+    if (raw === '30m') return 30;
+    if (raw === '1h') return 60;
+    if (raw === 'End of chapter') return 'chapter';
+    return null;
+  }
+  const [sleepMode, setSleepMode] = useState<SleepMode>(parseSleepDefault(sleepDefault));
   const [sleepRemain, setSleepRemain] = useState(0);
   const [sleepOpen, setSleepOpen] = useState(false);
   const sleepRef = useRef<HTMLDivElement>(null);
