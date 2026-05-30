@@ -265,6 +265,8 @@ export function registerShortcuts(bindings: ShortcutBinding[]): Promise<void> {
 export interface Collection {
   id: string;
   name: string;
+  description?: string | null;
+  books?: Array<{ id: string }>;
 }
 
 export function createCollection(serverUrl: string, libraryId: string, name: string, bookId: string): Promise<Collection> {
