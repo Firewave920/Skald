@@ -173,12 +173,24 @@ export default function Player({ st }: PlayerProps) {
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveWidth, setWaveWidth] = useState(600);
 
+  const transportRef = useRef<HTMLDivElement>(null);
+  const [transportWidth, setTransportWidth] = useState(700);
+
   useEffect(() => {
     if (!waveformRef.current) return;
     const ro = new ResizeObserver(entries => {
       setWaveWidth(entries[0].contentRect.width);
     });
     ro.observe(waveformRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!transportRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      setTransportWidth(entries[0].contentRect.width);
+    });
+    ro.observe(transportRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -334,19 +346,43 @@ export default function Player({ st }: PlayerProps) {
               <Waveform width={waveWidth} height={72} progress={chLocal / curCh.dur} color="var(--onyx-accent)" dim="rgba(255,255,255,0.15)" bars={140} flat />
             </div>
 
-            <div style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'hidden' }}>
+            <div ref={transportRef} style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'hidden' }}>
 
               <div style={{ display: 'flex', gap: 6, flexShrink: 1, minWidth: 0 }}>
-                {SPEEDS.map(s => (
-                  <button key={s} onClick={() => { st.setSpeed(s); setAudioSpeed(parseFloat(s)).catch(console.error); }} style={{
-                    padding: '7px 12px', borderRadius: 6, fontFamily: MONO, fontSize: 11,
-                    background: s === st.speed ? 'var(--onyx-accent-dim)' : 'transparent',
-                    color: s === st.speed ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
-                    border: `1px solid ${s === st.speed ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
-                    fontWeight: s === st.speed ? 600 : 400,
-                    cursor: 'pointer',
-                  }}>{s}×</button>
-                ))}
+                {transportWidth >= 620 ? (
+                  SPEEDS.map(s => (
+                    <button key={s} onClick={() => { st.setSpeed(s); setAudioSpeed(parseFloat(s)).catch(console.error); }} style={{
+                      padding: '7px 12px', borderRadius: 6, fontFamily: MONO, fontSize: 11,
+                      background: s === st.speed ? 'var(--onyx-accent-dim)' : 'transparent',
+                      color: s === st.speed ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
+                      border: `1px solid ${s === st.speed ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
+                      fontWeight: s === st.speed ? 600 : 400,
+                      cursor: 'pointer',
+                    }}>{s}×</button>
+                  ))
+                ) : (
+                  <select
+                    value={st.speed}
+                    onChange={e => { st.setSpeed(e.target.value); setAudioSpeed(parseFloat(e.target.value)).catch(console.error); }}
+                    style={{
+                      height: 44,
+                      borderRadius: 10,
+                      background: 'var(--onyx-glass)',
+                      border: '1px solid var(--onyx-glass-edge)',
+                      color: 'var(--onyx-text)',
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      flexShrink: 1,
+                      minWidth: 60,
+                      paddingLeft: 8,
+                      paddingRight: 8,
+                      cursor: 'pointer',
+                      outline: 'none',
+                    }}
+                  >
+                    {SPEEDS.map(s => <option key={s} value={s}>{s}×</option>)}
+                  </select>
+                )}
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
