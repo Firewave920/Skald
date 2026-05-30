@@ -61,16 +61,6 @@ export function buildItemContextMenu(
       },
     },
     {
-      label: 'Add to Collection',
-      onClick: () => setCollectionItem?.(item),
-      disabled: !setCollectionItem,
-    },
-    {
-      label: 'Files',
-      onClick: () => setFilesItem?.(item),
-      disabled: !setFilesItem,
-    },
-    {
       label: 'Remove from Continue Listening',
       onClick: async () => {
         try {
@@ -85,6 +75,8 @@ export function buildItemContextMenu(
 
   if (isAdmin) {
     items.push(
+      { label: 'Add to Collection', onClick: () => setCollectionItem?.(item), disabled: !setCollectionItem },
+      { label: 'Files',             onClick: () => setFilesItem?.(item),      disabled: !setFilesItem },
       { label: 'Re-Scan (coming soon)', onClick: () => {}, disabled: true },
       { label: 'Match', onClick: () => setMatchItem?.(item), disabled: !setMatchItem },
       { label: 'Delete (coming soon)',  onClick: () => {}, disabled: true, danger: true },
