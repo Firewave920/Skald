@@ -9,9 +9,21 @@ export interface ToastProps {
 }
 
 const BORDER_COLOR: Record<ToastType, string> = {
-  success: 'var(--onyx-accent)',
+  success: '#52c97a',
   error:   '#e05a5a',
   info:    'var(--onyx-text-dim)',
+};
+
+const BG_COLOR: Record<ToastType, string> = {
+  success: 'rgba(76,175,80,0.08)',
+  error:   'transparent',
+  info:    'transparent',
+};
+
+const ICON: Record<ToastType, string | null> = {
+  success: '✓',
+  error:   null,
+  info:    null,
 };
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -36,7 +48,9 @@ export default function Toast({ message, type, onDismiss }: ToastProps) {
       gap: 12,
       minWidth: 260,
       maxWidth: 420,
-      background: 'var(--onyx-panel2)',
+      background: BG_COLOR[type]
+        ? `linear-gradient(${BG_COLOR[type]}, ${BG_COLOR[type]}), var(--onyx-panel2)`
+        : 'var(--onyx-panel2)',
       backdropFilter: 'blur(20px)',
       WebkitBackdropFilter: 'blur(20px)',
       border: '1px solid var(--onyx-glass-edge)',
@@ -46,6 +60,11 @@ export default function Toast({ message, type, onDismiss }: ToastProps) {
       padding: '11px 10px 11px 14px',
       pointerEvents: 'auto',
     }}>
+      {ICON[type] && (
+        <span style={{ fontSize: 14, color: BORDER_COLOR[type], flexShrink: 0, lineHeight: 1 }}>
+          {ICON[type]}
+        </span>
+      )}
       <span style={{ flex: 1, fontSize: 13, color: 'var(--onyx-text)', lineHeight: 1.4 }}>
         {message}
       </span>
