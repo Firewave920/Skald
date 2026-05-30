@@ -384,6 +384,28 @@ impl AbsClient {
         Ok(wrapper.results)
     }
 
+    /// POST /api/collections  body: {"libraryId", "name"}
+    pub async fn create_collection(
+        &self,
+        library_id: &str,
+        name: &str,
+    ) -> Result<Collection, String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/collections", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({ "libraryId": library_id, "name": name }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("create_collection failed: HTTP {}", resp.status()));
+        }
+
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
     /// POST /api/collections/{collection_id}/book  body: {"id": book_id}
     pub async fn add_book_to_collection(
         &self,

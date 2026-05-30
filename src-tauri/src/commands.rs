@@ -323,6 +323,20 @@ pub async fn get_collections(
 }
 
 #[tauri::command]
+pub async fn create_collection(
+    server_url: String,
+    library_id: String,
+    name: String,
+) -> Result<models::Collection, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .create_collection(&library_id, &name)
+        .await
+}
+
+#[tauri::command]
 pub async fn add_book_to_collection(
     server_url: String,
     collection_id: String,
