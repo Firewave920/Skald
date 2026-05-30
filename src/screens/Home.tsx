@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { OnyxState } from '../state/onyx';
 import {
   chapterAt, fmtRemaining,
@@ -27,13 +28,19 @@ export default function Home({ st }: HomeProps) {
   const chapters = st.currentBookChapters;
   const { idx: chIdx } = chapterAt(chapters, st.position);
 
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const openBook = (id: string) => {
-    st.setCurrentBookId(id);
-    if (id !== st.currentBookId) {
-      const b = st.library.find(x => x.id === id);
-      if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+    if (selectedId === id) {
+      st.setScreen('player');
+    } else {
+      setSelectedId(id);
+      st.setCurrentBookId(id);
+      if (id !== st.currentBookId) {
+        const b = st.library.find(x => x.id === id);
+        if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));
+      }
     }
-    st.setScreen('player');
   };
 
   return (
