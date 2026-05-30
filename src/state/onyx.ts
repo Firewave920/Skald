@@ -459,7 +459,7 @@ export function useOnyxState(): OnyxState {
   useEffect(() => {
     if (!serverUrl || !authToken || library.length === 0) return;
     let cancelled = false;
-    (async () => {
+    const t = setTimeout(async () => {
       try {
         const me = await getMe(serverUrl);
         if (cancelled) return;
@@ -479,8 +479,8 @@ export function useOnyxState(): OnyxState {
       } catch (e) {
         console.error('Post-library fetch failed', e);
       }
-    })();
-    return () => { cancelled = true; };
+    }, 2000);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [library, serverUrl, authToken]);
 
   // ── Playback ─────────────────────────────────────────────────────────────────
