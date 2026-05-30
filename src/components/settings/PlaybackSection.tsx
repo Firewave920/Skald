@@ -60,10 +60,7 @@ export default function PlaybackSection() {
       </Row>
 
       <Row label="Auto-play next chapter" hint="Continue without pausing when a chapter ends.">
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <Toggle on={autoPlayNext} onChange={setAutoPlayNext} />
-          <WipBadge />
-        </div>
+        <Toggle on={autoPlayNext} onChange={setAutoPlayNext} />
       </Row>
 
       <Row label="Smart pause" hint="Pause when the audio device disconnects (e.g. headphones unplugged).">
