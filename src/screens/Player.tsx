@@ -373,7 +373,7 @@ export default function Player({ st }: PlayerProps) {
                       fontFamily: 'inherit',
                       fontSize: 12,
                       flexShrink: 1,
-                      minWidth: 60,
+                      minWidth: 48,
                       paddingLeft: 8,
                       paddingRight: 8,
                       cursor: 'pointer',
@@ -417,15 +417,13 @@ export default function Player({ st }: PlayerProps) {
                       border: `1px solid ${sleepMode != null ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
                       color: sleepMode != null ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
                       width: sleepMode != null ? 'auto' : 40,
-                      maxWidth: 120,
                       padding: sleepMode != null ? '0 10px' : 0,
                       gap: 6,
-                      overflow: 'hidden',
                     }}
                   >
                     <Icon name="sleep" size={15} />
                     {sleepMode != null && (
-                      <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{sleepLabel}</span>
+                      <span style={{ fontFamily: MONO, fontSize: 11, fontWeight: 600, letterSpacing: '0.02em', whiteSpace: 'nowrap' }}>{sleepLabel}</span>
                     )}
                   </button>
                   {sleepOpen && (
