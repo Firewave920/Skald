@@ -70,6 +70,7 @@ export interface BookMedia {
 export interface FileMetadata {
   filename: string;
   size: number;
+  path?: string | null;
 }
 
 export interface LibraryFile {

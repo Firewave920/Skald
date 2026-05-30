@@ -115,7 +115,8 @@
       "Bash(curl -s http://localhost:1420/src/components/settings/ServerSection.tsx?t=__TRACKED_VAR__)",
       "Bash(cargo add *)",
       "Bash(pnpm add *)",
-      "Bash(curl -s http://localhost:1420/src/hooks/useGlobalShortcuts.ts?t=__TRACKED_VAR__)"
+      "Bash(curl -s http://localhost:1420/src/hooks/useGlobalShortcuts.ts?t=__TRACKED_VAR__)",
+      "Bash(cargo clean *)"
     ]
   }
 }

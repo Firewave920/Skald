@@ -22,6 +22,7 @@ function fmtSize(bytes: number): string {
 export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalProps) {
   const [files, setFiles] = useState<LibraryFile[] | null>(null);
   const [error, setError] = useState('');
+  const [fullPath, setFullPath] = useState(false);
 
   useEffect(() => {
     fetchItem(serverUrl, bookId)
@@ -59,24 +60,42 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
               {files.length} {files.length === 1 ? 'file' : 'files'}
             </div>
           )}
-          <button
-            onClick={onClose}
-            style={{
-              marginLeft: 'auto',
-              background: 'transparent',
-              border: '1px solid var(--onyx-glass-edge)',
-              borderRadius: 6,
-              color: 'var(--onyx-text-dim)',
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase' as const,
-              padding: '5px 12px',
-              cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
+          <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+            <button
+              onClick={() => setFullPath(p => !p)}
+              style={{
+                background: fullPath ? 'var(--onyx-accent-dim)' : 'transparent',
+                border: `1px solid ${fullPath ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
+                borderRadius: 6,
+                color: fullPath ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase' as const,
+                padding: '5px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Full Path
+            </button>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--onyx-glass-edge)',
+                borderRadius: 6,
+                color: 'var(--onyx-text-dim)',
+                fontFamily: MONO,
+                fontSize: 10,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase' as const,
+                padding: '5px 12px',
+                cursor: 'pointer',
+              }}
+            >
+              Close
+            </button>
+          </div>
         </div>
 
         {/* Content */}
@@ -115,7 +134,7 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
                     style={{ borderBottom: i < files.length - 1 ? '1px solid var(--onyx-line)' : 'none' }}
                   >
                     <td style={{ padding: '10px 24px', fontSize: 12.5, color: 'var(--onyx-text)', fontFamily: MONO, wordBreak: 'break-all' }}>
-                      {f.metadata.filename}
+                      {fullPath ? (f.metadata.path ?? f.metadata.filename) : f.metadata.filename}
                     </td>
                     <td style={{ padding: '10px 24px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-dim)', whiteSpace: 'nowrap' }}>
                       {fmtSize(f.metadata.size)}

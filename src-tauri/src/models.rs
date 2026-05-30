@@ -81,6 +81,8 @@ pub struct FileMetadata {
     pub filename: String,
     #[serde(default)]
     pub size: i64,
+    #[serde(default)]
+    pub path: Option<String>,
 }
 
 /// A single physical file attached to a library item.
