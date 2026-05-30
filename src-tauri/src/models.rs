@@ -40,12 +40,23 @@ pub struct User {
     pub user_type: Option<String>,
 }
 
+/// Minimal book entry nested inside a collection response.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionBook {
+    pub id: String,
+}
+
 /// A single collection inside a library.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Collection {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub books: Vec<CollectionBook>,
 }
 
 /// Wrapper for GET /api/libraries/{id}/collections response.
