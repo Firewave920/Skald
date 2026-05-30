@@ -24,6 +24,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::login,
             commands::logout,
+            commands::has_token,
             commands::get_me,
             commands::fetch_libraries,
             commands::fetch_library_items,

@@ -6,9 +6,10 @@ import Titlebar from '../components/chrome/Titlebar';
 
 export interface LoginProps {
   st: OnyxState;
+  onLoginSuccess: () => void;
 }
 
-export default function Login({ st }: LoginProps) {
+export default function Login({ st, onLoginSuccess }: LoginProps) {
   const isDark = st.theme !== 'light';
   const z = st.scale / 100;
   const mono = "'JetBrains Mono', ui-monospace, monospace";
@@ -35,6 +36,7 @@ export default function Login({ st }: LoginProps) {
       st.setAuthToken(user.token);
       st.setUsername(user.username);
       st.setUser(user);
+      onLoginSuccess();
     } catch (e) {
       setError(
         typeof e === 'string'
