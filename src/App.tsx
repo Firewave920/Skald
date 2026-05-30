@@ -72,7 +72,7 @@ export default function App() {
             {st.screen === 'home'     && <Home     st={st} />}
             {st.screen === 'library'  && <Library  st={st} />}
             {st.screen === 'player'   && <Player   st={st} />}
-            {st.screen === 'settings' && <Settings st={st} />}
+            {st.screen === 'settings' && <Settings st={st} onLogout={() => setIsAuthenticated(false)} />}
           </>
         )}
       </div>

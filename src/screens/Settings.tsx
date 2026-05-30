@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { OnyxState } from '../state/onyx';
+import { logout } from '../api/abs';
 import Glass from '../components/chrome/Glass';
 import Icon from '../components/Icon';
 import type { IconName } from '../components/Icon';
@@ -18,7 +19,7 @@ import {
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-export interface SettingsProps { st: OnyxState; }
+export interface SettingsProps { st: OnyxState; onLogout: () => void; }
 
 type SectionId =
   | 'account' | 'server' | 'playback' | 'audio'
@@ -39,8 +40,18 @@ const NAV: NavSection[] = [
   { id: 'about',        label: 'About',        icon: 'dot'      },
 ];
 
-export default function Settings({ st }: SettingsProps) {
+export default function Settings({ st, onLogout }: SettingsProps) {
   const [section, setSection] = useState<SectionId>('account');
+
+  async function handleSignOut() {
+    try { await logout(); } catch { /* keyring failure is non-fatal */ }
+    localStorage.removeItem('skald.authToken');
+    localStorage.removeItem('skald.serverUrl');
+    localStorage.removeItem('skald.userId');
+    localStorage.removeItem('skald.username');
+    localStorage.removeItem('skald.sessionId');
+    onLogout();
+  }
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 32px 24px', minHeight: 0 }}>
@@ -91,9 +102,9 @@ export default function Settings({ st }: SettingsProps) {
 
           <div style={{ flex: 1 }} />
 
-          <button style={{
+          <button onClick={handleSignOut} style={{
             display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-            background: 'transparent', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
+            background: 'transparent', border: '1px solid rgba(232,113,106,0.4)', borderRadius: 8,
             color: '#e8716a', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5,
             justifyContent: 'center', marginTop: 12,
           }}>
@@ -103,7 +114,7 @@ export default function Settings({ st }: SettingsProps) {
 
         {/* Content panel */}
         <Glass translucent={st.translucent} style={{ flex: 1, padding: '28px 36px', overflow: 'auto', minWidth: 0 }}>
-          {section === 'account'    && <AccountSection />}
+          {section === 'account'    && <AccountSection onSignOut={handleSignOut} />}
           {section === 'server'     && <ServerSection />}
           {section === 'playback'   && <PlaybackSection st={st} />}
           {section === 'audio'      && <AudioSection st={st} />}
