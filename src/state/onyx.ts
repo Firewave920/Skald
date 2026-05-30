@@ -225,6 +225,9 @@ export interface OnyxState {
   screen: string;
   setScreen: (screen: string) => void;
   currentBook: LibraryItem | undefined;
+  focusedBook: LibraryItem | undefined;
+  focusedBookId: string | null;
+  setFocusedBookId: (id: string | null) => void;
   currentBookId: string;
   setCurrentBookId: (id: string) => void;
   currentBookChapters: Chapter[];
@@ -494,6 +497,9 @@ export function useOnyxState(): OnyxState {
   // ── Playback ─────────────────────────────────────────────────────────────────
   const [screen, setScreen] = useState('library');
   const [currentBookId, setCurrentBookId] = useState('');
+  const [focusedBookId, setFocusedBookId] = useState<string | null>(
+    () => localStorage.getItem('skald.currentBookId') || null,
+  );
   const [currentBookChapters, setCurrentBookChapters] = useState<Chapter[]>([]);
 
   useEffect(() => {
@@ -645,14 +651,18 @@ export function useOnyxState(): OnyxState {
     setAccentColorRaw(hex);
   }, []);
 
-  // When library first loads, seed currentBookId to the first item.
+  // When library first loads, seed currentBookId (and focusedBookId if unset).
   useEffect(() => {
     if (library.length > 0 && !currentBookId) {
       setCurrentBookId(library[0].id);
+      setFocusedBookId(prev => prev ?? library[0].id);
+    } else if (library.length > 0 && !focusedBookId) {
+      setFocusedBookId(currentBookId || library[0].id);
     }
-  }, [library, currentBookId]);
+  }, [library, currentBookId]); // focusedBookId intentionally excluded
 
-  const currentBook = library.find(b => b.id === currentBookId) ?? library[0];
+  const currentBook  = library.find(b => b.id === currentBookId)  ?? library[0];
+  const focusedBook  = library.find(b => b.id === (focusedBookId ?? currentBookId)) ?? currentBook;
   const bookSecs = currentBook?.media.duration ?? 0;
 
   useEffect(() => {
@@ -694,6 +704,7 @@ export function useOnyxState(): OnyxState {
     library, libraryLoading, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId, currentBookChapters,
+    focusedBook, focusedBookId, setFocusedBookId,
     playing, setPlaying,
     position, setPosition, bookSecs,
     volume, setVolume, muted, setMuted,
