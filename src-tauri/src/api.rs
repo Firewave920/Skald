@@ -384,6 +384,23 @@ impl AbsClient {
         Ok(wrapper.results)
     }
 
+    /// DELETE /api/items/{item_id} — permanently removes the item from the library.
+    pub async fn delete_item(&self, item_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/items/{item_id}", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_item failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
     /// POST /api/items/{item_id}/scan — server-side library rescan for one item.
     pub async fn rescan_item(&self, item_id: &str) -> Result<(), String> {
         let resp = self

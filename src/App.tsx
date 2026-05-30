@@ -3,6 +3,7 @@ import { useOnyxState } from './state/onyx';
 import { hasToken } from './api/abs';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import Toast from './components/ui/Toast';
+import ConfirmDialog from './components/ui/ConfirmDialog';
 import OnyxWash from './components/chrome/OnyxWash';
 import Titlebar from './components/chrome/Titlebar';
 import Login from './screens/Login';
@@ -85,6 +86,16 @@ export default function App() {
           message={st.toast.message}
           type={st.toast.type}
           onDismiss={() => st.setToast(null)}
+        />
+      )}
+      {st.confirmDialog && (
+        <ConfirmDialog
+          title={st.confirmDialog.title}
+          message={st.confirmDialog.message}
+          confirmLabel={st.confirmDialog.confirmLabel}
+          danger
+          onConfirm={() => { st.confirmDialog!.onConfirm(); st.setConfirmDialog(null); }}
+          onCancel={() => st.setConfirmDialog(null)}
         />
       )}
     </div>
