@@ -502,7 +502,8 @@ export default function Player({ st }: PlayerProps) {
 
               <div ref={transportRef} style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'visible' }}>
 
-              <div style={{ display: 'flex', gap: 6, flexShrink: 1, minWidth: 0 }}>
+              {/* Left group — speed pills; fixed width to balance the right group */}
+              <div style={{ flex: '0 0 auto', minWidth: 160, display: 'flex', gap: 6 }}>
                 {transportWidth >= 620 ? (
                   SPEEDS.map(s => (
                     <button key={s} onClick={() => { st.setSpeed(s); setAudioSpeed(parseFloat(s)).catch(console.error); }} style={{
@@ -539,7 +540,9 @@ export default function Player({ st }: PlayerProps) {
                 )}
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+              {/* Center group — primary transport controls; flex: 1 with centered content
+                  ensures play/pause/skip always sit at the geometric center of the row */}
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14 }}>
                 <button onClick={() => seekAudio(Math.max(0, st.position - 30)).catch(console.error)} title="Back 30s" style={transportBtn()}>
                   <Icon name="skip-back" size={20} />
                 </button>
@@ -557,7 +560,9 @@ export default function Player({ st }: PlayerProps) {
                 </button>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, flexShrink: 1, minWidth: 0 }}>
+              {/* Right group — secondary controls (bookmark, sleep timer); matches left group
+                  width so the center group remains geometrically centered regardless of content */}
+              <div style={{ flex: '0 0 auto', minWidth: 160, display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                 <button onClick={addBookmark} style={transportBtnSmall()} title="Bookmark this moment">
                   <Icon name="bookmark" size={15} />
                 </button>
