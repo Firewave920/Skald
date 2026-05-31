@@ -500,7 +500,8 @@ export default function Player({ st }: PlayerProps) {
                 <Waveform width={waveWidth} height={72} progress={chLocal / curCh.dur} color="var(--onyx-accent)" dim="rgba(255,255,255,0.15)" bars={140} flat />
               </div>
 
-              <div ref={transportRef} style={{ marginTop: 22, display: 'flex', alignItems: 'center', justifyContent: 'space-between', minWidth: 0, overflow: 'visible' }}>
+              <div ref={transportRef} style={{ marginTop: 22, display: 'flex', justifyContent: 'center', width: '100%', overflow: 'visible' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', maxWidth: 700, margin: '0 auto', minWidth: 0 }}>
 
               <div style={{ display: 'flex', gap: 6, flexShrink: 1, minWidth: 0 }}>
                 {transportWidth >= 620 ? (
@@ -594,6 +595,7 @@ export default function Player({ st }: PlayerProps) {
                       })}
                     </div>
                   )}
+                </div>
                 </div>
               </div>
             </div>
