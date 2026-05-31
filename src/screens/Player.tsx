@@ -85,6 +85,20 @@ export default function Player({ st }: PlayerProps) {
   const chapters = st.currentBookChapters; // waveform/position only
   const { idx: chIdx, local: chLocal, chapter: curCh } = chapterAt(chapters, st.position);
 
+  // When viewing a non-playing book, use saved media progress to determine
+  // which chapters have been completed and which is the current position.
+  const focusedProgress = isFocusedDifferent
+    ? st.mediaProgress.find(p => p.libraryItemId === st.focusedBookId)
+    : null;
+  // Saved playback position for the focused book (0 if never started)
+  const focusedPosition = focusedProgress?.currentTime ?? 0;
+  // Find the chapter the focused book is paused at, using the same
+  // cumulative-duration logic as chapterAt() — reuses the same helper
+  // to stay consistent with how the live chapter index is derived.
+  const focusedChIdx = isFocusedDifferent
+    ? chapterAt(displayChapters, focusedPosition).idx
+    : chIdx;
+
   const autoPlayNext = localStorage.getItem('onyx.playback.autoPlayNext') !== 'false';
   const raw = localStorage.getItem('onyx.playback.sleepDefault') ?? '"Off"';
   const sleepDefault = JSON.parse(raw) as string;
@@ -723,7 +737,10 @@ export default function Player({ st }: PlayerProps) {
               )}
               <div style={{ flex: 1, overflow: 'auto', marginRight: -8, paddingRight: 8 }}>
                 {displayChapters.map((c, i) => {
-                  const state = i < chIdx ? 'done' : i === chIdx ? 'playing' : 'next';
+                  // Use focusedChIdx when browsing a non-playing book so the chapter list
+                  // reflects that book's saved progress, not the live playback position.
+                  const rowChIdx = isFocusedDifferent ? focusedChIdx : chIdx;
+                  const state = i < rowChIdx ? 'done' : i === rowChIdx ? 'playing' : 'next';
                   return (
                     <button key={c.n} onClick={async () => {
                       const pos = chapterStart(displayChapters, i);
