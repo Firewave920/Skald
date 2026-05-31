@@ -385,32 +385,19 @@ export default function Player({ st }: PlayerProps) {
     }
   };
 
-  const handlePlayFocused = async () => {
-    const fid = st.focusedBookId!;
+  const handlePlayFocused = () => {
+    // Step 1: Make the focused book the currently playing book in local state only.
+    // No server interaction — this is purely a UI state change that tells the
+    // transport bar which book to control.
+    st.setCurrentBookId(st.focusedBookId!);
 
-    // Look up saved position BEFORE starting the animation so the transport
-    // card renders at the correct position from the first frame it is visible.
-    const saved = st.mediaProgress.find(p => p.libraryItemId === fid);
-    const anticipatedPosition = saved ? saved.currentTime : 0;
-
-    // Pre-seed the position so the waveform and time readout are correct
-    // the moment the transport card expands — before playBook resolves.
-    st.setPosition(anticipatedPosition);
-
-    // Begin the button exit animation immediately on click.
+    // Step 2: Animate the button out and expand the transport bar.
+    // The user can then use the standard play button to start playback.
     setBtnOut(true);
-    // Expand the card after 50ms — position is already set so it renders correctly.
+    // Expand the card after 50ms to allow the button exit animation to begin first.
     setTimeout(() => setShowTransport(true), 50);
     // Remove the button from the DOM after the exit animation completes (300ms).
     setTimeout(() => setBtnMounted(false), 300);
-
-    // Start playback via the canonical function; it will confirm and update
-    // the final position via setPosition(result.currentTime) when it resolves.
-    try {
-      await playBook(st, fid);
-    } catch (err) {
-      console.error('[Player] play focused book failed:', err);
-    }
   };
 
   return (

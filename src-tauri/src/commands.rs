@@ -378,6 +378,26 @@ pub async fn add_book_to_collection(
         .await
 }
 
+/// Closes all open listening sessions for the current user. Called once on
+/// app startup to clean up ghost sessions left from previous runs so the
+/// server's session list stays consistent.
+#[tauri::command]
+pub async fn close_all_open_sessions(server_url: String) -> Result<u32, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    let client = AbsClient::new(server_url).with_token(token);
+    let ids = client.get_open_sessions().await?;
+    let mut closed: u32 = 0;
+    for id in &ids {
+        match client.close_session_by_id(id).await {
+            Ok(()) => { closed += 1; }
+            Err(e) => { eprintln!("[close_all_open_sessions] failed to close {id}: {e}"); }
+        }
+    }
+    eprintln!("[close_all_open_sessions] closed {closed} of {} sessions", ids.len());
+    Ok(closed)
+}
+
 #[tauri::command]
 pub async fn close_active_session(
     state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
