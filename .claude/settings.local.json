@@ -117,7 +117,8 @@
       "Bash(pnpm add *)",
       "Bash(curl -s http://localhost:1420/src/hooks/useGlobalShortcuts.ts?t=__TRACKED_VAR__)",
       "Bash(cargo clean *)",
-      "Bash(xargs wc -l)"
+      "Bash(xargs wc -l)",
+      "Bash(git revert *)"
     ]
   }
 }

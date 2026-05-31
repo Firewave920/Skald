@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User } from '../api/abs';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, openPlaybackSession } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, openPlaybackSession, closeAllOpenSessions } from '../api/abs';
 
 export type { User };
 import {
@@ -664,6 +664,16 @@ export function useOnyxState(): OnyxState {
       setFocusedBookId(currentBookId || library[0].id);
     }
   }, [library, currentBookId]); // focusedBookId intentionally excluded
+
+  // On first authenticated load, close any ghost sessions left from the
+  // previous run so the server's session list stays consistent. Runs once
+  // when the server URL and library become available (same guards as preload).
+  useEffect(() => {
+    if (!serverUrl || library.length === 0) return;
+    closeAllOpenSessions(serverUrl)
+      .then(n => { if (n > 0) console.log(`[startup] closed ${n} ghost session(s)`); })
+      .catch(console.error); // non-fatal — stale sessions are a cosmetic issue
+  }, [serverUrl, library.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Preload the playback session at app start so the Player view shows
   // full metadata (waveform, duration, chapters) and the first play press

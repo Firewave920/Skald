@@ -302,6 +302,12 @@ export function addBookToCollection(serverUrl: string, collectionId: string, boo
   return invoke('add_book_to_collection', { serverUrl, collectionId, bookId });
 }
 
+// Closes all open listening sessions on the server, returning the count closed.
+// Called once on app startup to clear ghost sessions from previous runs.
+export function closeAllOpenSessions(serverUrl: string): Promise<number> {
+  return invoke('close_all_open_sessions', { serverUrl });
+}
+
 export function closeActiveSession(): Promise<void> {
   return invoke('close_active_session');
 }

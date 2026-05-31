@@ -372,6 +372,54 @@ impl AbsClient {
         Ok(())
     }
 
+    /// GET /api/users/me/listening-sessions — returns all open sessions for
+    /// the authenticated user so stale sessions from previous runs can be closed.
+    pub async fn get_open_sessions(&self) -> Result<Vec<String>, String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/users/me/listening-sessions", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_open_sessions failed: HTTP {}", resp.status()));
+        }
+
+        // Extract session IDs from the response array or wrapper object.
+        let body: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let sessions = body
+            .as_array()
+            .or_else(|| body.get("sessions").and_then(|v| v.as_array()))
+            .cloned()
+            .unwrap_or_default();
+
+        Ok(sessions
+            .into_iter()
+            .filter_map(|s| s.get("id")?.as_str().map(str::to_owned))
+            .collect())
+    }
+
+    /// POST /api/session/{id}/close — closes a single session by ID.
+    /// Used to clean up ghost sessions left from previous app runs.
+    pub async fn close_session_by_id(&self, session_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/session/{session_id}/close", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({ "currentTime": 0, "timeListened": 0 }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("close_session_by_id failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
     /// GET /api/libraries/{library_id}/collections
     pub async fn get_collections(&self, library_id: &str) -> Result<Vec<Collection>, String> {
         let resp = self

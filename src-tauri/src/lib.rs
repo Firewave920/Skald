@@ -74,6 +74,7 @@ pub fn run() {
             commands::get_cache_dir,
             commands::reveal_cache_dir,
             commands::close_active_session,
+            commands::close_all_open_sessions,
             commands::delete_item,
             commands::rescan_item,
             commands::get_collections,
