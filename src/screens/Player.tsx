@@ -511,8 +511,13 @@ export default function Player({ st }: PlayerProps) {
               }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 22 }}>
                 <div style={{ minWidth: 0 }}>
+                  {/* Eyebrow always visible — tells the user what will play when they press the button */}
                   <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>Now playing · {bookTitle(st.currentBook ?? b)}</div>
-                  <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, marginTop: 4, letterSpacing: '-0.005em' }}>{curCh.t}</div>
+                  {/* Only show chapter title once playback has started — before that,
+                      nothing is technically playing so showing a chapter would be misleading. */}
+                  {(st.playing || st.position > 0) && (
+                    <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, marginTop: 4, letterSpacing: '-0.005em' }}>{curCh.t}</div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-dim)' }}>
                   <span style={{ fontSize: 14, color: 'var(--onyx-text)', fontWeight: 500 }}>{fmtTime(chLocal)}</span>
