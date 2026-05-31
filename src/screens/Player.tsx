@@ -248,6 +248,14 @@ export default function Player({ st }: PlayerProps) {
     return () => ro.disconnect();
   }, []);
 
+  // When the waveform container mounts after preview card expansion,
+  // the empty-deps effect above has already run and won't re-fire.
+  // This effect takes a fresh measurement when showTransport becomes true.
+  useEffect(() => {
+    if (!showTransport || !waveformRef.current) return;
+    setWaveWidth(waveformRef.current.getBoundingClientRect().width || 600);
+  }, [showTransport]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!transportRef.current) return;
     const ro = new ResizeObserver(entries => {
