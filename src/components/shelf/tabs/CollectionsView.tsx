@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
+import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookAuthor } from '../../../state/onyx';
 import { getCollections } from '../../../api/abs';
 import type { Collection } from '../../../api/abs';
@@ -11,13 +12,6 @@ import Cover from '../../Cover';
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-function groupMatchesFilter(books: LibraryItem[], st: OnyxState): boolean {
-  if (st.filter === 'all') return true;
-  if (st.filter === 'reading')  return books.some(b  => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return Boolean(p && p.progress > 0 && !p.isFinished); });
-  if (st.filter === 'unread')   return books.some(b  => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return !p || p.progress === 0; });
-  if (st.filter === 'finished') return books.every(b => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return p?.isFinished === true; });
-  return true;
-}
 
 export interface CollectionsViewProps {
   st: OnyxState;
@@ -59,7 +53,7 @@ export default function CollectionsView({ st, inline = false }: CollectionsViewP
   }
 
   if (st.filter !== 'all') {
-    filtered = filtered.filter(c => groupMatchesFilter(booksFor(c), st));
+    filtered = filtered.filter(c => groupMatchesFilter(booksFor(c), st.filter, st.mediaProgress));
   }
 
   const openCollection = (c: Collection) => {
