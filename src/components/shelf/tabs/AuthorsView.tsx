@@ -1,4 +1,5 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
+import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookAuthor, bookGenre, bookDurSecs } from '../../../state/onyx';
 import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
@@ -13,13 +14,6 @@ interface AuthorGroup {
   books: LibraryItem[];
 }
 
-function groupMatchesFilter(books: LibraryItem[], st: OnyxState): boolean {
-  if (st.filter === 'all') return true;
-  if (st.filter === 'reading')  return books.some(b  => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return Boolean(p && p.progress > 0 && !p.isFinished); });
-  if (st.filter === 'unread')   return books.some(b  => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return !p || p.progress === 0; });
-  if (st.filter === 'finished') return books.every(b => { const p = st.mediaProgress.find(x => x.libraryItemId === b.id);  return p?.isFinished === true; });
-  return true;
-}
 
 export interface AuthorsViewProps {
   st: OnyxState;
@@ -47,7 +41,7 @@ export default function AuthorsView({ st, inline = false }: AuthorsViewProps) {
   }
 
   if (st.filter !== 'all') {
-    list = list.filter(a => groupMatchesFilter(a.books, st));
+    list = list.filter(a => groupMatchesFilter(a.books, st.filter, st.mediaProgress));
   }
 
   const open = (name: string) => {
