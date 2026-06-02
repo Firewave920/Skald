@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::{api::AbsClient, auth, cover_cache, models, session::SessionManager};
+use crate::{api::AbsClient, auth, cover_cache, models, session::SessionManager, socket};
 
 #[tauri::command]
 pub async fn login(
@@ -452,6 +452,119 @@ pub fn get_cache_dir() -> Result<String, String> {
     directories::ProjectDirs::from("com", "skald", "Skald")
         .map(|dirs| dirs.cache_dir().to_string_lossy().into_owned())
         .ok_or_else(|| "Could not determine cache directory".to_string())
+}
+
+// ── Admin user-management commands ──────────────────────────────────────────
+// These four commands wrap the AbsClient admin endpoints. They are gated by
+// the ABS server itself (HTTP 403 for non-admin callers); Skald additionally
+// hides the UI for non-admin users so normal accounts never trigger them.
+
+// ── Phase B: Socket.IO transport commands ────────────────────────────────────
+// connect_socket and disconnect_socket are the only public interface into
+// socket.rs from the frontend.  All Phase C/D/E event handling will be wired
+// inside socket.rs — these commands remain the sole entry points.
+
+/// Opens an authenticated Socket.IO connection to the ABS server.
+/// Called when the user enables live sync, or automatically on startup when
+/// the `onyx.sync.live` preference is already true.
+/// Takes server_url and token explicitly so the command is stateless from
+/// the caller's perspective — the connection object is stored internally.
+#[tauri::command]
+pub async fn connect_socket(
+    server_url: String,
+    token: String,
+    app: tauri::AppHandle,
+    socket: tauri::State<'_, socket::SocketState>,
+) -> Result<(), String> {
+    socket::connect(server_url, token, app, socket.inner().clone()).await
+}
+
+/// Tears down the active Socket.IO connection cleanly.
+/// Called when the user disables live sync, on logout, or on app close.
+/// Safe to call when no connection is open.
+#[tauri::command]
+pub async fn disconnect_socket(
+    socket: tauri::State<'_, socket::SocketState>,
+) -> Result<(), String> {
+    socket::disconnect(socket.inner().clone()).await;
+    Ok(())
+}
+
+/// GET /api/users/online — returns the IDs of users currently connected via WebSocket.
+/// Used to drive the presence dot on each user row in the admin account panel.
+/// Any authenticated user can call this; the ABS server does not restrict it to admins.
+#[tauri::command]
+pub async fn get_online_users(server_url: String) -> Result<Vec<String>, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url).with_token(token).get_online_users().await
+}
+
+/// GET /api/users — returns every user account on the server.
+/// Admin and root accounts only; the ABS server returns 403 for others.
+#[tauri::command]
+pub async fn get_all_users(server_url: String) -> Result<Vec<models::AdminUser>, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url).with_token(token).get_all_users().await
+}
+
+/// POST /api/users — creates a new user account on the server.
+/// `user_type` must be "user" or "admin"; "root" cannot be created via API.
+#[tauri::command]
+pub async fn create_user(
+    server_url: String,
+    username: String,
+    password: String,
+    user_type: String,
+) -> Result<models::AdminUser, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .create_user(&username, &password, &user_type)
+        .await
+}
+
+/// PATCH /api/users/{id} — partially updates a user account.
+/// Any `None` field is omitted from the request body so the server keeps the
+/// existing value. An empty string `password` is converted to `None` here so
+/// that leaving the password field blank in the UI does not overwrite it.
+#[tauri::command]
+pub async fn update_user(
+    server_url: String,
+    user_id: String,
+    username: Option<String>,
+    password: Option<String>,
+    user_type: Option<String>,
+) -> Result<models::AdminUser, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    // Treat an empty password string the same as None so the server keeps the
+    // existing hash rather than overwriting it with an empty password.
+    let pw = password.as_deref().filter(|s| !s.is_empty());
+    AbsClient::new(server_url)
+        .with_token(token)
+        .update_user(
+            &user_id,
+            username.as_deref(),
+            pw,
+            user_type.as_deref(),
+        )
+        .await
+}
+
+/// DELETE /api/users/{id} — permanently removes a user account from the server.
+/// The UI prevents deletion of the currently logged-in user's own row, but
+/// the server would reject self-deletion anyway.
+#[tauri::command]
+pub async fn delete_user(server_url: String, user_id: String) -> Result<(), String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .delete_user(&user_id)
+        .await
 }
 
 #[tauri::command]

@@ -118,7 +118,31 @@
       "Bash(curl -s http://localhost:1420/src/hooks/useGlobalShortcuts.ts?t=__TRACKED_VAR__)",
       "Bash(cargo clean *)",
       "Bash(xargs wc -l)",
-      "Bash(git revert *)"
+      "Bash(git revert *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src\" -Recurse -File -Filter \"*.ts\" -o *.tsx\" | Select-Object -ExpandProperty FullName | head -30)",
+      "Bash(taskkill //F //PID 48456)",
+      "Bash(taskkill //F //PID 22440)",
+      "Bash(curl -s http://localhost:1420)",
+      "Bash(curl -s http://localhost:1420/src/components/settings/AccountSection.tsx)",
+      "Bash(curl -s http://localhost:1420/src/api/abs.ts)",
+      "Bash(curl -s \"http://localhost:1420/@fs/c:/Users/fireb/Documents/Skald/src/api/abs.ts\")",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(taskkill //F //IM skald.exe)",
+      "Bash(taskkill //F //IM vite.exe)",
+      "Bash(xargs -r taskkill //F //PID)",
+      "Bash(findstr :1420)",
+      "Bash(taskkill //F //PID 53444)",
+      "Bash(taskkill //F //PID 51000)",
+      "Bash(findstr LISTENING)",
+      "Bash(taskkill //F //PID 20004)",
+      "PowerShell(taskkill /F /IM skald.exe 2>&1; $pid1420 = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTENING\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($pid1420\\) { taskkill /F /PID $pid1420 2>&1 }; echo \"done\")",
+      "PowerShell($p = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTENING\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($p\\) { taskkill /F /PID $p }; taskkill /F /IM skald.exe 2>&1; echo \"done\")",
+      "PowerShell(Get-Process | Where-Object { $_.Name -match \"skald|cargo|rustc\" } | ForEach-Object { Write-Host \"Killing $\\($_.Name\\) PID $\\($_.Id\\)\"; Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue }; $p = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTEN\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($p\\) { taskkill /F /PID $p 2>&1 }; echo \"done\")",
+      "PowerShell($p = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTEN\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($p\\) { taskkill /F /PID $p }; Get-Process | Where-Object { $_.Name -match \"skald|node\" } | Stop-Process -Force -ErrorAction SilentlyContinue; echo \"done\")",
+      "PowerShell($p = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTEN\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($p\\) { taskkill /F /PID $p }; echo \"cleared\")",
+      "Bash(Start-Process -NoNewWindow -FilePath \"pnpm\" -ArgumentList \"tauri\",\"dev\" -RedirectStandardOutput \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\tauri-dev.log\" -RedirectStandardError \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\tauri-dev-err.log\")",
+      "Bash(pkill -f \"tauri\")",
+      "Bash(pkill -f \"pnpm\")"
     ]
   }
 }

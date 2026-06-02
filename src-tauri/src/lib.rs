@@ -5,6 +5,7 @@ pub mod audio;
 pub mod commands;
 pub mod session;
 pub mod cover_cache;
+pub mod socket; // Phase B: Socket.IO transport for live sync
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -23,6 +24,11 @@ pub fn run() {
     let shortcut_map: commands::ShortcutActionMap =
         Arc::new(std::sync::RwLock::new(std::collections::HashMap::new()));
     let shortcut_map_for_handler = Arc::clone(&shortcut_map);
+
+    // Socket.IO client slot — None until the user enables live sync.
+    // Arc<Mutex<Option<Client>>> so connect/disconnect commands can
+    // safely swap the client from any tokio task.
+    let socket_state: socket::SocketState = Arc::new(Mutex::new(None));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -45,6 +51,7 @@ pub fn run() {
         )
         .manage(session_mgr)
         .manage(shortcut_map)
+        .manage(socket_state) // Socket.IO client — accessed by connect/disconnect commands
         .invoke_handler(tauri::generate_handler![
             commands::login,
             commands::logout,
@@ -81,6 +88,16 @@ pub fn run() {
             commands::create_collection,
             commands::add_book_to_collection,
             commands::register_shortcuts,
+            // Phase B: Socket.IO transport commands
+            commands::connect_socket,
+            commands::disconnect_socket,
+            // Presence — any authenticated user; used for the admin user-list dot.
+            commands::get_online_users,
+            // Admin user-management commands (admin/root only — ABS enforces this)
+            commands::get_all_users,
+            commands::create_user,
+            commands::update_user,
+            commands::delete_user,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

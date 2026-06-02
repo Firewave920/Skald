@@ -92,30 +92,17 @@ export default function Login({ st }: LoginProps) {
   };
 
   return (
-    // Full-screen backdrop behind the floating login window
+    // Outermost container — fills the entire native window; no card framing.
     <div style={{
       position: 'fixed',
       inset: 0,
       display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#08080b', // deep background visible around the window corners
+      overflow: 'hidden',
+      background: '#0b0b0e',
+      color: '#ebe7df',
+      fontFamily: SANS,
     }}>
-      {/* ── Login window — 760×620 with rounded corners and ambient shadow ── */}
-      <div style={{
-        position: 'relative',
-        width: 760,
-        height: 620,
-        borderRadius: 12,
-        border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: '0 30px 70px rgba(0,0,0,0.5)',
-        display: 'flex',
-        overflow: 'hidden',
-        background: '#0b0b0e',
-        color: '#ebe7df',
-        fontFamily: SANS,
-      }}>
-        {/* Titlebar: absolutely positioned, spans the full 760px width at z-index 50 */}
+        {/* Titlebar: absolutely positioned, left: 0, right: 0 — spans the full window width */}
         <Titlebar isDark subtitle="Saga" />
 
         {/* ── LEFT PANEL — 268px manuscript column ───────────────────────── */}
@@ -334,7 +321,7 @@ export default function Login({ st }: LoginProps) {
             </div>
           )}
 
-          {/* Action row: gold pill CTA + forgotten-passphrase link */}
+          {/* Action row: gold pill CTA */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 32 }}>
             {/* Primary "Enter" button — gold pill with gradient */}
             <button
@@ -366,17 +353,8 @@ export default function Login({ st }: LoginProps) {
               <span className="saga-arrow" style={{ display: 'flex', transition: 'transform 0.2s' }}>→</span>
             </button>
 
-            {/* Secondary link — no real action in MVP */}
-            <a
-              href="#"
-              onClick={e => e.preventDefault()}
-              style={{ fontFamily: SERIF, fontStyle: 'italic', fontSize: 13, color: 'rgba(235,231,223,0.62)', textDecoration: 'none' }}
-            >
-              I've forgotten my passphrase
-            </a>
           </div>
         </form>
-      </div>
     </div>
   );
 }

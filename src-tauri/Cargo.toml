@@ -29,4 +29,11 @@ directories = "5"
 chrono = { version = "0.4", features = ["serde"] }
 vlc-rs = "0.3"
 tauri-plugin-global-shortcut = "2.3.2"
+# Socket.IO client — async feature pulls in the tokio-backed async runtime.
+# Used in socket.rs for the live sync WebSocket transport (Phase B+).
+rust_socketio = { version = "0.6", features = ["async"] }
+# Required for .boxed() on async blocks in rust_socketio callbacks
+futures-util = "0.3"
+# Used temporarily in connect_socket to decode JWT payload for expiry diagnostics
+base64 = "0.21"
 

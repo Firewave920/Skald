@@ -248,6 +248,28 @@ pub struct Bookmark {
     pub time: f64,
 }
 
+/// A user record returned by the admin-only GET /api/users, POST /api/users,
+/// and PATCH /api/users/{id} endpoints. Kept separate from the auth `User`
+/// struct because these responses do not include a token and add management-
+/// specific timestamps that the login response omits.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminUser {
+    pub id: String,
+    pub username: String,
+    /// "root" | "admin" | "user" | "guest"
+    /// `rename` overrides camelCase so the JSON key stays "type", matching ABS.
+    #[serde(rename = "type")]
+    pub user_type: String,
+    /// Unix ms of the user's last sign-in; null if they have never signed in.
+    pub last_seen: Option<i64>,
+    /// Unix ms when the account was created.
+    pub created_at: Option<i64>,
+    pub is_active: Option<bool>,
+    /// Library-item ID the user is currently reading, if any.
+    pub current_book_id: Option<String>,
+}
+
 /// Response from POST /api/items/{id}/play — the active playback session.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

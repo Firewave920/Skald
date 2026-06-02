@@ -282,6 +282,23 @@ export interface Collection {
   books?: Array<{ id: string }>;
 }
 
+// ── Admin user-management types ────────────────────────────────────────────
+// Mirror of models::AdminUser in src-tauri/src/models.rs.
+// Used by the AccountSection admin view; never used in the auth flow.
+
+export interface AdminUser {
+  id: string;
+  username: string;
+  // JSON key is "type" (Rust field is user_type with #[serde(rename="type")]).
+  type: string;
+  // Unix ms of last sign-in; null when the account was never used.
+  lastSeen: number | null;
+  // Unix ms when the account was created.
+  createdAt: number | null;
+  isActive: boolean | null;
+  currentBookId: string | null;
+}
+
 export function deleteItem(serverUrl: string, itemId: string): Promise<void> {
   return invoke('delete_item', { serverUrl, itemId });
 }
@@ -329,4 +346,60 @@ export function searchBooks(
   return invoke('search_books', { serverUrl, title, author, provider });
 }
 
+// ── Admin user-management wrappers ─────────────────────────────────────────
+// These four functions call the Rust admin commands. They are only invoked
+// from AccountSection when the logged-in user is admin or root.
+
+// ── Phase B: Socket.IO transport wrappers ─────────────────────────────────
+
+/** Opens an authenticated Socket.IO connection to the ABS server.
+ *  Stores the client in Rust managed state; call disconnectSocket() to close it.
+ *  Emits 'socket-connected' / 'socket-disconnected' Tauri events on lifecycle changes. */
+export function connectSocket(serverUrl: string, token: string): Promise<void> {
+  return invoke('connect_socket', { serverUrl, token });
+}
+
+/** Tears down the active Socket.IO connection cleanly.
+ *  Safe to call when no connection is open. */
+export function disconnectSocket(): Promise<void> {
+  return invoke('disconnect_socket');
+}
+
+/** GET /api/users/online — returns the IDs of users currently connected via WebSocket.
+ *  Used to drive the presence dot in the admin user list. */
+export function getOnlineUsers(serverUrl: string): Promise<string[]> {
+  return invoke('get_online_users', { serverUrl });
+}
+
+/** GET /api/users — returns all accounts on the server. */
+export function getAllUsers(serverUrl: string): Promise<AdminUser[]> {
+  return invoke('get_all_users', { serverUrl });
+}
+
+/** POST /api/users — creates a new user account. */
+export function createUser(
+  serverUrl: string,
+  username: string,
+  password: string,
+  userType: string,
+): Promise<AdminUser> {
+  return invoke('create_user', { serverUrl, username, password, userType });
+}
+
+/** PATCH /api/users/{id} — partially updates a user account.
+ *  Pass `null` for any field that should remain unchanged on the server. */
+export function updateUser(
+  serverUrl: string,
+  userId: string,
+  username: string | null,
+  password: string | null,
+  userType: string | null,
+): Promise<AdminUser> {
+  return invoke('update_user', { serverUrl, userId, username, password, userType });
+}
+
+/** DELETE /api/users/{id} — permanently removes a user account. */
+export function deleteUser(serverUrl: string, userId: string): Promise<void> {
+  return invoke('delete_user', { serverUrl, userId });
+}
 

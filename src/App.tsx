@@ -1,7 +1,9 @@
 // Root application component. Renders the Saga login screen when the user
 // has no saved auth token; otherwise renders the main library/player shell.
+import { useEffect } from 'react';
 import { useOnyxState } from './state/onyx';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
+import { connectSocket, disconnectSocket } from './api/abs';
 import Toast from './components/ui/Toast';
 import ConfirmDialog from './components/ui/ConfirmDialog';
 import OnyxWash from './components/chrome/OnyxWash';
@@ -12,6 +14,9 @@ import Library from './screens/Library';
 import Player from './screens/Player';
 import Settings from './screens/Settings';
 
+// Guard against React StrictMode double-mount firing two connections.
+let socketConnected = false;
+
 export default function App() {
   // Single shared state object — all screens read from and write to this
   const st = useOnyxState();
@@ -21,6 +26,42 @@ export default function App() {
 
   // Register global keyboard shortcuts (Ctrl+Alt+Space etc.) once on mount
   useGlobalShortcuts(st);
+
+  // ── Live sync auto-connect ──────────────────────────────────────────────
+  // Fires whenever the auth token changes (login, logout, or initial mount
+  // from a persisted token).
+  //
+  // On login / initial mount with saved token:
+  //   If 'onyx.sync.live' is true the socket is opened automatically so the
+  //   user does not have to toggle it off and on after every restart.
+  //
+  // On logout (st.authToken becomes ''):
+  //   The socket is always disconnected — a live connection to the old server
+  //   must not persist after the user signs out.
+  useEffect(() => {
+    if (!st.authToken || !st.serverUrl) {
+      // Auth cleared (logout) or serverUrl not yet populated — disconnect.
+      disconnectSocket().catch(() => {});
+      return;
+    }
+    // Guard against StrictMode double-invocation firing two connections.
+    if (socketConnected) return;
+    socketConnected = true;
+    // Auth is present: restore connection if the preference is enabled.
+    if (localStorage.getItem('onyx.sync.live') === 'true') {
+      connectSocket(st.serverUrl, st.authToken).catch(e => {
+        // Non-fatal: the toggle in Settings → Sync remains the manual fallback.
+        console.warn('[sync] auto-connect on startup failed:', e);
+      });
+    }
+    return () => {
+      // Re-arm the guard on real unmount so a future mount can connect again.
+      socketConnected = false;
+    };
+  // st.authToken is the only meaningful trigger — serverUrl and localStorage
+  // are stable after login and do not need to be in the dep array.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.authToken]);
 
   // ── Auth gate ───────────────────────────────────────────────────────────
   // st.authToken is initialised synchronously from localStorage, so this

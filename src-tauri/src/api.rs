@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::models::{Bookmark, Collection, CollectionsResponse, Library, LibraryItem, ListeningStats, MeResponse, PlaySession, User};
+use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, Library, LibraryItem, ListeningStats, MeResponse, PlaySession, User};
 
 #[derive(Clone)]
 pub struct AbsClient {
@@ -516,6 +516,147 @@ impl AbsClient {
 
         if !resp.status().is_success() {
             return Err(format!("add_book_to_collection failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
+    // ── Admin user-management endpoints ─────────────────────────────────────
+    // All four endpoints require an admin or root token; calling them as a
+    // regular user will return HTTP 403 from the ABS server.
+
+    /// GET /api/users — returns every account on the server.
+    /// Response shape: { "users": [...] }  (confirmed in UserController.js).
+    pub async fn get_all_users(&self) -> Result<Vec<AdminUser>, String> {
+        // Local wrapper so we don't need to export this intermediary shape.
+        #[derive(serde::Deserialize)]
+        struct Wrapper { users: Vec<AdminUser> }
+
+        let resp = self
+            .http
+            .get(format!("{}/api/users", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_all_users failed: HTTP {}", resp.status()));
+        }
+
+        let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
+        Ok(body.users)
+    }
+
+    /// POST /api/users — creates a new user account.
+    /// Body: { "username", "password", "type" }
+    /// ABS wraps the created user in an envelope: { "user": { ... } }
+    pub async fn create_user(
+        &self,
+        username: &str,
+        password: &str,
+        user_type: &str,
+    ) -> Result<AdminUser, String> {
+        // Wrapper to match the ABS response envelope: { "user": { ... } }
+        #[derive(serde::Deserialize)]
+        struct CreateUserResponse { user: AdminUser }
+
+        let resp = self
+            .http
+            .post(format!("{}/api/users", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({
+                "username": username,
+                "password": password,
+                // The ABS field name is "type"; do not rename.
+                "type": user_type,
+            }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("create_user failed: HTTP {}", resp.status()));
+        }
+
+        let envelope: CreateUserResponse = resp.json().await.map_err(|e| e.to_string())?;
+        Ok(envelope.user)
+    }
+
+    /// PATCH /api/users/{id} — partially updates a user account.
+    /// Only fields that are `Some` are included in the request body, so callers
+    /// can change a single field without overwriting the others.
+    /// ABS returns the updated user object directly (not wrapped).
+    pub async fn update_user(
+        &self,
+        user_id: &str,
+        username: Option<&str>,
+        password: Option<&str>,
+        user_type: Option<&str>,
+    ) -> Result<AdminUser, String> {
+        // Build a sparse JSON body with only the fields that were provided.
+        let mut body = serde_json::Map::new();
+        if let Some(u) = username  { body.insert("username".into(), u.into()); }
+        if let Some(p) = password  { body.insert("password".into(), p.into()); }
+        if let Some(t) = user_type { body.insert("type".into(), t.into()); }
+
+        let resp = self
+            .http
+            .patch(format!("{}/api/users/{user_id}", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("update_user failed: HTTP {}", resp.status()));
+        }
+
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
+    /// GET /api/users/online — returns the IDs of users currently connected via WebSocket.
+    /// ABS wraps the list in { "usersOnline": [{ "id": "...", ... }] }.
+    /// Only the IDs are extracted; the caller decides what to do with them.
+    pub async fn get_online_users(&self) -> Result<Vec<String>, String> {
+        // Minimal shape — only `id` is needed from each online-user object.
+        #[derive(serde::Deserialize)]
+        struct OnlineUser { id: String }
+        // `usersOnline` in JSON → `users_online` in Rust via camelCase rename.
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Wrapper { users_online: Vec<OnlineUser> }
+
+        let resp = self
+            .http
+            .get(format!("{}/api/users/online", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_online_users failed: HTTP {}", resp.status()));
+        }
+
+        let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
+        Ok(body.users_online.into_iter().map(|u| u.id).collect())
+    }
+
+    /// DELETE /api/users/{id} — permanently removes a user account from the server.
+    /// ABS returns HTTP 200 with no body on success.
+    pub async fn delete_user(&self, user_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/users/{user_id}", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_user failed: HTTP {}", resp.status()));
         }
 
         Ok(())

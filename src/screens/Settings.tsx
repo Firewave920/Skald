@@ -8,6 +8,7 @@ import {
   AccountSection,
   ServerSection,
   PlaybackSection,
+  SyncSection,
   AudioSection,
   LibrarySection,
   DownloadsSection,
@@ -22,7 +23,7 @@ const MONO = "'JetBrains Mono', ui-monospace, monospace";
 export interface SettingsProps { st: OnyxState; onLogout: () => void; }
 
 type SectionId =
-  | 'account' | 'server' | 'playback' | 'audio'
+  | 'account' | 'server' | 'playback' | 'sync' | 'audio'
   | 'library' | 'downloads' | 'appearance' | 'keyboard' | 'about' | 'integrations';
 
 interface NavSection { id: SectionId; label: string; icon: IconName; }
@@ -31,6 +32,7 @@ const NAV: NavSection[] = [
   { id: 'account',    label: 'Account',    icon: 'home'       },
   { id: 'server',     label: 'Server',     icon: 'monitor'    },
   { id: 'playback',   label: 'Playback',   icon: 'play'       },
+  { id: 'sync',       label: 'Sync',       icon: 'airplay'    },
   { id: 'audio',      label: 'Audio',      icon: 'headphones' },
   { id: 'library',    label: 'Library',    icon: 'grid'       },
   { id: 'downloads',  label: 'Downloads',  icon: 'bookmark'   },
@@ -108,6 +110,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           {section === 'account'    && <AccountSection st={st} onSignOut={handleSignOut} />}
           {section === 'server'     && <ServerSection st={st} />}
           {section === 'playback'   && <PlaybackSection />}
+          {section === 'sync'       && <SyncSection st={st} />}
           {section === 'audio'      && <AudioSection />}
           {section === 'library'    && <LibrarySection st={st} />}
           {section === 'downloads'  && <DownloadsSection />}

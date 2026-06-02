@@ -1,0 +1,1 @@
+Read the entire roadmap on Vault\Skald\Skald Live sync Roadmap.md prior to execution and get adetailed understanding of the overall objective. Consider actions holistically rather than just trying to complete the next step.
