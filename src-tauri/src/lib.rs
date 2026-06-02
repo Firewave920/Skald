@@ -130,6 +130,10 @@ pub fn run() {
                         // before the async HTTP call (MutexGuard is not Send).
                         let (sid, ct, tl, client) = {
                             let guard = mgr.lock().await;
+                            // Cancel the background tick and sync tasks before releasing
+                            // the lock — prevents a racing 10-second sync from firing
+                            // between the lock release and the close HTTP request below.
+                            guard.cancel_tasks();
                             match guard.session_id.clone() {
                                 None => return,
                                 Some(id) => (
@@ -140,11 +144,18 @@ pub fn run() {
                                 ),
                             }
                         };
-                        let _ = tokio::time::timeout(
+                        // Log the outcome so we can verify sessions are closing on exit.
+                        // The result is still ignored for shutdown purposes — we cannot retry here.
+                        match tokio::time::timeout(
                             std::time::Duration::from_secs(5),
                             client.close_session(&sid, ct, tl),
                         )
-                        .await;
+                        .await
+                        {
+                            Ok(Ok(_))  => eprintln!("[shutdown] session closed successfully"),
+                            Ok(Err(e)) => eprintln!("[shutdown] session close failed: {:?}", e),
+                            Err(_)     => eprintln!("[shutdown] session close timed out"),
+                        }
                     });
                 });
                 let _ = t.join();
