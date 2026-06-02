@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useOnyxState } from './state/onyx';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { connectSocket, disconnectSocket } from './api/abs';
+import { closeActiveSession, connectSocket, disconnectSocket } from './api/abs';
 import Toast from './components/ui/Toast';
 import ConfirmDialog from './components/ui/ConfirmDialog';
 import OnyxWash from './components/chrome/OnyxWash';
@@ -93,6 +93,24 @@ export default function App() {
   // Listeners are set up once — st.setToast is a stable setter from useState.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Shutdown safety net ─────────────────────────────────────────────────
+  // beforeunload fires when the WebView is dismissed and gives the frontend
+  // a chance to initiate session close before the window disappears.  The
+  // Rust ExitRequested handler is the authoritative close path; this is a
+  // belt-and-suspenders safety net only.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Best-effort session close on window dismiss — fire-and-forget since
+      // beforeunload cannot await async operations. The Rust ExitRequested
+      // handler is the authoritative close; this is a safety net only.
+      closeActiveSession().catch(() => {});
+    };
+
+    // Register once on mount; clean up if the component ever unmounts.
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []); // empty deps — register once for the lifetime of the app
 
   // ── Auth gate ───────────────────────────────────────────────────────────
   // st.authToken is initialised synchronously from localStorage, so this

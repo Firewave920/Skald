@@ -11,7 +11,12 @@ export async function playBook(
   startTimeOverride?: number, // only for chapter clicks / bookmark jumps
 ): Promise<void> {
   // 1. Tear down any existing session so the server commits its final state
-  await closeActiveSession().catch(() => {});
+  // Log session close failures so ghost sessions can be diagnosed.
+  // We still proceed even on failure — a new session open will work regardless,
+  // but the server may have a dangling open session.
+  await closeActiveSession().catch(e =>
+    console.error('[playbook] closeActiveSession failed:', e)
+  );
   st.setSessionReady(false);
   st.setSessionId('');
   st.setPlaying(false);

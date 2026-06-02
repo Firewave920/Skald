@@ -151,6 +151,13 @@ impl SessionManager {
         self.client.sync_session(sid, ct, tl).await
     }
 
+    /// Signal the tick and sync background tasks to stop on their next iteration.
+    /// Called from the ExitRequested shutdown handler before the final close call
+    /// so no further sync fires between the lock release and the HTTP request.
+    pub fn cancel_tasks(&self) {
+        self.active.store(false, Ordering::Relaxed);
+    }
+
     /// Close the session on the server and stop background tasks.
     /// Called on shutdown (CLAUDE.md critical lesson 4).
     pub async fn close(&self) -> Result<(), String> {
