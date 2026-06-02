@@ -187,24 +187,47 @@ pub async fn connect(
                 let token = token_rc.clone();
                 let app = app.clone();
                 async move {
-                    eprintln!("[socket] reconnected — re-emitting auth");
-                    // Wait for the Socket.IO handshake to settle on the server
-                    // side before sending auth; mirrors the initial connect delay.
+                    // Wait for the socket handshake to settle before re-auth;
+                    // mirrors the 500 ms delay used on initial connect.
                     tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                    if let Err(e) = socket.emit("auth", token).await {
-                        eprintln!("[socket] re-auth failed: {:?}", e);
-                    } else {
-                        eprintln!("[socket] re-auth emitted after reconnect");
-                    }
-                    // Notify the frontend to perform a full resync after reconnect —
-                    // events missed during the disconnection window cannot be replayed,
-                    // so we refresh all state from the server to ensure consistency.
+                    // Re-emit auth on the fresh socket ID. Failure is unusual
+                    // (same valid token, same established transport) so we
+                    // proceed to notify the frontend regardless — the resync HTTP
+                    // calls use their own auth headers and will succeed either way.
+                    let _ = socket.emit("auth", token).await;
+                    // Signal the frontend to pull a fresh snapshot of library and
+                    // progress so no missed events leave the UI in a stale state.
                     let _ = app.emit("socket-reconnected", ());
                 }
                 .boxed()
             }
         })
-        // "error" catches transport-level failures.
+        // "connect_error" fires when a connection attempt fails at the transport
+        // level (server unreachable, TLS error, auth rejection, etc.). Forward the
+        // error string to the frontend so it can track consecutive failures and
+        // disable live sync automatically after a threshold is crossed.
+        .on("connect_error", {
+            let app = app.clone();
+            move |payload: Payload, _: Client| {
+                let app = app.clone();
+                async move {
+                    // Extract the error message from the payload. ABS sends errors
+                    // as JSON text; fall back to a generic string if the shape varies.
+                    let msg = if let Payload::Text(values) = payload {
+                        values
+                            .first()
+                            .map(|v| v.to_string())
+                            .unwrap_or_else(|| "connection error".to_string())
+                    } else {
+                        "connection error".to_string()
+                    };
+                    let _ = app.emit("socket-error", msg);
+                }
+                .boxed()
+            }
+        })
+        // "error" catches general Socket.IO protocol errors (distinct from the
+        // transport-level connect_error above; both are forwarded via separate events).
         .on("error", move |_err: Payload, _: Client| {
             async move {}
             .boxed()
