@@ -266,23 +266,23 @@ function UserStatsPage({ stats, loading }: { stats: UserStats | null; loading: b
     // gap: 28 gives sections more breathing room across the available pane height.
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
-      {/* Hero trio: Minutes · Days listened · Finished */}
-      <div style={{ display: 'flex', gap: 24 }}>
+      {/* Hero duo: Minutes · Days listened (Finished appears in the footer, not here) */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 32 }}> {/* centered with wider gap */}
         <BigStat
           // ABS returns totalTime in milliseconds — divide by 60,000 to get minutes
           value={stats ? Math.round((stats.totalTime ?? 0) / 60_000).toLocaleString() : ph}
           label="Minutes"
         />
         <BigStat value={stats ? stats.numDaysListened : ph} label="Days listened" />
-        <BigStat value={stats ? stats.numBooksFinished : ph} label="Finished" />
+        {/* Finished BigStat removed — it duplicated the Finished GreetStat in the footer */}
       </div>
 
       {/* 7-day sparkline */}
       <div>
         <SubHead>Minutes listening · last 7 days</SubHead>
         <SparkBars data={last7} />
-        {/* 4-up summary row below the sparkline */}
-        <div style={{ display: 'flex', gap: 0, marginTop: 14 }}>
+        {/* 4-up summary row below the sparkline — centered with even gaps */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 14 }}> {/* centered, gap: 24 */}
           <MiniStat value={loading ? ph : weekMinutes} unit="min" label="This week" />
           <MiniStat value={loading ? ph : dailyAvg}    unit="min" label="Daily avg" />
           <MiniStat value={loading ? ph : bestDay}     unit="min" label="Best day" />
@@ -602,7 +602,8 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
         paddingTop: 18,
         borderTop: '1px solid var(--onyx-line)',
         display: 'flex',
-        gap: 28,
+        justifyContent: 'center', // center the three footer stats across the pane width
+        gap: 32, // wider gap to match the hero row
       }}>
         {/* Total items in the loaded library */}
         <GreetStat label="In library" value={st.library.length} />
