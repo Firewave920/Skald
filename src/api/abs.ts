@@ -467,6 +467,12 @@ export interface DeviceInfo {
   deviceDescription: string | null;
 }
 
+// Nested user object present in GET /api/sessions (all-users endpoint) responses.
+// Per-user endpoints omit this; use the flat username field for those cases.
+export interface SessionUser {
+  username: string | null;
+}
+
 // Mirrors models::ListeningSession — one row in the sessions table.
 // bookId is deserialized from ABS's "libraryItemId" field via Rust serde rename.
 // author is deserialized from ABS's "displayAuthor" field via Rust serde rename.
@@ -476,12 +482,13 @@ export interface ListeningSession {
   displayTitle: string | null;
   author: string | null;
   userId: string;
-  username: string | null;
-  playMethod: number | null; // 0=DirectPlay 1=DirectStream 2=Transcode 3=Local
+  username: string | null;       // flat username — present in per-user endpoint responses
+  playMethod: number | null;     // 0=DirectPlay 1=DirectStream 2=Transcode 3=Local
   deviceInfo: DeviceInfo | null;
-  timeListening: number | null; // seconds
-  currentTime: number | null;   // seconds — playback position
-  updatedAt: number | null;     // Unix ms — used to detect open sessions
+  timeListening: number | null;  // seconds
+  currentTime: number | null;    // seconds — playback position
+  updatedAt: number | null;      // Unix ms — used to detect open sessions
+  user?: SessionUser | null;     // nested user object — present in GET /api/sessions responses
 }
 
 // Mirrors models::ListeningSessionsResponse.
@@ -509,18 +516,20 @@ export function getLibraryStats(serverUrl: string, libraryId: string): Promise<L
 
 // ── Listening sessions wrappers ────────────────────────────────────────────
 
-/** GET /api/me/listening-sessions or GET /api/users/{id}/listening-sessions.
- *  userId=undefined → own sessions (any user); userId=id → admin fetches another user's.
+/** Paginated listening sessions — three routing cases on the Rust side:
+ *  userId=null|undefined → GET /api/sessions          (all users, admin only)
+ *  userId='__me__'       → GET /api/me/listening-sessions (own sessions)
+ *  userId='<id>'         → GET /api/users/{id}/listening-sessions (specific user, admin)
  *  page is 0-indexed. itemsPerPage controls the page size. */
 export function getListeningSessions(
   serverUrl: string,
-  userId?: string,
+  userId?: string | null,  // null/undefined → all users; '__me__' → own; id → specific user
   page?: number,
   itemsPerPage?: number,
 ): Promise<ListeningSessionsResponse> {
   return invoke('get_listening_sessions', {
     serverUrl,
-    userId: userId ?? null,       // Rust expects Option<String>; null maps to None
+    userId: userId ?? null,       // null maps to Rust None → GET /api/sessions
     page: page ?? 0,
     itemsPerPage: itemsPerPage ?? 10,
   });
