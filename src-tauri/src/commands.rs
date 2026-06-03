@@ -676,22 +676,24 @@ pub fn reveal_cache_dir() -> Result<(), String> {
     Ok(())
 }
 
-/// GET /api/me/listening-sessions or GET /api/users/{id}/listening-sessions.
-/// user_id=None → own sessions; Some(id) → admin can fetch any user's sessions.
-/// page is 0-indexed; items_per_page controls the page size (10/25/50).
+/// Paginated listening sessions with optional server-side sorting.
+/// user_id=None → all sessions (admin); "__me__" → own; id → specific user.
+/// sort/desc are forwarded to ABS so it orders the full dataset, not just one page.
 #[tauri::command]
 pub async fn get_listening_sessions(
     server_url: String,
     user_id: Option<String>,
     page: u32,
     items_per_page: u32,
+    sort: Option<String>,   // ABS sort field name — None omits the param
+    desc: Option<bool>,     // true=descending, false=ascending, None=omit
 ) -> Result<models::ListeningSessionsResponse, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
     AbsClient::new(server_url)
         .with_token(token)
         // Convert Option<String> to Option<&str> for the AbsClient method.
-        .get_listening_sessions(user_id.as_deref(), page, items_per_page)
+        .get_listening_sessions(user_id.as_deref(), page, items_per_page, sort.as_deref(), desc)
         .await
 }
 

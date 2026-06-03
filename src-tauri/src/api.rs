@@ -414,28 +414,35 @@ impl AbsClient {
     ///   Some("__me__") → GET /api/me/listening-sessions (own sessions)
     ///   Some(id)       → GET /api/users/{id}/listening-sessions (specific user, admin only)
     /// page is 0-indexed; ABS uses the same convention.
+    /// sort/desc are forwarded as query params so ABS sorts the full dataset server-side.
     pub async fn get_listening_sessions(
         &self,
         user_id: Option<&str>,
         page: u32,
         items_per_page: u32,
+        sort: Option<&str>,   // ABS sort field name, e.g. "updatedAt", "timeListening"
+        desc: Option<bool>,   // true = descending; None = omit the param entirely
     ) -> Result<ListeningSessionsResponse, String> {
-        // "__me__" is a frontend sentinel meaning "authenticated caller's sessions".
-        // None means "all users" and targets the admin-only GET /api/sessions endpoint.
-        let url = match user_id {
-            None => format!(
-                "{}/api/sessions?page={}&itemsPerPage={}", // all users — admin only
-                self.root(), page, items_per_page
-            ),
-            Some("__me__") => format!(
-                "{}/api/me/listening-sessions?page={}&itemsPerPage={}", // own sessions
-                self.root(), page, items_per_page
-            ),
-            Some(id) => format!(
-                "{}/api/users/{}/listening-sessions?page={}&itemsPerPage={}", // specific user
-                self.root(), id, page, items_per_page
-            ),
+        // Build the base path for each routing case — pagination is included here;
+        // sort/desc are appended below so the logic stays symmetric across all three cases.
+        let base = match user_id {
+            None           => format!("{}/api/sessions", self.root()),                       // all users — admin only
+            Some("__me__") => format!("{}/api/me/listening-sessions", self.root()),          // own sessions
+            Some(id)       => format!("{}/api/users/{}/listening-sessions", self.root(), id), // specific user
         };
+
+        // Build query string with pagination and optional sorting.
+        // ABS sorts the full dataset server-side, so the returned page is
+        // already correctly ordered across all results, not just the visible page.
+        let mut url = format!("{}?page={}&itemsPerPage={}", base, page, items_per_page);
+        if let Some(s) = sort {
+            url.push_str(&format!("&sort={}", s)); // forward the sort field name verbatim
+        }
+        if let Some(d) = desc {
+            // ABS expects desc=1 for descending, desc=0 for ascending.
+            url.push_str(&format!("&desc={}", if d { 1 } else { 0 }));
+        }
+
         let resp = self
             .http
             .get(url)
