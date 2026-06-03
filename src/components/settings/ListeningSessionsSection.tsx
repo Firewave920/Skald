@@ -7,7 +7,7 @@
 //      auto-refreshed every 30 s. (ABS has no dedicated open-sessions endpoint;
 //      recency of updatedAt is used as a proxy for an active/open session.)
 
-import { useState, useEffect, useCallback, useMemo } from 'react'; // useMemo added for sorted sessions
+import { useState, useEffect, useCallback } from 'react'; // useMemo removed — sort is now server-side
 import type { OnyxState } from '../../state/onyx';
 import { SERIF, MONO } from './shared';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -298,43 +298,69 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
   const [sortKey, setSortKey] = useState<string>('updatedAt'); // active sort column key
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc'); // active sort direction
 
-  // Sorted sessions — recomputed only when the sessions data, sort key, or direction changes.
-  // Sorts client-side within the current page; server-side sorting across pages is not yet needed.
-  const sortedSessions = useMemo(() => {
-    const copy = [...sessions]; // avoid mutating the state array
-    copy.sort((a, b) => {
-      const av = getSortVal(a, sortKey); // extract comparable value for row a
-      const bv = getSortVal(b, sortKey); // extract comparable value for row b
-      // Numeric fields (timestamps, durations) compare as numbers for correct ordering.
-      if (typeof av === 'number' && typeof bv === 'number') {
-        return sortDir === 'asc' ? av - bv : bv - av;
-      }
-      // String fields compare case-insensitively using locale-aware comparison.
-      const as = String(av).toLowerCase();
-      const bs = String(bv).toLowerCase();
-      return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
-    });
-    return copy;
-  }, [sessions, sortKey, sortDir]); // only recompute when these three change
+  // Maps frontend sort keys to the ABS server sort field names it accepts.
+  // null means the field is not top-level on the session object and cannot be
+  // sorted server-side — those columns fall back to client-side sorting of the
+  // current page only (noted in the relevant TH onClick handler).
+  const SERVER_SORT_FIELDS: Record<string, string | null> = {
+    displayTitle:  'displayTitle',  // session title — server-sortable
+    username:      'userId',        // ABS sorts by userId; alphabetical by name is client-only
+    device:        null,            // deviceInfo.clientName is nested — not server-sortable
+    timeListening: 'timeListening', // seconds listened — server-sortable
+    currentTime:   'currentTime',   // playback position — server-sortable
+    updatedAt:     'updatedAt',     // last update timestamp — server-sortable
+  };
 
   // ── Fetch helpers ────────────────────────────────────────────────────────
 
   // Fetch a page of historical sessions. Wrapped in useCallback so it can be
   // called from effects and from pagination controls without stale closures.
+  // sk/sd (sort key/direction) are passed as parameters rather than captured in
+  // the closure so the callback identity stays stable and doesn't force effect re-runs.
   const loadSessions = useCallback(async (
-    uid: string | null, // null = All Users; '__me__' = own; '<id>' = specific user
+    uid: string | null,     // null = All Users; '__me__' = own; '<id>' = specific user
     pg: number,
     perPage: number,
+    sk: string,             // active sort column key (e.g. 'updatedAt', 'device')
+    sd: 'asc' | 'desc',    // active sort direction
   ) => {
     if (!st?.serverUrl) return; // optional chaining: safe when st is transiently undefined
     setLoading(true);
     setError('');
     try {
       // Non-admin users always fetch their own sessions regardless of uid.
-      // Admins pass uid through: null → all users, '__me__' → own, id → specific user.
       const effectiveUid = isAdmin ? uid : '__me__';
-      const res = await getListeningSessions(st.serverUrl, effectiveUid, pg, perPage); // st defined: guard passed
-      setSessions(res.sessions);
+
+      // Look up whether this column has a server-side sort field.
+      // null means the field is nested/derived and must be sorted client-side.
+      const serverField = SERVER_SORT_FIELDS[sk] ?? null; // null = no server sort for this column
+
+      const res = await getListeningSessions(
+        st.serverUrl,
+        effectiveUid,
+        pg,
+        perPage,
+        serverField ?? undefined,          // undefined omits the sort param entirely
+        serverField ? sd === 'desc' : undefined, // only send desc when server sort applies
+      );
+
+      // For columns with a server sort field, the response is already ordered correctly.
+      // For client-only columns (currently 'device'), sort the current page client-side.
+      // Note: client-side sort only applies to the visible page, not the full dataset.
+      const result = serverField
+        ? res.sessions
+        : [...res.sessions].sort((a, b) => {
+            const av = getSortVal(a, sk); // extract comparable value for row a
+            const bv = getSortVal(b, sk); // extract comparable value for row b
+            if (typeof av === 'number' && typeof bv === 'number') {
+              return sd === 'asc' ? av - bv : bv - av; // numeric comparison
+            }
+            const as = String(av).toLowerCase();
+            const bs = String(bv).toLowerCase();
+            return sd === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as); // string comparison
+          });
+
+      setSessions(result); // already sorted (server or client fallback)
       setTotal(res.total);
       // numPages from the server may be 0 when there are no sessions — clamp to 1.
       setNumPages(Math.max(1, res.numPages));
@@ -343,7 +369,7 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     } finally {
       setLoading(false);
     }
-  }, [st?.serverUrl]); // dep array: optional chaining prevents crash when st is undefined
+  }, [st?.serverUrl]); // dep array: serverUrl is the key lifecycle trigger; sk/sd are params
 
   // Fetch open sessions — page 0, large page to capture all recent activity —
   // then filter client-side to sessions updated within the last 5 minutes.
@@ -375,10 +401,12 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     getAllUsers(st.serverUrl).then(setAllUsers).catch(console.error); // st defined: guard passed
   }, [isAdmin, st?.serverUrl]); // dep array: optional chaining on st
 
-  // Reload historical sessions whenever filter, page, or page size changes.
+  // Reload historical sessions whenever filter, page, page size, or sort changes.
+  // sortKey/sortDir are now in the dep array so any sort change triggers a refetch
+  // with the new ordering applied server-side to the full dataset.
   useEffect(() => {
-    loadSessions(filterUserId, page, itemsPerPage);
-  }, [loadSessions, filterUserId, page, itemsPerPage]);
+    loadSessions(filterUserId, page, itemsPerPage, sortKey, sortDir); // pass current sort
+  }, [loadSessions, filterUserId, page, itemsPerPage, sortKey, sortDir]); // sortKey/Dir added
 
   // Load open sessions on mount and refresh every 30 seconds automatically.
   useEffect(() => {
@@ -406,9 +434,9 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     setDeletePending(true);
     try {
       await deleteSession(st.serverUrl, deleteTarget);
-      // Refresh both lists after a successful deletion.
+      // Refresh both lists after a successful deletion, preserving the active sort.
       await Promise.all([
-        loadSessions(filterUserId, page, itemsPerPage),
+        loadSessions(filterUserId, page, itemsPerPage, sortKey, sortDir), // preserve active sort
         loadOpenSessions(),
       ]);
     } catch (e) {
@@ -484,67 +512,33 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
 
         {/* Sessions table */}
         <div style={{ overflowX: 'auto' }}>
+          {/* handleSort: toggle direction when clicking the active column; switch+reset when
+              clicking a different column. Always resets to page 1 since the full dataset
+              reorders server-side, so the current page content changes entirely. */}
+          {(() => {
+            const handleSort = (key: string, defaultDir: 'asc' | 'desc' = 'desc') => {
+              if (sortKey === key) {
+                setSortDir(d => d === 'asc' ? 'desc' : 'asc'); // toggle direction on active column
+              } else {
+                setSortKey(key);        // switch to new column
+                setSortDir(defaultDir); // sensible default for this column type
+              }
+              setPage(0); // always reset to page 1 — entire dataset order changes
+            };
+            return (
           <table style={tableStyle}>
             <thead>
               <tr>
-                {/* Each sortable header receives onClick to toggle sort, plus active/dir for the indicator */}
-                <TH
-                  onClick={() => { // ITEM sorts by display title
-                    sortKey === 'displayTitle' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc') // toggle direction
-                      : (setSortKey('displayTitle'), setSortDir('desc')); // new column → default desc
-                  }}
-                  active={sortKey === 'displayTitle'} // highlight when this column is active
-                  dir={sortDir}                       // direction drives the ▲/▼ indicator
-                >Item</TH>
-                {/* USER column only visible to admins */}
-                {isAdmin && (
-                  <TH
-                    w={90}
-                    onClick={() => { // USER sorts by username (flat or nested)
-                      sortKey === 'username' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                        : (setSortKey('username'), setSortDir('asc')); // names default ascending
-                    }}
-                    active={sortKey === 'username'}
-                    dir={sortDir}
-                  >User</TH>
-                )}
-                <TH
-                  w={120}
-                  onClick={() => { // DEVICE sorts by client name
-                    sortKey === 'device' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                      : (setSortKey('device'), setSortDir('asc'));
-                  }}
-                  active={sortKey === 'device'}
-                  dir={sortDir}
-                >Device</TH>
-                <TH
-                  w={80}
-                  onClick={() => { // TIME LISTENED sorts by seconds listened
-                    sortKey === 'timeListening' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                      : (setSortKey('timeListening'), setSortDir('desc')); // most listened first
-                  }}
-                  active={sortKey === 'timeListening'}
-                  dir={sortDir}
-                >Listened</TH>
-                <TH
-                  w={80}
-                  onClick={() => { // POSITION sorts by current playback time (seconds)
-                    sortKey === 'currentTime' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                      : (setSortKey('currentTime'), setSortDir('desc'));
-                  }}
-                  active={sortKey === 'currentTime'}
-                  dir={sortDir}
-                >Position</TH>
-                <TH
-                  w={80}
-                  onClick={() => { // LAST UPDATE sorts by updatedAt timestamp
-                    sortKey === 'updatedAt' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-                      : (setSortKey('updatedAt'), setSortDir('desc')); // newest first by default
-                  }}
-                  active={sortKey === 'updatedAt'}
-                  dir={sortDir}
-                >Updated</TH>
-                {/* Delete column header — not sortable, no onClick */}
+                {/* Each sortable header is clickable; active/dir drive the ▲/▼ indicator */}
+                <TH onClick={() => handleSort('displayTitle', 'desc')} active={sortKey === 'displayTitle'} dir={sortDir}>Item</TH>
+                {/* USER column only visible to admins; sorts by userId server-side */}
+                {isAdmin && <TH w={90} onClick={() => handleSort('username', 'asc')} active={sortKey === 'username'} dir={sortDir}>User</TH>}
+                {/* DEVICE sorts client-side only — deviceInfo.clientName is not a top-level field */}
+                <TH w={120} onClick={() => handleSort('device', 'asc')} active={sortKey === 'device'} dir={sortDir}>Device</TH>
+                <TH w={80} onClick={() => handleSort('timeListening', 'desc')} active={sortKey === 'timeListening'} dir={sortDir}>Listened</TH>
+                <TH w={80} onClick={() => handleSort('currentTime', 'desc')} active={sortKey === 'currentTime'} dir={sortDir}>Position</TH>
+                <TH w={80} onClick={() => handleSort('updatedAt', 'desc')} active={sortKey === 'updatedAt'} dir={sortDir}>Updated</TH>
+                {/* Delete column header — not sortable */}
                 {isAdmin && <TH w={32}></TH>}
               </tr>
             </thead>
@@ -556,7 +550,7 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
                     Loading…
                   </td>
                 </tr>
-              ) : sortedSessions.length === 0 ? (
+              ) : sessions.length === 0 ? (
                 // Empty state
                 <tr>
                   <td colSpan={isAdmin ? 7 : 5} style={{ padding: '18px 0', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)' }}>
@@ -564,8 +558,9 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
                   </td>
                 </tr>
               ) : (
-                // Render sortedSessions — same data as sessions but in the chosen order
-                sortedSessions.map(s => (
+                // Render sessions directly — server has already applied the sort order.
+                // The 'device' column is sorted client-side inside loadSessions.
+                sessions.map(s => (
                   <SessionRow
                     key={s.id}
                     session={s}
@@ -578,6 +573,8 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
               )}
             </tbody>
           </table>
+            ); // close the IIFE return
+          })()} {/* close the IIFE — allows handleSort to close over setSortKey/setSortDir/setPage/sortKey */}
         </div>
 
         {/* Pagination row */}

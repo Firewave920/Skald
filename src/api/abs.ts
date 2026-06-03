@@ -516,22 +516,26 @@ export function getLibraryStats(serverUrl: string, libraryId: string): Promise<L
 
 // ── Listening sessions wrappers ────────────────────────────────────────────
 
-/** Paginated listening sessions — three routing cases on the Rust side:
+/** Paginated listening sessions with optional server-side sorting.
  *  userId=null|undefined → GET /api/sessions          (all users, admin only)
  *  userId='__me__'       → GET /api/me/listening-sessions (own sessions)
  *  userId='<id>'         → GET /api/users/{id}/listening-sessions (specific user, admin)
- *  page is 0-indexed. itemsPerPage controls the page size. */
+ *  sort/desc are forwarded to ABS so it orders the full dataset server-side. */
 export function getListeningSessions(
   serverUrl: string,
   userId?: string | null,  // null/undefined → all users; '__me__' → own; id → specific user
   page?: number,
   itemsPerPage?: number,
+  sort?: string,           // ABS sort field name, e.g. 'updatedAt', 'timeListening'
+  desc?: boolean,          // true = descending; undefined = omit the param
 ): Promise<ListeningSessionsResponse> {
   return invoke('get_listening_sessions', {
     serverUrl,
     userId: userId ?? null,       // null maps to Rust None → GET /api/sessions
     page: page ?? 0,
     itemsPerPage: itemsPerPage ?? 10,
+    sort: sort ?? null,           // null maps to Rust None → param omitted from query
+    desc: desc ?? null,           // null maps to Rust None → param omitted from query
   });
 }
 
