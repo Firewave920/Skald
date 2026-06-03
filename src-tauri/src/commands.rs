@@ -676,6 +676,41 @@ pub fn reveal_cache_dir() -> Result<(), String> {
     Ok(())
 }
 
+/// GET /api/me/listening-sessions or GET /api/users/{id}/listening-sessions.
+/// user_id=None → own sessions; Some(id) → admin can fetch any user's sessions.
+/// page is 0-indexed; items_per_page controls the page size (10/25/50).
+#[tauri::command]
+pub async fn get_listening_sessions(
+    server_url: String,
+    user_id: Option<String>,
+    page: u32,
+    items_per_page: u32,
+) -> Result<models::ListeningSessionsResponse, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        // Convert Option<String> to Option<&str> for the AbsClient method.
+        .get_listening_sessions(user_id.as_deref(), page, items_per_page)
+        .await
+}
+
+/// DELETE /api/sessions/{id} — admin-only, permanently removes a session record.
+/// The ABS server enforces admin access; Skald additionally hides this button
+/// from non-admin users in the UI.
+#[tauri::command]
+pub async fn delete_session(
+    server_url: String,
+    session_id: String,
+) -> Result<(), String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .delete_session(&session_id)
+        .await
+}
+
 /// GET /api/me/listening-stats — returns listening stats for the authenticated user.
 /// Used by GreetingPane for the "Your stats" page: total time, days listened,
 /// books finished, 7-day sparkline data, and recent sessions.

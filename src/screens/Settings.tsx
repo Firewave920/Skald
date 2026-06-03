@@ -109,7 +109,8 @@ export default function Settings({ st, onLogout }: SettingsProps) {
         <Glass translucent={st.translucent} style={{ flex: 1, padding: '28px 36px', overflow: 'auto', minWidth: 0 }}>
           {section === 'account'    && <AccountSection st={st} onSignOut={handleSignOut} />}
           {section === 'server'     && <ServerSection st={st} />}
-          {section === 'playback'   && <PlaybackSection />}
+          {/* st is passed so the Sessions subtab can access serverUrl and user type */}
+          {section === 'playback'   && <PlaybackSection st={st} />}
           {section === 'sync'       && <SyncSection st={st} />}
           {section === 'audio'      && <AudioSection />}
           {section === 'library'    && <LibrarySection st={st} />}
