@@ -358,6 +358,16 @@ pub struct LibraryStats {
     pub genres: Vec<GenreStat>,
 }
 
+/// Nested user object returned inside sessions from GET /api/sessions (all-users endpoint).
+/// Per-user endpoints omit this object; the flat `username` field covers those cases.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionUser {
+    /// Username of the account that owns the session.
+    #[serde(default)]
+    pub username: Option<String>,
+}
+
 /// Device info block embedded in a ListeningSession — client name and a
 /// human-readable device description string (browser + OS or app name).
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -405,6 +415,10 @@ pub struct ListeningSession {
     /// Unix millisecond timestamp of last update — used to detect open sessions.
     #[serde(default)]
     pub updated_at: Option<i64>,
+    /// Nested user object — present only in GET /api/sessions (all-users) responses.
+    /// Per-user endpoints omit it; use the flat `username` field for those.
+    #[serde(default)]
+    pub user: Option<SessionUser>,
 }
 
 /// Paginated response from GET /api/me/listening-sessions or

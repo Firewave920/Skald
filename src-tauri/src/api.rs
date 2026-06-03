@@ -409,24 +409,30 @@ impl AbsClient {
         Ok(())
     }
 
-    /// GET /api/me/listening-sessions or GET /api/users/{id}/listening-sessions.
-    /// user_id=None → own sessions; Some(id) → admin can view any user's sessions.
-    /// page is 0-indexed; ABS pagination uses the same convention.
+    /// Paginated listening-session fetch — three routing cases:
+    ///   None           → GET /api/sessions             (all users, admin only)
+    ///   Some("__me__") → GET /api/me/listening-sessions (own sessions)
+    ///   Some(id)       → GET /api/users/{id}/listening-sessions (specific user, admin only)
+    /// page is 0-indexed; ABS uses the same convention.
     pub async fn get_listening_sessions(
         &self,
         user_id: Option<&str>,
         page: u32,
         items_per_page: u32,
     ) -> Result<ListeningSessionsResponse, String> {
-        // Route to the per-user admin endpoint when a user ID is supplied,
-        // otherwise use the /api/me endpoint for the authenticated caller.
+        // "__me__" is a frontend sentinel meaning "authenticated caller's sessions".
+        // None means "all users" and targets the admin-only GET /api/sessions endpoint.
         let url = match user_id {
             None => format!(
-                "{}/api/me/listening-sessions?page={}&itemsPerPage={}",
+                "{}/api/sessions?page={}&itemsPerPage={}", // all users — admin only
+                self.root(), page, items_per_page
+            ),
+            Some("__me__") => format!(
+                "{}/api/me/listening-sessions?page={}&itemsPerPage={}", // own sessions
                 self.root(), page, items_per_page
             ),
             Some(id) => format!(
-                "{}/api/users/{}/listening-sessions?page={}&itemsPerPage={}",
+                "{}/api/users/{}/listening-sessions?page={}&itemsPerPage={}", // specific user
                 self.root(), id, page, items_per_page
             ),
         };

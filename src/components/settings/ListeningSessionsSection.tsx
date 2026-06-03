@@ -147,7 +147,9 @@ function SessionRow({
       {showUser && (
         <TD muted>
           <span style={{ fontFamily: MONO, fontSize: 11 }}>
-            {session.username ?? session.userId.slice(0, 8)}
+            {/* Prefer flat username (per-user endpoints), fall back to the nested user object
+                (GET /api/sessions), then the first 8 chars of userId as a last resort. */}
+            {session.username ?? session.user?.username ?? session.userId.slice(0, 8)}
           </span>
         </TD>
       )}
@@ -229,8 +231,12 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
   const [numPages, setNumPages]           = useState(1);
   const [page, setPage]                   = useState(0); // 0-indexed, matches ABS
   const [itemsPerPage, setItemsPerPage]   = useState(10);
-  // Admin-only: filter by a specific user. undefined = own sessions.
-  const [filterUserId, setFilterUserId]   = useState<string | undefined>(undefined);
+  // Filter selection — three states:
+  //   null     → All Users (admin only, default for admins) → GET /api/sessions
+  //   '__me__' → own sessions → GET /api/me/listening-sessions
+  //   '<id>'   → specific user (admin only) → GET /api/users/{id}/listening-sessions
+  // Defaults to null (All Users) so admins see cross-user data immediately on mount.
+  const [filterUserId, setFilterUserId]   = useState<string | null>(null);
   const [loading, setLoading]             = useState(false);
   const [error, setError]                 = useState('');
 
@@ -250,7 +256,7 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
   // Fetch a page of historical sessions. Wrapped in useCallback so it can be
   // called from effects and from pagination controls without stale closures.
   const loadSessions = useCallback(async (
-    uid: string | undefined,
+    uid: string | null, // null = All Users; '__me__' = own; '<id>' = specific user
     pg: number,
     perPage: number,
   ) => {
@@ -258,7 +264,10 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     setLoading(true);
     setError('');
     try {
-      const res = await getListeningSessions(st.serverUrl, uid, pg, perPage); // st defined: guard passed
+      // Non-admin users always fetch their own sessions regardless of uid.
+      // Admins pass uid through: null → all users, '__me__' → own, id → specific user.
+      const effectiveUid = isAdmin ? uid : '__me__';
+      const res = await getListeningSessions(st.serverUrl, effectiveUid, pg, perPage); // st defined: guard passed
       setSessions(res.sessions);
       setTotal(res.total);
       // numPages from the server may be 0 when there are no sessions — clamp to 1.
@@ -277,8 +286,10 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     if (!st?.serverUrl) return; // optional chaining: safe when st is transiently undefined
     setOpenLoading(true);
     try {
-      // Fetch a generous page so we don't miss recently active sessions.
-      const res = await getListeningSessions(st.serverUrl, undefined, 0, 50); // st defined: guard passed
+      // '__me__' explicitly requests own sessions via GET /api/me/listening-sessions.
+      // Passing null here would target GET /api/sessions (all users), which is wrong for
+      // the open-sessions panel — we only want to surface own open sessions as a proxy.
+      const res = await getListeningSessions(st.serverUrl, '__me__', 0, 50); // st defined: guard passed
       const fiveMinutesAgo = Date.now() - 5 * 60 * 1000; // 5-minute recency window
       // A session is considered "open" if its updatedAt is within the last 5 minutes.
       const open = res.sessions.filter(s => s.updatedAt !== null && s.updatedAt > fiveMinutesAgo);
@@ -363,14 +374,17 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
             Listening Sessions
           </div>
 
-          {/* Admin-only filter dropdown — lets admins view any user's sessions */}
-          {isAdmin && allUsers.length > 0 && (
+          {/* Admin-only filter dropdown — not shown to non-admins */}
+          {isAdmin && (
             <select
+              // null (All Users) maps to the empty-string option value.
               value={filterUserId ?? ''}
               onChange={e => {
-                // Reset to page 0 when the user filter changes.
+                // Reset to page 0 whenever the user filter changes.
                 setPage(0);
-                setFilterUserId(e.target.value || undefined);
+                const val = e.target.value;
+                // '' → null (All Users); any other string passes through as-is.
+                setFilterUserId(val === '' ? null : val);
               }}
               style={{
                 padding: '6px 10px',
@@ -383,8 +397,11 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
                 cursor: 'pointer',
               }}
             >
-              {/* Default: own sessions (no user_id filter) */}
-              <option value="">My sessions</option>
+              {/* All Users — default for admins; maps to null → GET /api/sessions */}
+              <option value="">All Users</option>
+              {/* My sessions — '__me__' sentinel → GET /api/me/listening-sessions */}
+              <option value="__me__">My sessions</option>
+              {/* Per-user options — specific user ID → GET /api/users/{id}/listening-sessions */}
               {allUsers.map(u => (
                 <option key={u.id} value={u.id}>{u.username}</option>
               ))}
