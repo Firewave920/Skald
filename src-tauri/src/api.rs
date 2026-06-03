@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, Library, LibraryItem, LibraryStats, ListeningStats, MeResponse, PlaySession, User, UserStats};
+use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, Library, LibraryItem, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, PlaySession, User, UserStats};
 
 #[derive(Clone)]
 pub struct AbsClient {
@@ -404,6 +404,61 @@ impl AbsClient {
 
         if !resp.status().is_success() {
             return Err(format!("close_session failed: HTTP {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
+    /// GET /api/me/listening-sessions or GET /api/users/{id}/listening-sessions.
+    /// user_id=None → own sessions; Some(id) → admin can view any user's sessions.
+    /// page is 0-indexed; ABS pagination uses the same convention.
+    pub async fn get_listening_sessions(
+        &self,
+        user_id: Option<&str>,
+        page: u32,
+        items_per_page: u32,
+    ) -> Result<ListeningSessionsResponse, String> {
+        // Route to the per-user admin endpoint when a user ID is supplied,
+        // otherwise use the /api/me endpoint for the authenticated caller.
+        let url = match user_id {
+            None => format!(
+                "{}/api/me/listening-sessions?page={}&itemsPerPage={}",
+                self.root(), page, items_per_page
+            ),
+            Some(id) => format!(
+                "{}/api/users/{}/listening-sessions?page={}&itemsPerPage={}",
+                self.root(), id, page, items_per_page
+            ),
+        };
+        let resp = self
+            .http
+            .get(url)
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_listening_sessions failed: HTTP {}", resp.status()));
+        }
+
+        // The response is a paginated wrapper; unknown extra fields are silently ignored.
+        resp.json::<ListeningSessionsResponse>().await.map_err(|e| e.to_string())
+    }
+
+    /// DELETE /api/sessions/{id} — permanently removes a session record.
+    /// ABS enforces admin-only access; non-admin callers receive 403.
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/sessions/{session_id}", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_session failed: HTTP {}", resp.status()));
         }
 
         Ok(())

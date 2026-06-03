@@ -357,3 +357,69 @@ pub struct LibraryStats {
     #[serde(default)]
     pub genres: Vec<GenreStat>,
 }
+
+/// Device info block embedded in a ListeningSession — client name and a
+/// human-readable device description string (browser + OS or app name).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceInfo {
+    #[serde(default)]
+    pub client_name: Option<String>,
+    /// ABS may not include this field on older versions — default to None.
+    #[serde(default)]
+    pub device_description: Option<String>,
+}
+
+/// A single listening session row from GET /api/me/listening-sessions or
+/// GET /api/users/{id}/listening-sessions.
+/// Field names use serde renames where ABS's JSON keys differ from the
+/// snake_case Rust names that camelCase would produce.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListeningSession {
+    pub id: String,
+    /// ABS uses "libraryItemId"; rename so the Rust field stays descriptive.
+    #[serde(rename = "libraryItemId", default)]
+    pub book_id: Option<String>,
+    #[serde(default)]
+    pub display_title: Option<String>,
+    /// ABS uses "displayAuthor"; rename so the struct field stays generic.
+    #[serde(rename = "displayAuthor", default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub user_id: String,
+    /// Not present in every endpoint response — optional for forward compatibility.
+    #[serde(default)]
+    pub username: Option<String>,
+    /// 0=DirectPlay, 1=DirectStream, 2=Transcode, 3=Local.
+    #[serde(default)]
+    pub play_method: Option<i32>,
+    #[serde(default)]
+    pub device_info: Option<DeviceInfo>,
+    /// Total seconds listened in this session.
+    #[serde(default)]
+    pub time_listening: Option<f64>,
+    /// Current playback position in seconds.
+    #[serde(default)]
+    pub current_time: Option<f64>,
+    /// Unix millisecond timestamp of last update — used to detect open sessions.
+    #[serde(default)]
+    pub updated_at: Option<i64>,
+}
+
+/// Paginated response from GET /api/me/listening-sessions or
+/// GET /api/users/{id}/listening-sessions.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ListeningSessionsResponse {
+    #[serde(default)]
+    pub sessions: Vec<ListeningSession>,
+    /// Total number of sessions across all pages.
+    #[serde(default)]
+    pub total: u32,
+    /// Total number of pages at the requested itemsPerPage.
+    #[serde(default)]
+    pub num_pages: u32,
+    #[serde(default)]
+    pub items_per_page: u32,
+}

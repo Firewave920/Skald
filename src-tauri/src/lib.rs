@@ -96,6 +96,9 @@ pub fn run() {
             // Stats commands for GreetingPane
             commands::get_user_stats,
             commands::get_library_stats,
+            // Listening sessions — Settings → Playback → Sessions tab
+            commands::get_listening_sessions,
+            commands::delete_session,
             // Phase B: Socket.IO transport commands
             commands::connect_socket,
             commands::disconnect_socket,
