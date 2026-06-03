@@ -7,7 +7,7 @@
 //      auto-refreshed every 30 s. (ABS has no dedicated open-sessions endpoint;
 //      recency of updatedAt is used as a proxy for an active/open session.)
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react'; // useMemo added for sorted sessions
 import type { OnyxState } from '../../state/onyx';
 import { SERIF, MONO } from './shared';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -17,6 +17,23 @@ import {
   getAllUsers,
 } from '../../api/abs';
 import type { ListeningSession, AdminUser } from '../../api/abs';
+
+// ── Sort value extractor ────────────────────────────────────────────────────
+
+// Returns the value used for sorting a session by the given column key.
+// Handles nested fields (device client name, cross-endpoint username) that
+// cannot be reached by simple dynamic property access.
+function getSortVal(s: ListeningSession, key: string): string | number {
+  switch (key) {
+    case 'displayTitle':  return s.displayTitle ?? '';             // ITEM column
+    case 'username':      return s.username ?? s.user?.username ?? ''; // USER — flat or nested
+    case 'device':        return s.deviceInfo?.clientName ?? '';   // DEVICE INFO column
+    case 'timeListening': return s.timeListening ?? 0;             // TIME LISTENED
+    case 'currentTime':   return s.currentTime ?? 0;              // LAST TIME (position)
+    case 'updatedAt':     return s.updatedAt ?? 0;                // LAST UPDATE
+    default:              return '';
+  }
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -75,21 +92,45 @@ const TrashIcon = (
 );
 
 // Column header cell — mono, uppercase, muted.
-function TH({ children, w }: { children?: React.ReactNode; w?: number }) {
+// When onClick is supplied the cell is sortable: a ▲/▼ indicator shows on the active column.
+function TH({
+  children,
+  w,
+  onClick,  // supplied for sortable columns; omitted for non-sortable (delete, actions)
+  active,   // true when this column is the current sort key
+  dir,      // current sort direction — drives the ▲/▼ indicator
+}: {
+  children?: React.ReactNode;
+  w?: number;
+  onClick?: () => void;
+  active?: boolean;
+  dir?: 'asc' | 'desc';
+}) {
   return (
-    <th style={{
-      fontFamily: MONO,
-      fontSize: 9,
-      letterSpacing: '0.1em',
-      textTransform: 'uppercase',
-      color: 'var(--onyx-text-mute)',
-      fontWeight: 400,
-      textAlign: 'left',
-      padding: '0 12px 10px 0',
-      whiteSpace: 'nowrap',
-      width: w,
-    }}>
+    <th
+      onClick={onClick}
+      style={{
+        fontFamily: MONO,
+        fontSize: 9,
+        letterSpacing: '0.1em',
+        textTransform: 'uppercase',
+        color: active ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)', // accent on active column
+        fontWeight: active ? 600 : 400, // bold on active column
+        textAlign: 'left',
+        padding: '0 12px 10px 0',
+        whiteSpace: 'nowrap',
+        width: w,
+        cursor: onClick ? 'pointer' : undefined, // pointer cursor when sortable
+        userSelect: 'none', // prevent text selection on rapid double-clicks
+      }}
+    >
       {children}
+      {/* Sort direction arrow — only shown on the active sort column */}
+      {active && (
+        <span style={{ marginLeft: 4, fontSize: 8 }}>
+          {dir === 'asc' ? '▲' : '▼'}
+        </span>
+      )}
     </th>
   );
 }
@@ -250,6 +291,31 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
   // ── Open sessions state ─────────────────────────────────────────────────
   const [openSessions, setOpenSessions]   = useState<ListeningSession[]>([]);
   const [openLoading, setOpenLoading]     = useState(false);
+
+  // ── Sort state ────────────────────────────────────────────────────────────
+  // Tracks which column is sorted and in which direction.
+  // Default: sort by LAST UPDATE descending so newest sessions appear first.
+  const [sortKey, setSortKey] = useState<string>('updatedAt'); // active sort column key
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc'); // active sort direction
+
+  // Sorted sessions — recomputed only when the sessions data, sort key, or direction changes.
+  // Sorts client-side within the current page; server-side sorting across pages is not yet needed.
+  const sortedSessions = useMemo(() => {
+    const copy = [...sessions]; // avoid mutating the state array
+    copy.sort((a, b) => {
+      const av = getSortVal(a, sortKey); // extract comparable value for row a
+      const bv = getSortVal(b, sortKey); // extract comparable value for row b
+      // Numeric fields (timestamps, durations) compare as numbers for correct ordering.
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return sortDir === 'asc' ? av - bv : bv - av;
+      }
+      // String fields compare case-insensitively using locale-aware comparison.
+      const as = String(av).toLowerCase();
+      const bs = String(bv).toLowerCase();
+      return sortDir === 'asc' ? as.localeCompare(bs) : bs.localeCompare(as);
+    });
+    return copy;
+  }, [sessions, sortKey, sortDir]); // only recompute when these three change
 
   // ── Fetch helpers ────────────────────────────────────────────────────────
 
@@ -421,14 +487,64 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
           <table style={tableStyle}>
             <thead>
               <tr>
-                <TH>Item</TH>
+                {/* Each sortable header receives onClick to toggle sort, plus active/dir for the indicator */}
+                <TH
+                  onClick={() => { // ITEM sorts by display title
+                    sortKey === 'displayTitle' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc') // toggle direction
+                      : (setSortKey('displayTitle'), setSortDir('desc')); // new column → default desc
+                  }}
+                  active={sortKey === 'displayTitle'} // highlight when this column is active
+                  dir={sortDir}                       // direction drives the ▲/▼ indicator
+                >Item</TH>
                 {/* USER column only visible to admins */}
-                {isAdmin && <TH w={90}>User</TH>}
-                <TH w={120}>Device</TH>
-                <TH w={80}>Listened</TH>
-                <TH w={80}>Position</TH>
-                <TH w={80}>Updated</TH>
-                {/* Delete column header — admin only */}
+                {isAdmin && (
+                  <TH
+                    w={90}
+                    onClick={() => { // USER sorts by username (flat or nested)
+                      sortKey === 'username' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                        : (setSortKey('username'), setSortDir('asc')); // names default ascending
+                    }}
+                    active={sortKey === 'username'}
+                    dir={sortDir}
+                  >User</TH>
+                )}
+                <TH
+                  w={120}
+                  onClick={() => { // DEVICE sorts by client name
+                    sortKey === 'device' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      : (setSortKey('device'), setSortDir('asc'));
+                  }}
+                  active={sortKey === 'device'}
+                  dir={sortDir}
+                >Device</TH>
+                <TH
+                  w={80}
+                  onClick={() => { // TIME LISTENED sorts by seconds listened
+                    sortKey === 'timeListening' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      : (setSortKey('timeListening'), setSortDir('desc')); // most listened first
+                  }}
+                  active={sortKey === 'timeListening'}
+                  dir={sortDir}
+                >Listened</TH>
+                <TH
+                  w={80}
+                  onClick={() => { // POSITION sorts by current playback time (seconds)
+                    sortKey === 'currentTime' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      : (setSortKey('currentTime'), setSortDir('desc'));
+                  }}
+                  active={sortKey === 'currentTime'}
+                  dir={sortDir}
+                >Position</TH>
+                <TH
+                  w={80}
+                  onClick={() => { // LAST UPDATE sorts by updatedAt timestamp
+                    sortKey === 'updatedAt' ? setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+                      : (setSortKey('updatedAt'), setSortDir('desc')); // newest first by default
+                  }}
+                  active={sortKey === 'updatedAt'}
+                  dir={sortDir}
+                >Updated</TH>
+                {/* Delete column header — not sortable, no onClick */}
                 {isAdmin && <TH w={32}></TH>}
               </tr>
             </thead>
@@ -440,7 +556,7 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
                     Loading…
                   </td>
                 </tr>
-              ) : sessions.length === 0 ? (
+              ) : sortedSessions.length === 0 ? (
                 // Empty state
                 <tr>
                   <td colSpan={isAdmin ? 7 : 5} style={{ padding: '18px 0', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)' }}>
@@ -448,7 +564,8 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
                   </td>
                 </tr>
               ) : (
-                sessions.map(s => (
+                // Render sortedSessions — same data as sessions but in the chosen order
+                sortedSessions.map(s => (
                   <SessionRow
                     key={s.id}
                     session={s}
