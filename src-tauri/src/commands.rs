@@ -713,6 +713,19 @@ pub async fn delete_session(
         .await
 }
 
+/// GET /api/users/online → openSessions — returns all currently active playback sessions.
+/// The /api/users/online response contains both connected user records and an openSessions
+/// array; this command extracts only the sessions, which is what the Settings panel needs.
+#[tauri::command]
+pub async fn get_open_sessions(server_url: String) -> Result<Vec<models::ListeningSession>, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .get_online_open_sessions() // distinct from get_open_sessions which returns IDs for cleanup
+        .await
+}
+
 /// GET /api/me/listening-stats — returns listening stats for the authenticated user.
 /// Used by GreetingPane for the "Your stats" page: total time, days listened,
 /// books finished, 7-day sparkline data, and recent sessions.

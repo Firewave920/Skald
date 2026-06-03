@@ -544,3 +544,10 @@ export function deleteSession(serverUrl: string, sessionId: string): Promise<voi
   return invoke('delete_session', { serverUrl, sessionId });
 }
 
+/** GET /api/users/online → openSessions — returns all currently active playback sessions.
+ *  Replaces the old 5-minute updatedAt proxy; this is the authoritative open-sessions list.
+ *  Sessions include all users' active playback, not just the authenticated caller's. */
+export function getOpenSessions(serverUrl: string): Promise<ListeningSession[]> {
+  return invoke('get_open_sessions', { serverUrl }); // backed by GET /api/users/online
+}
+

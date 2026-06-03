@@ -3,9 +3,8 @@
 // Two Glass cards stacked vertically:
 //   1. Listening Sessions — paginated historical table with user filter (admin)
 //      and per-row delete (admin).
-//   2. Open Listening Sessions — sessions updated within the last 5 minutes,
-//      auto-refreshed every 30 s. (ABS has no dedicated open-sessions endpoint;
-//      recency of updatedAt is used as a proxy for an active/open session.)
+//   2. Open Listening Sessions — currently active sessions from GET /api/users/online
+//      (openSessions field), auto-refreshed every 30 s.
 
 import { useState, useEffect, useCallback } from 'react'; // useMemo removed — sort is now server-side
 import type { OnyxState } from '../../state/onyx';
@@ -15,6 +14,7 @@ import {
   getListeningSessions,
   deleteSession,
   getAllUsers,
+  getOpenSessions, // new: fetches open sessions from GET /api/users/online → openSessions
 } from '../../api/abs';
 import type { ListeningSession, AdminUser } from '../../api/abs';
 
@@ -371,21 +371,16 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     }
   }, [st?.serverUrl]); // dep array: serverUrl is the key lifecycle trigger; sk/sd are params
 
-  // Fetch open sessions — page 0, large page to capture all recent activity —
-  // then filter client-side to sessions updated within the last 5 minutes.
-  // This is a proxy because ABS has no dedicated open-sessions endpoint.
+  // Fetch currently active sessions from GET /api/users/online → openSessions.
+  // This is the authoritative real-time source — no proxy filtering needed.
   const loadOpenSessions = useCallback(async () => {
     if (!st?.serverUrl) return; // optional chaining: safe when st is transiently undefined
     setOpenLoading(true);
     try {
-      // '__me__' explicitly requests own sessions via GET /api/me/listening-sessions.
-      // Passing null here would target GET /api/sessions (all users), which is wrong for
-      // the open-sessions panel — we only want to surface own open sessions as a proxy.
-      const res = await getListeningSessions(st.serverUrl, '__me__', 0, 50); // st defined: guard passed
-      const fiveMinutesAgo = Date.now() - 5 * 60 * 1000; // 5-minute recency window
-      // A session is considered "open" if its updatedAt is within the last 5 minutes.
-      const open = res.sessions.filter(s => s.updatedAt !== null && s.updatedAt > fiveMinutesAgo);
-      setOpenSessions(open);
+      // getOpenSessions calls GET /api/users/online and returns the openSessions array directly.
+      // This replaces the old 5-minute updatedAt proxy which could miss long sessions.
+      const sessions = await getOpenSessions(st.serverUrl); // st defined: guard passed
+      setOpenSessions(sessions); // all currently active sessions across all users
     } catch {
       // Open sessions are best-effort; silently ignore errors to avoid cluttering the UI.
     } finally {
