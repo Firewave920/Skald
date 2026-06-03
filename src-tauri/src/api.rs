@@ -721,6 +721,36 @@ impl AbsClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
+    /// GET /api/users/online → openSessions — extracts currently active playback sessions.
+    /// ABS returns { usersOnline: [...], openSessions: [...] }; this method pulls out the
+    /// openSessions array, which is the authoritative list of all active sessions on the server.
+    pub async fn get_online_open_sessions(&self) -> Result<Vec<ListeningSession>, String> {
+        // Minimal wrapper that captures only the openSessions field we need from the response.
+        // usersOnline is present but unused here; it's consumed by get_online_users separately.
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Wrapper {
+            #[serde(default)] // default to empty vec if the field is absent
+            open_sessions: Vec<ListeningSession>, // JSON key: openSessions (camelCase rename)
+        }
+
+        let resp = self
+            .http
+            .get(format!("{}/api/users/online", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_online_open_sessions failed: HTTP {}", resp.status()));
+        }
+
+        // Deserialize only the openSessions field; remaining fields are ignored by serde.
+        let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
+        Ok(body.open_sessions) // return the session list directly
+    }
+
     /// GET /api/users/online — returns the IDs of users currently connected via WebSocket.
     /// ABS wraps the list in { "usersOnline": [{ "id": "...", ... }] }.
     /// Only the IDs are extracted; the caller decides what to do with them.

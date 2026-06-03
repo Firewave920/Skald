@@ -99,6 +99,7 @@ pub fn run() {
             // Listening sessions — Settings → Playback → Sessions tab
             commands::get_listening_sessions,
             commands::delete_session,
+            commands::get_open_sessions, // open sessions via GET /api/users/online → openSessions
             // Phase B: Socket.IO transport commands
             commands::connect_socket,
             commands::disconnect_socket,
