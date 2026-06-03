@@ -39,8 +39,8 @@ function buildLast7(days: Record<string, number>): Array<{ d: string; m: number 
     const date = new Date();
     date.setDate(date.getDate() - 6 + i); // 6 days ago → today
     const key   = localDateKey(date);
-    // ABS stores seconds; the sparkline works in whole minutes.
-    const mins  = Math.round((days[key] ?? 0) / 60);
+    // ABS stores day totals in seconds; divide by 60 to get whole minutes for the chart.
+    const mins  = Math.round((days[key] ?? 0) / 60); // seconds → minutes
     // "Mon", "Tue", etc. — slice to 3 chars for consistency.
     const label = date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
     return { d: label, m: mins };
@@ -263,12 +263,14 @@ function UserStatsPage({ stats, loading }: { stats: UserStats | null; loading: b
   const recentSessions = stats?.recentSessions.slice(0, 3) ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+    // gap: 28 gives sections more breathing room across the available pane height.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
       {/* Hero trio: Minutes · Days listened · Finished */}
       <div style={{ display: 'flex', gap: 24 }}>
         <BigStat
-          value={stats ? Math.round(stats.totalTime / 60).toLocaleString() : ph}
+          // totalTime is in seconds; divide by 60 for minutes, ?? 0 guards against null.
+          value={stats ? Math.round((stats.totalTime ?? 0) / 60).toLocaleString() : ph}
           label="Minutes"
         />
         <BigStat value={stats ? stats.numDaysListened : ph} label="Days listened" />
@@ -347,9 +349,9 @@ function LibraryStatsPage({
   const ph = loading ? '…' : '—';
 
   // Hours: totalDuration (seconds) → hours, formatted with thousands separator.
-  const hours = stats ? Math.round(stats.totalDuration / 3600).toLocaleString() : ph;
-  // GB: totalAudioFilesSize (bytes) → GB, one decimal place.
-  const sizeGb = stats ? (stats.totalAudioFilesSize / 1e9).toFixed(1) : ph;
+  const hours = stats ? Math.round((stats.totalDuration ?? 0) / 3600).toLocaleString() : ph; // ?? 0 guards against null
+  // GiB: 1_073_741_824 = 2^30 bytes per gibibyte (matches how storage tools report audio sizes).
+  const sizeGb = stats ? ((stats.totalAudioFilesSize ?? 0) / 1_073_741_824).toFixed(1) : ph; // bytes → GiB, one decimal
 
   // Top genres: compute pct relative to total items so bars are meaningful.
   const topGenres = (stats?.genres ?? []).slice(0, 4).map(g => ({
@@ -364,7 +366,8 @@ function LibraryStatsPage({
   const maxAuthorVal = topAuthors[0]?.value ?? 1; // avoid division by zero
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+    // gap: 28 gives sections more breathing room across the available pane height.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
       {/* Hero quad: Hours · Authors · Tracks · GB */}
       {/* Widths tuned to fit the four numbers in one row at 360px. */}
@@ -504,6 +507,7 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
         flexShrink: 0,
         position: 'relative',
         overflow: 'hidden',
+        height: '100%', // fill the left column so content is spread across the full height
       }}
     >
       {/* Gold hairline along the top edge — echoes the player chrome */}
@@ -538,7 +542,7 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
 
       {/* Segmented toggle — Your stats / Library stats */}
       <div style={{
-        marginTop: 18,
+        marginTop: 28, // increased from 18 to spread sections across available height
         display: 'flex',
         padding: 3,
         gap: 3,
@@ -580,7 +584,7 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
         flex: 1,
         minHeight: 0,
         overflowY: 'auto',
-        marginTop: 18,
+        marginTop: 28, // increased from 18 to spread sections across available height
         // Slight negative margin + padding trick keeps the scrollbar flush with the card edge.
         marginRight: -6,
         paddingRight: 6,
@@ -593,7 +597,7 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
 
       {/* Footer strip — always present, derived from local library state */}
       <div style={{
-        marginTop: 18,
+        marginTop: 'auto', // anchors footer to the bottom when content is short; paddingTop provides separation
         paddingTop: 18,
         borderTop: '1px solid var(--onyx-line)',
         display: 'flex',
