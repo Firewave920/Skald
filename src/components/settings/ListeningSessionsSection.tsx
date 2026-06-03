@@ -308,6 +308,18 @@ export default function ListeningSessionsSection({ st }: ListeningSessionsSectio
     return () => clearInterval(timer); // clean up on unmount
   }, [loadOpenSessions]);
 
+  // Guard against rendering before auth state is loaded — st.user is null on
+  // first render when the app starts without a stored session token. All hooks
+  // above have already been called unconditionally (required by React's rules of
+  // hooks), so this early return is safe here after all useState/useCallback/useEffect.
+  if (!st?.user) {
+    return (
+      <div style={{ color: 'var(--onyx-text-mute)', fontSize: 13, padding: 24 }}>
+        Loading…
+      </div>
+    );
+  }
+
   // ── Delete handler ────────────────────────────────────────────────────────
 
   async function handleDeleteConfirmed() {
