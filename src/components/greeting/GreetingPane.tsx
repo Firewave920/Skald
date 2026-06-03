@@ -39,8 +39,8 @@ function buildLast7(days: Record<string, number>): Array<{ d: string; m: number 
     const date = new Date();
     date.setDate(date.getDate() - 6 + i); // 6 days ago → today
     const key   = localDateKey(date);
-    // ABS stores day totals in seconds; divide by 60 to get whole minutes for the chart.
-    const mins  = Math.round((days[key] ?? 0) / 60); // seconds → minutes
+    // ABS stores day totals in milliseconds — divide by 60,000 for whole minutes
+    const mins  = Math.round((days[key] ?? 0) / 60_000); // ms → minutes
     // "Mon", "Tue", etc. — slice to 3 chars for consistency.
     const label = date.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3);
     return { d: label, m: mins };
@@ -269,8 +269,8 @@ function UserStatsPage({ stats, loading }: { stats: UserStats | null; loading: b
       {/* Hero trio: Minutes · Days listened · Finished */}
       <div style={{ display: 'flex', gap: 24 }}>
         <BigStat
-          // totalTime is in seconds; divide by 60 for minutes, ?? 0 guards against null.
-          value={stats ? Math.round((stats.totalTime ?? 0) / 60).toLocaleString() : ph}
+          // ABS returns totalTime in milliseconds — divide by 60,000 to get minutes
+          value={stats ? Math.round((stats.totalTime ?? 0) / 60_000).toLocaleString() : ph}
           label="Minutes"
         />
         <BigStat value={stats ? stats.numDaysListened : ph} label="Days listened" />
@@ -348,8 +348,8 @@ function LibraryStatsPage({
 }) {
   const ph = loading ? '…' : '—';
 
-  // Hours: totalDuration (seconds) → hours, formatted with thousands separator.
-  const hours = stats ? Math.round((stats.totalDuration ?? 0) / 3600).toLocaleString() : ph; // ?? 0 guards against null
+  // ABS returns totalDuration in milliseconds — divide by 3,600,000 (ms → hours)
+  const hours = stats ? Math.round((stats.totalDuration ?? 0) / 3_600_000).toLocaleString() : ph; // ms → hours
   // GiB: 1_073_741_824 = 2^30 bytes per gibibyte (matches how storage tools report audio sizes).
   const sizeGb = stats ? ((stats.totalAudioFilesSize ?? 0) / 1_073_741_824).toFixed(1) : ph; // bytes → GiB, one decimal
 
