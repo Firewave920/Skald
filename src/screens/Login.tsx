@@ -20,15 +20,15 @@ export interface LoginProps {
 export default function Login({ st }: LoginProps) {
   // ── Form state (local only — never touches global state until submit succeeds) ──
   const [scheme, setScheme] = useState<'http' | 'https'>('http');     // protocol selector
-  const [host, setHost]     = useState('***REDACTED-HOST***:13378');         // host:port pre-filled
-  const [user, setUser]     = useState('Testadmin');                    // username pre-filled
-  const [pass, setPass]     = useState('');                             // password starts empty
+  const [host, setHost]     = useState('');         // No prefilled server — user must enter their own server address
+  const [user, setUser]     = useState('');         // No prefilled username
+  const [pass, setPass]     = useState('');         // No prefilled password
   const [schemeOpen, setSchemeOpen] = useState(false);                  // dropdown open state
   const [pending, setPending] = useState(false);                        // request in flight
   const [error, setError]   = useState('');                             // validation/server error
-  // Auth method toggle — 'password' (username + password) or 'apikey' (single key field)
-  const [method, setMethod] = useState<'password' | 'apikey'>('password');
-  const [apiKey, setApiKey] = useState('');                             // API key input value
+  // API key is the primary login method — better experience than password
+  const [method, setMethod] = useState<'password' | 'apikey'>('apikey');
+  const [apiKey, setApiKey] = useState('');         // No prefilled API key
 
   // Ref for the scheme dropdown wrapper — used to detect outside-click dismissal
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -191,8 +191,8 @@ export default function Login({ st }: LoginProps) {
                 src={lyreIcon}
                 alt="Skald"
                 style={{
-                  width: 140,
-                  height: 140,
+                  width: 200,
+                  height: 200,
                   objectFit: 'contain',
                   opacity: 0.85,
                   filter: 'drop-shadow(0 0 18px rgba(var(--onyx-accent-r), var(--onyx-accent-g), var(--onyx-accent-b), 0.35))',
@@ -243,7 +243,8 @@ export default function Login({ st }: LoginProps) {
               border: '1px solid rgba(212,166,74,0.25)',
               overflow: 'hidden',
             }}>
-              {(['password', 'apikey'] as const).map(m => (
+              {/* API Key tab rendered first (left), Password second (right) */}
+              {(['apikey', 'password'] as const).map(m => (
                 <button
                   key={m}
                   type="button"
