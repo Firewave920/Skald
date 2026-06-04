@@ -134,8 +134,6 @@ pub async fn play_audio(
                 .unwrap_or(false);
             if is_playing { break; }
         }
-        eprintln!("[play_audio] player.is_playing() after wait: {}",
-            player_arc.lock().unwrap().as_ref().map(|p| p.is_playing()).unwrap_or(false));
     }
     play_result
 }
@@ -459,10 +457,9 @@ pub async fn close_all_open_sessions(server_url: String) -> Result<u32, String> 
     for id in &ids {
         match client.close_session_by_id(id).await {
             Ok(()) => { closed += 1; }
-            Err(e) => { eprintln!("[close_all_open_sessions] failed to close {id}: {e}"); }
+            Err(_) => {}
         }
     }
-    eprintln!("[close_all_open_sessions] closed {closed} of {} sessions", ids.len());
     Ok(closed)
 }
 
@@ -567,13 +564,11 @@ pub async fn flush_offline_progress(server_url: String) -> Result<u32, String> {
                 let _ = downloads::remove_progress_entry(&dl_dir, &entry.item_id);
                 flushed += 1;
             }
-            Err(e) => {
-                // Non-fatal — log and continue; the entry stays for the next flush.
-                eprintln!("[flush_offline_progress] failed to sync {}: {e}", entry.item_id);
+            Err(_) => {
+                // Non-fatal — entry stays in the queue for the next flush.
             }
         }
     }
-    eprintln!("[flush_offline_progress] synced {flushed} of {} entries", queue.len());
     Ok(flushed)
 }
 
@@ -614,12 +609,10 @@ pub async fn save_chapter_cache(
     // the path but does not create it.
     std::fs::create_dir_all(cache_path.parent().unwrap_or(&cache_path))
         .map_err(|e| format!("Create dir failed: {e}"))?;
-    eprintln!("[chapter_cache] saving to: {}", cache_path.display());
     let json = serde_json::to_string(&chapters)
         .map_err(|e| format!("Serialize failed: {e}"))?;
     std::fs::write(&cache_path, json)
         .map_err(|e| format!("Write failed: {e}"))?;
-    eprintln!("[chapter_cache] saved successfully");
     Ok(())
 }
 
@@ -1132,9 +1125,7 @@ pub async fn download_item(
     // extract_dir and the ZIP serves no further purpose.
     // Non-fatal: if removal fails (e.g. the file is transiently locked) the
     // download is still usable — log and continue rather than failing.
-    if let Err(e) = std::fs::remove_file(&file_path) {
-        eprintln!("[download_item] could not remove zip {}: {e}", file_path.display());
-    }
+    let _ = std::fs::remove_file(&file_path);
 
     // ── Locate the primary audio file ─────────────────────────────────────────
     // Single-file books: the registry points directly to the audio file.
