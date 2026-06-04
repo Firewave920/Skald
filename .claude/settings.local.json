@@ -145,7 +145,10 @@
       "Bash(pkill -f \"pnpm\")",
       "Bash(taskkill /IM skald.exe /F)",
       "Bash(taskkill /IM Skald.exe /F)",
-      "PowerShell(cd \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\"; pnpm tauri build 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\skald-build2.log\"; Write-Host \"Exit: $LASTEXITCODE\")"
+      "PowerShell(cd \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\"; pnpm tauri build 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\skald-build2.log\"; Write-Host \"Exit: $LASTEXITCODE\")",
+      "PowerShell(Add-Type -AssemblyName System.Drawing; $img = [System.Drawing.Image]::FromFile\\(\"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\design-handoff\\\\Dark Gold Lyre - Transparent.png\"\\); Write-Host \"Width: $\\($img.Width\\)  Height: $\\($img.Height\\)\"; $img.Dispose\\(\\))",
+      "PowerShell(cd \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\"; pnpm build 2>&1; Write-Host \"Exit: $LASTEXITCODE\")",
+      "PowerShell(cd \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\src-tauri\"; cargo check 2>&1 | Select-Object -Last 20; Write-Host \"Exit: $LASTEXITCODE\")"
     ]
   }
 }
