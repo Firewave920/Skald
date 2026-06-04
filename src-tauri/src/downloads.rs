@@ -32,6 +32,11 @@ pub struct DownloadRecord {
     pub file_path: String,  // absolute path to the downloaded audio file on disk
     pub file_size: u64,     // bytes — used to compute storage totals in the UI
     pub downloaded_at: i64, // Unix timestamp ms — shown as relative time in the Downloads list
+    // True when the book has been removed from the server while the local copy still exists.
+    // The user retains offline playback ability but the badge changes from brass ↓ to amber !.
+    // #[serde(default)] ensures existing registry files without this field deserialise as false.
+    #[serde(default)]
+    pub server_deleted: bool,
 }
 
 // All registry operations read/write this single file inside the downloads directory.
@@ -73,6 +78,18 @@ pub fn upsert_record(downloads_dir: &Path, record: DownloadRecord) -> Result<(),
     match records.iter().position(|r| r.item_id == record.item_id) {
         Some(pos) => records[pos] = record,
         None => records.push(record),
+    }
+    save_registry(downloads_dir, &records)
+}
+
+// Update the server_deleted flag for a single registry entry without touching
+// the other fields. Called when a library-item-removed socket event fires for
+// a book that has a local download — the file is kept but flagged as orphaned.
+pub fn set_server_deleted(downloads_dir: &Path, item_id: &str, deleted: bool) -> Result<(), String> {
+    let mut records = load_registry(downloads_dir);
+    // Update in place — avoids overwriting fields we don't have in this call context.
+    if let Some(record) = records.iter_mut().find(|r| r.item_id == item_id) {
+        record.server_deleted = deleted;
     }
     save_registry(downloads_dir, &records)
 }

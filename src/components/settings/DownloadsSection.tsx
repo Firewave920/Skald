@@ -443,6 +443,19 @@ export default function DownloadsSection({ st }: Props) {
                     {/* Relative download date, e.g. "2 days ago" */}
                     <span style={{ flexShrink: 0 }}>{relativeTime(record.downloadedAt)}</span>
                   </div>
+                  {/* Server-deleted warning — the book was removed from the server but
+                      the local file is retained and still playable offline. */}
+                  {record.serverDeleted && (
+                    <div style={{
+                      marginTop: 4,
+                      fontSize: 10,
+                      color: '#d4834a', // amber warning tone matching the shelf badge
+                      fontFamily: MONO,
+                      letterSpacing: '0.04em',
+                    }}>
+                      ⚠ No longer on server — local copy only
+                    </div>
+                  )}
                 </div>
 
                 {/* Trash delete button — opens ConfirmDialog before acting */}

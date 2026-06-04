@@ -577,6 +577,16 @@ pub async fn flush_offline_progress(server_url: String) -> Result<u32, String> {
     Ok(flushed)
 }
 
+// Marks a downloaded book as server-deleted — the item was removed from the
+// ABS server but the local audio file still exists and is playable offline.
+// The badge on the book cover changes from brass ↓ to amber ! to indicate this.
+// Called from the library-item-removed socket event handler in the frontend.
+#[tauri::command]
+pub fn mark_server_deleted(item_id: String) -> Result<(), String> {
+    let dir = downloads::downloads_dir()?;
+    downloads::set_server_deleted(&dir, &item_id, true)
+}
+
 // Returns the offline progress queue entry for a specific item, or None if
 // no entry exists. Used by the offline playback path to restore the last
 // known position when st.mediaProgress is empty (server unreachable and no
@@ -998,7 +1008,18 @@ pub async fn download_item(
         bytes_downloaded += chunk.len() as u64;
 
         if let Err(e) = file.write_all(&chunk).await {
-            break LoopExit::WriteError(format!("Write error: {e}"));
+            // Detect disk-full before falling through to the generic write error.
+            // OS error 112 is ERROR_DISK_FULL on Windows; 28 is ENOSPC on Linux/macOS.
+            let msg = if let Some(os_err) = e.raw_os_error() {
+                if os_err == 112 || os_err == 28 {
+                    "Not enough disk space to complete the download.".to_string()
+                } else {
+                    format!("Write error: {e}")
+                }
+            } else {
+                format!("Write error: {e}")
+            };
+            break LoopExit::WriteError(msg);
         }
 
         // Fire-and-forget progress event — a slow frontend cannot stall the download.
@@ -1167,6 +1188,8 @@ pub async fn download_item(
         file_path: playback_path.clone(),
         file_size,
         downloaded_at,
+        // Newly downloaded books are always present on the server.
+        server_deleted: false,
     })?;
 
     // Remove the cancellation token now that the download completed successfully.

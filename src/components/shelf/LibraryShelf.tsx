@@ -110,6 +110,8 @@ function ShelfList({ books, st, openBook, onContextMenu }: { books: LibraryItem[
           {sorted.map((b, i) => {
             const active = b.id === (st.focusedBookId ?? st.currentBookId);
             const prog = bookProgress(b, st.mediaProgress);
+            // Cached once per row — used for both badge presence and server-deleted variant.
+            const dlRecord = st.downloads.find(d => d.itemId === b.id);
             return (
               <tr
                 key={b.id}
@@ -131,18 +133,22 @@ function ShelfList({ books, st, openBook, onContextMenu }: { books: LibraryItem[
                         <div style={{ width: `${prog * 100}%`, height: '100%', background: 'var(--onyx-accent)' }} />
                       </div>
                     )}
-                    {/* Downloaded badge — shows when the book is available offline */}
-                    {st.downloads.find(d => d.itemId === b.id) && (
-                      <div style={{
-                        position: 'absolute', bottom: st.showProgressOverlay && prog > 0 ? 4 : 2, right: 1,
-                        zIndex: 3,
-                        background: 'rgba(0,0,0,0.72)', borderRadius: 2,
-                        padding: '1px 3px',
-                        display: 'inline-flex', alignItems: 'center',
-                        color: 'var(--onyx-accent)', fontSize: 8, fontFamily: MONO,
-                        lineHeight: 1, userSelect: 'none',
-                      }}>
-                        ↓
+                    {/* Downloaded badge — brass ↓ when available; amber ! when server-deleted */}
+                    {dlRecord && (
+                      <div
+                        title={dlRecord.serverDeleted ? 'No longer on server — local copy only' : 'Available offline'}
+                        style={{
+                          position: 'absolute', bottom: st.showProgressOverlay && prog > 0 ? 4 : 2, right: 1,
+                          zIndex: 3,
+                          background: 'rgba(0,0,0,0.72)', borderRadius: 2,
+                          padding: '1px 3px',
+                          display: 'inline-flex', alignItems: 'center',
+                          // Amber when the server has removed the book; brass when still on server.
+                          color: dlRecord.serverDeleted ? '#d4834a' : 'var(--onyx-accent)',
+                          fontSize: 8, fontFamily: MONO,
+                          lineHeight: 1, userSelect: 'none',
+                        }}>
+                        {dlRecord.serverDeleted ? '!' : '↓'}
                       </div>
                     )}
                   </div>
@@ -274,6 +280,8 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${coverW}px, 1fr))`, gap: 14 }}>
           {shelfBooks.map(b => {
             const prog = bookProgress(b, st.mediaProgress);
+            // Cached once per tile — used for both badge presence and server-deleted variant.
+            const dlRecord = st.downloads.find(d => d.itemId === b.id);
             return (
               <button key={b.id} onClick={() => openBook(b.id)} onContextMenu={e => onContextMenu(e, b)} className="onyx-tile" style={{ position: 'relative', background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', color: 'inherit' }}>
                 <div style={{
@@ -294,18 +302,22 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
                       <div style={{ width: `${prog * 100}%`, height: '100%', background: 'var(--onyx-accent)' }} />
                     </div>
                   )}
-                  {/* Downloaded badge — visible when the book is available for offline playback */}
-                  {st.downloads.find(d => d.itemId === b.id) && (
-                    <div style={{
-                      position: 'absolute', bottom: st.showProgressOverlay && prog > 0 ? 6 : 4, right: 4,
-                      zIndex: 3,
-                      background: 'rgba(0,0,0,0.72)', borderRadius: 3,
-                      padding: '1px 4px',
-                      display: 'inline-flex', alignItems: 'center',
-                      color: 'var(--onyx-accent)', fontSize: 9, fontFamily: MONO,
-                      lineHeight: 1, userSelect: 'none',
-                    }}>
-                      ↓
+                  {/* Downloaded badge — brass ↓ when available; amber ! when server-deleted */}
+                  {dlRecord && (
+                    <div
+                      title={dlRecord.serverDeleted ? 'No longer on server — local copy only' : 'Available offline'}
+                      style={{
+                        position: 'absolute', bottom: st.showProgressOverlay && prog > 0 ? 6 : 4, right: 4,
+                        zIndex: 3,
+                        background: 'rgba(0,0,0,0.72)', borderRadius: 3,
+                        padding: '1px 4px',
+                        display: 'inline-flex', alignItems: 'center',
+                        // Amber when the server has removed the book; brass when still on server.
+                        color: dlRecord.serverDeleted ? '#d4834a' : 'var(--onyx-accent)',
+                        fontSize: 9, fontFamily: MONO,
+                        lineHeight: 1, userSelect: 'none',
+                      }}>
+                      {dlRecord.serverDeleted ? '!' : '↓'}
                     </div>
                   )}
                 </div>
