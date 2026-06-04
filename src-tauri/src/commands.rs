@@ -523,6 +523,35 @@ pub fn get_cache_dir() -> Result<String, String> {
         .ok_or_else(|| "Could not determine cache directory".to_string())
 }
 
+// Saves the library to a local JSON cache file so it can be loaded
+// when the server is unreachable on next launch.
+#[tauri::command]
+pub async fn save_library_cache(items: Vec<serde_json::Value>) -> Result<(), String> {
+    let cache_path = std::path::PathBuf::from(get_cache_dir()?).join("library_cache.json");
+    // get_cache_dir() resolves the path but does not create the directory.
+    std::fs::create_dir_all(cache_path.parent().unwrap_or(&cache_path))
+        .map_err(|e| format!("Create dir failed: {e}"))?;
+    let json = serde_json::to_string(&items)
+        .map_err(|e| format!("Serialize failed: {e}"))?;
+    std::fs::write(&cache_path, json)
+        .map_err(|e| format!("Write failed: {e}"))?;
+    Ok(())
+}
+
+// Loads the library from the local cache file.
+// Returns an empty array if no cache exists yet.
+#[tauri::command]
+pub async fn load_library_cache() -> Result<Vec<serde_json::Value>, String> {
+    let cache_path = std::path::PathBuf::from(get_cache_dir()?).join("library_cache.json");
+    // No cache on first launch — return an empty list so callers can distinguish
+    // "no cache" from "cache exists but is empty".
+    if !cache_path.exists() { return Ok(vec![]); }
+    let json = std::fs::read_to_string(&cache_path)
+        .map_err(|e| format!("Read failed: {e}"))?;
+    serde_json::from_str(&json)
+        .map_err(|e| format!("Parse failed: {e}"))
+}
+
 // ── Admin user-management commands ──────────────────────────────────────────
 // These four commands wrap the AbsClient admin endpoints. They are gated by
 // the ABS server itself (HTTP 403 for non-admin callers); Skald additionally
