@@ -19,7 +19,8 @@
         "minHeight": 640,
         "decorations": false,
         "transparent": true,
-        "shadow": true
+        "shadow": true,
+        "devtools": true
       }
     ],
     "security": {
@@ -38,7 +39,8 @@
     ],
     "resources": {
       "vlc-dist/libvlc.dll": "libvlc.dll",
-      "vlc-dist/libvlccore.dll": "libvlccore.dll"
+      "vlc-dist/libvlccore.dll": "libvlccore.dll",
+      "vlc-dist/plugins/**/*": "plugins/"
     },
     "windows": {
       "digestAlgorithm": "sha256",

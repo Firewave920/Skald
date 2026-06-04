@@ -63,6 +63,17 @@ pub fn run() {
         .manage(shortcut_map)
         .manage(socket_state) // Socket.IO client — accessed by connect/disconnect commands
         .manage(cancel_registry) // per-download CancellationTokens — accessed by cancel_download
+        .setup(|app| {
+            // Set VLC_PLUGIN_PATH to the bundled plugins directory so LibVLC can
+            // find its codecs/demuxers regardless of whether VLC is installed on
+            // the target machine. Must run before the first Instance::new() call,
+            // which is lazy (triggered by open_playback_session / play_local_file).
+            use tauri::Manager;
+            if let Ok(resource_dir) = app.path().resource_dir() {
+                std::env::set_var("VLC_PLUGIN_PATH", resource_dir.join("plugins"));
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::login,
             commands::logout,
