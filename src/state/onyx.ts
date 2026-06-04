@@ -523,11 +523,16 @@ export function useOnyxState(): OnyxState {
         console.warn('[library] fetch failed, attempting cache fallback:', e);
         try {
           const cached = await loadLibraryCache();
-          if (cached.length > 0) {
-            setLibraryRaw(cached as LibraryItem[]);
-            // Server unreachable — library came from disk; activate the offline indicator.
-            setIsOffline(true);
-            // Inform the user they are viewing a cached library
+          // If there is no cache and no auth token, this is a fresh install —
+          // do not show any error, just wait for the user to log in.
+          if (cached.length === 0) return;
+          setLibraryRaw(cached as LibraryItem[]);
+          // Server unreachable — library came from disk; activate the offline indicator.
+          setIsOffline(true);
+          // Only show the offline warning if the user has already logged in and
+          // is actively using the app — not during the initial login flow where
+          // the library has not been fetched yet and a cache miss is expected.
+          if (authToken && screen !== 'login') {
             setToast({ message: 'Server unreachable — showing cached library', type: 'info' });
           }
         } catch (ce) {
