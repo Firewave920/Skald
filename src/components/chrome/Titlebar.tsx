@@ -4,6 +4,10 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 export interface TitlebarProps {
   subtitle?: string;
   isDark: boolean;
+  // True when the library was loaded from the disk cache (server unreachable).
+  // Displays a persistent amber OFFLINE pill so the user always knows they are
+  // browsing cached data rather than a live server connection.
+  isOffline?: boolean;
 }
 
 type DragStyle = CSSProperties & { WebkitAppRegion?: string };
@@ -20,7 +24,7 @@ const HANDLERS: Record<string, () => void> = {
   close: () => { void getCurrentWindow().close(); },
 };
 
-export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
+export default function Titlebar({ subtitle, isDark, isOffline }: TitlebarProps) {
   const themeName = isDark ? 'Onyx' : 'Folio';
   const mono = "'JetBrains Mono', ui-monospace, monospace";
 
@@ -40,6 +44,7 @@ export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
   return (
     <div style={bar} data-tauri-drag-region>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* App icon */}
         <div style={{
           width: 18, height: 18, borderRadius: 5,
           background: 'var(--onyx-glass-strong)',
@@ -49,9 +54,28 @@ export default function Titlebar({ subtitle, isDark }: TitlebarProps) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 10, fontWeight: 700, color: 'var(--onyx-accent)',
         }}>S</div>
+        {/* App name + optional theme/subtitle */}
         <div style={{ fontFamily: mono, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
           Skald · {themeName}{subtitle ? ` · ${subtitle}` : ''}
         </div>
+        {/* Offline indicator — shown when the library loaded from disk cache.
+            Amber pill gives the user a persistent signal that they are in offline mode. */}
+        {isOffline && (
+          <div style={{
+            fontFamily: mono,
+            fontSize: 9,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase' as const,
+            color: '#d4834a',                       // amber warning tone
+            border: '1px solid rgba(212,131,74,0.4)',
+            borderRadius: 4,
+            padding: '2px 6px',
+            background: 'rgba(212,131,74,0.08)',
+            lineHeight: 1,
+          }}>
+            offline
+          </div>
+        )}
       </div>
       <div style={noDrag}>
         {BUTTONS.map((b) => (

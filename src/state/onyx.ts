@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord } from '../api/abs';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted } from '../api/abs';
 
 export type { User };
 import {
@@ -215,6 +215,9 @@ export interface OnyxState {
   // Library
   library: LibraryItem[];
   libraryLoading: boolean;
+  // True when the library was loaded from the disk cache because the server was unreachable.
+  // Used by the titlebar to display a persistent OFFLINE indicator.
+  isOffline: boolean;
   updateLibraryItem: (item: LibraryItem) => void;
   refreshLibrary: () => Promise<void>;
   mediaProgress: MediaProgress[];
@@ -439,6 +442,9 @@ export function useOnyxState(): OnyxState {
   const [libraryLoading, setLibraryLoadingRaw] = useState(
     () => Boolean(localStorage.getItem('skald.serverUrl') && localStorage.getItem('skald.authToken')),
   );
+  // True when the library loaded from the disk cache (server unreachable).
+  // Reset to false on every successful server fetch.
+  const [isOffline, setIsOffline] = useState(false);
   const [mediaProgress, setMediaProgress] = useState<MediaProgress[]>([]);
   const [listeningStats, setListeningStats] = useState<ListeningStats | null>(null);
   const [bookmarks, setBookmarks] = useState<AbsBookmark[]>([]);
@@ -505,6 +511,8 @@ export function useOnyxState(): OnyxState {
         const items = await fetchLibraryItems(serverUrl, audiobookLib.id);
         if (cancelled) return;
         setLibraryRaw(patchLibraryItems(items));
+        // Server responded successfully — we are online; clear any offline indicator.
+        setIsOffline(false);
         // Persist the library to disk after every successful fetch so it is
         // available offline on next launch.
         saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
@@ -517,6 +525,8 @@ export function useOnyxState(): OnyxState {
           const cached = await loadLibraryCache();
           if (cached.length > 0) {
             setLibraryRaw(cached as LibraryItem[]);
+            // Server unreachable — library came from disk; activate the offline indicator.
+            setIsOffline(true);
             // Inform the user they are viewing a cached library
             setToast({ message: 'Server unreachable — showing cached library', type: 'info' });
           }
@@ -912,8 +922,10 @@ export function useOnyxState(): OnyxState {
       } catch (e) { console.error('library-item-updated parse failed', e); }
     }).then(fn => { unlistenUpdated = fn; });
 
-    // item_removed — book deleted; remove it from the shelf and clear any
-    // focused/current references so the player doesn't try to play a ghost.
+    // item_removed — book deleted from the server; remove it from the shelf and
+    // clear any focused/current references so the player doesn't try to play a ghost.
+    // If the book has a local download, flag it as server-deleted rather than
+    // deleting the file — the user retains offline playback, badge changes to amber !.
     listen<string>('library-item-removed', event => {
       try {
         const payload = JSON.parse(event.payload) as { id: string; libraryId: string };
@@ -923,6 +935,19 @@ export function useOnyxState(): OnyxState {
         setCurrentBookId(prev => prev === payload.id ? '' : prev);
         // Clear focusedBookId if the removed item was focused in the shelf.
         setFocusedBookId(prev => prev === payload.id ? null : prev);
+        // If the book has a local download, mark it server-deleted rather than removing.
+        // Using a functional update reads the latest state without a stale-closure risk.
+        setDownloads(prev => {
+          if (!prev.some(d => d.itemId === payload.id)) return prev; // not downloaded — no change
+          // Persist the flag to disk so it survives a reload.
+          markServerDeleted(payload.id).catch(e =>
+            console.error('[downloads] mark server-deleted failed:', e)
+          );
+          // Update local state immediately so the badge updates without a disk round-trip.
+          return prev.map(d =>
+            d.itemId === payload.id ? { ...d, serverDeleted: true } : d
+          );
+        });
       } catch (e) { console.error('library-item-removed parse failed', e); }
     }).then(fn => { unlistenRemoved = fn; });
 
@@ -989,7 +1014,7 @@ export function useOnyxState(): OnyxState {
     userId, setUserId,
     authToken, setAuthToken,
     user, setUser,
-    library, libraryLoading, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks, currentLibraryId,
+    library, libraryLoading, isOffline, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks, currentLibraryId,
     downloads, setDownloads,
     isLocalPlayback, setIsLocalPlayback,
     screen, setScreen,

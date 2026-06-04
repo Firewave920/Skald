@@ -102,6 +102,8 @@ pub fn run() {
             commands::flush_offline_progress,
             // Read one entry from the queue — used to restore position on offline launch
             commands::get_offline_progress,
+            // Flag a downloaded book as no longer present on the server
+            commands::mark_server_deleted,
             commands::close_active_session,
             commands::close_all_open_sessions,
             commands::delete_item,

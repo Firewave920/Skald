@@ -554,6 +554,10 @@ export interface DownloadRecord {
   filePath: string;    // absolute path to the audio file on disk
   fileSize: number;    // bytes — used for storage totals
   downloadedAt: number; // Unix ms — used to show relative time
+  // True when the book was removed from the ABS server after download.
+  // Local file is still playable; badge changes from brass ↓ to amber !.
+  // Optional for backwards-compat with registry entries written before Phase G.
+  serverDeleted?: boolean;
 }
 
 /** Streams GET /api/items/{id}/download to a local file in the app's downloads directory.
@@ -580,6 +584,13 @@ export function getDownloads(): Promise<DownloadRecord[]> {
  *  Used by the delete button in Settings → Downloads. */
 export function removeDownload(itemId: string): Promise<void> {
   return invoke('remove_download', { itemId });
+}
+
+/** Marks a downloaded book as server-deleted — the item was removed from ABS
+ *  but the local audio file is retained for offline playback. The shelf badge
+ *  changes from brass ↓ to amber ! to indicate the orphaned state. */
+export function markServerDeleted(itemId: string): Promise<void> {
+  return invoke('mark_server_deleted', { itemId });
 }
 
 /** Signals an in-progress download to abort on its next chunk boundary.

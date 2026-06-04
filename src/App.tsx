@@ -154,7 +154,8 @@ export default function App() {
     }}>
       {/* Ambient wash gradient and titlebar chrome */}
       <OnyxWash isDark={isDark} />
-      <Titlebar isDark={isDark} />
+      {/* isOffline is true when the library loaded from disk cache (server unreachable) */}
+      <Titlebar isDark={isDark} isOffline={st.isOffline} />
 
       {/* Screen content area — sits below the 44px titlebar */}
       <div style={{

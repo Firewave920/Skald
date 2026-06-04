@@ -142,7 +142,9 @@
       "PowerShell($p = \\(netstat -ano | Select-String \":1420 \" | Select-String \"LISTEN\" | ForEach-Object { \\($_ -split \"\\\\s+\"\\)[-1] }\\); if \\($p\\) { taskkill /F /PID $p }; echo \"cleared\")",
       "Bash(Start-Process -NoNewWindow -FilePath \"pnpm\" -ArgumentList \"tauri\",\"dev\" -RedirectStandardOutput \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\tauri-dev.log\" -RedirectStandardError \"C:\\\\Users\\\\fireb\\\\Documents\\\\Skald\\\\tauri-dev-err.log\")",
       "Bash(pkill -f \"tauri\")",
-      "Bash(pkill -f \"pnpm\")"
+      "Bash(pkill -f \"pnpm\")",
+      "Bash(taskkill /IM skald.exe /F)",
+      "Bash(taskkill /IM Skald.exe /F)"
     ]
   }
 }

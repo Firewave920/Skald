@@ -1,6 +1,6 @@
 import { bookAuthor, type LibraryItem, type OnyxState, type MediaProgress } from '../../state/onyx';
 import type { ContextMenuItem } from '../ContextMenu';
-import { updateProgress, deleteProgress, getMe, closeActiveSession, rescanItem, deleteItem, downloadItem } from '../../api/abs';
+import { updateProgress, deleteProgress, getMe, closeActiveSession, rescanItem, deleteItem, downloadItem, removeDownload } from '../../api/abs';
 // Canonical play function — routes through shared resume and UI-sync logic
 import { playBook } from '../../api/playbook';
 
@@ -15,6 +15,9 @@ export function buildItemContextMenu(
   setFilesItem?: (item: LibraryItem) => void,
 ): ContextMenuItem[] {
   const isAdmin = st.user?.type === 'root' || st.user?.type === 'admin';
+  // Used to toggle the first menu item between Download and Delete Download.
+  // Prevents duplicate downloads and gives a shelf-level management action.
+  const existingDownload = st.downloads.find(d => d.itemId === item.id);
 
   const refreshProgress = async () => {
     try {
@@ -26,29 +29,51 @@ export function buildItemContextMenu(
   };
 
   const items: ContextMenuItem[] = [
-    {
-      // Phase B: fires the Rust streaming command with title and author so the
-      // progress toast and downloads registry both have the metadata they need.
-      // The info and success toasts are now handled by DownloadProgressToast via
-      // the download-progress / download-complete Tauri events.
-      label: 'Download',
-      onClick: () => {
-        const title = item.media?.metadata?.title ?? item.id;
-        const author = bookAuthor(item);
-        // ABS serves multi-file audiobooks as a zip archive at this endpoint.
-        const fileName = `${title}.zip`;
-        downloadItem(st.serverUrl, item.id, fileName, title, author)
-          .then(path => {
-            // Log the resolved path for debug purposes; the success toast is
-            // triggered by DownloadProgressToast via the download-complete event.
-            console.log('[download] completed:', path);
-          })
-          .catch(e => {
-            console.error('[download] failed:', e);
-            st.setToast({ message: `Download failed: ${String(e)}`, type: 'error' });
-          });
-      },
-    },
+    existingDownload
+      ? {
+          // Already downloaded — offer deletion so the user can free up space directly
+          // from the shelf without navigating to Settings → Downloads.
+          label: 'Delete Download',
+          danger: true,
+          onClick: () => {
+            const title = item.media?.metadata?.title ?? item.id;
+            st.setConfirmDialog({
+              title: `Delete downloaded copy of "${title}"?`,
+              message: 'This will remove the local audio file from your device. The book will still be available for streaming from your server.',
+              confirmLabel: 'Delete',
+              onConfirm: async () => {
+                try {
+                  await removeDownload(item.id);
+                  // Sync global downloads state so the badge and playback router
+                  // reflect the change immediately without a page reload.
+                  st.setDownloads(prev => prev.filter(d => d.itemId !== item.id));
+                  st.setToast({ message: `Downloaded copy of "${title}" removed`, type: 'success' });
+                } catch (e) {
+                  st.setToast({ message: `Delete failed: ${String(e)}`, type: 'error' });
+                }
+              },
+            });
+          },
+        }
+      : {
+          // Not yet downloaded — fires the Rust streaming command.
+          // Progress toasts come from DownloadProgressToast via Tauri events.
+          label: 'Download',
+          onClick: () => {
+            const title = item.media?.metadata?.title ?? item.id;
+            const author = bookAuthor(item);
+            // ABS serves multi-file audiobooks as a zip archive at this endpoint.
+            const fileName = `${title}.zip`;
+            downloadItem(st.serverUrl, item.id, fileName, title, author)
+              .then(path => {
+                console.log('[download] completed:', path);
+              })
+              .catch(e => {
+                console.error('[download] failed:', e);
+                st.setToast({ message: `Download failed: ${String(e)}`, type: 'error' });
+              });
+          },
+        },
     {
       label: 'Play Book',
       onClick: async () => {
