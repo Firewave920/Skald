@@ -82,25 +82,31 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           </div>
 
           {/* Nav items */}
-          {NAV.map(s => (
-            <button
-              key={s.id}
-              onClick={() => setSection(s.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 12,
-                padding: '9px 12px', borderRadius: 8,
-                background: section === s.id ? 'var(--onyx-accent-dim)' : 'transparent',
-                border: `1px solid ${section === s.id ? 'var(--onyx-accent-edge)' : 'transparent'}`,
-                cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const,
-                color: section === s.id ? 'var(--onyx-accent)' : 'var(--onyx-text)',
-                fontSize: 13, fontWeight: section === s.id ? 500 : 400,
-                marginBottom: 2,
-              }}
-            >
-              <Icon name={s.icon} size={14} color={section === s.id ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)'} />
-              {s.label}
-            </button>
-          ))}
+          {NAV.map(s => {
+            // Build the label — append a count badge for Downloads when books are present.
+            // This gives the user an at-a-glance view of how many books are stored offline.
+            const downloadCount = s.id === 'downloads' ? st.downloads.length : 0;
+            const label = downloadCount > 0 ? `${s.label} (${downloadCount})` : s.label;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSection(s.id)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '9px 12px', borderRadius: 8,
+                  background: section === s.id ? 'var(--onyx-accent-dim)' : 'transparent',
+                  border: `1px solid ${section === s.id ? 'var(--onyx-accent-edge)' : 'transparent'}`,
+                  cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const,
+                  color: section === s.id ? 'var(--onyx-accent)' : 'var(--onyx-text)',
+                  fontSize: 13, fontWeight: section === s.id ? 500 : 400,
+                  marginBottom: 2,
+                }}
+              >
+                <Icon name={s.icon} size={14} color={section === s.id ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)'} />
+                {label}
+              </button>
+            );
+          })}
 
           <div style={{ flex: 1 }} />
         </Glass>
