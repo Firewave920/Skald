@@ -606,3 +606,15 @@ export function getOpenSessions(serverUrl: string): Promise<ListeningSession[]> 
   return invoke('get_open_sessions', { serverUrl }); // backed by GET /api/users/online
 }
 
+// ── Library disk cache ─────────────────────────────────────────────────────
+
+// Saves the library items to a local JSON cache file for offline fallback on next launch.
+export function saveLibraryCache(items: unknown[]): Promise<void> {
+  return invoke('save_library_cache', { items });
+}
+
+// Loads the cached library from disk. Returns an empty array if no cache exists yet.
+export function loadLibraryCache(): Promise<unknown[]> {
+  return invoke('load_library_cache');
+}
+

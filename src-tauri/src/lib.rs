@@ -91,6 +91,9 @@ pub fn run() {
             commands::search_books,
             commands::get_cache_dir,
             commands::reveal_cache_dir,
+            // Library disk cache — read/write for offline launch fallback
+            commands::save_library_cache,
+            commands::load_library_cache,
             commands::close_active_session,
             commands::close_all_open_sessions,
             commands::delete_item,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord } from '../api/abs';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache } from '../api/abs';
 
 export type { User };
 import {
@@ -505,8 +505,21 @@ export function useOnyxState(): OnyxState {
         const items = await fetchLibraryItems(serverUrl, audiobookLib.id);
         if (cancelled) return;
         setLibraryRaw(patchLibraryItems(items));
+        // Persist the library to disk after every successful fetch so it is
+        // available offline on next launch.
+        saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
       } catch (e) {
-        console.error('Library fetch failed', e);
+        console.warn('[library] fetch failed, attempting cache fallback:', e);
+        try {
+          const cached = await loadLibraryCache();
+          if (cached.length > 0) {
+            setLibraryRaw(cached as LibraryItem[]);
+            // Inform the user they are viewing a cached library
+            setToast({ message: 'Server unreachable — showing cached library', type: 'info' });
+          }
+        } catch (ce) {
+          console.error('[library] cache load also failed:', ce);
+        }
       } finally {
         if (!cancelled) setLibraryLoadingRaw(false);
       }
