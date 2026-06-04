@@ -198,7 +198,6 @@ pub fn run() {
                                                 .as_millis() as i64,
                                         };
                                         let _ = downloads::upsert_progress_entry(&dl_dir, entry);
-                                        eprintln!("[shutdown] offline progress queued for {item_id} at {pos:.1}s");
                                     }
                                 }
                                 return; // no server session — nothing more to do
@@ -214,18 +213,11 @@ pub fn run() {
                                 ),
                             }
                         };
-                        // Log the outcome so we can verify sessions are closing on exit.
-                        // The result is still ignored for shutdown purposes — we cannot retry here.
-                        match tokio::time::timeout(
+                        let _ = tokio::time::timeout(
                             std::time::Duration::from_secs(5),
                             client.close_session(&sid, ct, tl),
                         )
-                        .await
-                        {
-                            Ok(Ok(_))  => eprintln!("[shutdown] session closed successfully"),
-                            Ok(Err(e)) => eprintln!("[shutdown] session close failed: {:?}", e),
-                            Err(_)     => eprintln!("[shutdown] session close timed out"),
-                        }
+                        .await;
                     });
                 });
                 let _ = t.join();
