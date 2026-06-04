@@ -1,3 +1,45 @@
 Read the entire roadmap on Vault\Skald\Skald Download Implementation Roadmap.md prior to execution and get adetailed understanding of the overall objective. Consider actions holistically rather than just trying to complete the next step.
 
-Phase D: Offline playback via local file Comment every block and non-obvious line. Part 1 — Detect downloaded books: Open src/state/onyx.ts. On mount and after any download completes or is deleted, call getDownloads() and store the result in a new state variable: ts// Track which books are downloaded locally so the playback path can // route LibVLC to the local file instead of the HTTP stream. const [downloads, setDownloads] = useState<DownloadRecord[]>([]); Expose downloads and setDownloads from the hook. Refresh downloads after removeDownload and after a download-progress event with bytesDownloaded === totalBytes. Part 2 — Route playBook to local file when downloaded: Open src/api/playbook.ts. In the playBook function, before calling openPlaybackSession, check whether the book has a local download: ts// If the book is downloaded locally, play from disk rather than opening // a server session — this enables offline playback without network access. const localDownload = st.downloads.find(d => d.itemId === bookId); if (localDownload) { // Offline path: tell LibVLC to play the local file directly await playLocalFile(localDownload.filePath, startTimeOverride ?? 0); st.setCurrentBookId(bookId); st.setFocusedBookId(bookId); st.setPlaying(true); return; } // Online path: existing session-based playback unchanged await closeActiveSession().catch(e => console.error('[playbook] closeActiveSession failed:', e)); // ... rest of existing playBook logic Part 3 — Add playLocalFile Rust command: Open src-tauri/src/commands.rs. Add a command play_local_file(file_path: String, start_time: f64) -> Result<(), String> that tells LibVLC to open the local file path instead of an HTTP URL: rust// Opens a local audio file in LibVLC for offline playback. // Uses the same AudioPlayer state as the online path — all existing // transport controls (pause, seek, speed) work identically. #[tauri::command] pub async fn play_local_file( file_path: String, start_time: f64, audio: tauri::State<'_, Arc<Mutex<AudioPlayer>>>, ) -> Result<(), String> { let mut player = audio.lock().await; // Stop any existing playback before loading the local file player.stop(); // Open the local file — LibVLC accepts file:/// URIs let uri = format!("file:///{}", file_path.replace('\\', "/")); player.open(&uri)?; if start_time > 0.0 { // Brief delay to allow LibVLC to buffer enough to accept a seek tokio::time::sleep(tokio::time::Duration::from_millis(500)).await; player.seek(start_time)?; } player.play()?; Ok(()) } Use whatever method names AudioPlayer already exposes for stop, open, seek, and play — check src-tauri/src/audio.rs for the exact API and match it. Register the command in lib.rs and add a wrapper playLocalFile(filePath: string, startTime: number) in abs.ts. Part 4 — Skip session sync for local playback: Open src-tauri/src/session.rs or wherever the 30-second session sync timer runs. Add a check: if the current media source is a local file (not an HTTP URL), skip the sync — there is no server session to sync to. A simple flag is_local: bool on the session state, set by play_local_file and cleared by open_playback_session, is sufficient. Part 5 — Downloaded badge on book covers: Open the book tile component (likely src/components/shelf/BookTile.tsx). When st.downloads.find(d => d.itemId === book.id) is truthy, render a small download badge on the cover — a small arrow-down icon or ↓ in brass on a dark background, positioned bottom-right of the cover image. After completing, run pnpm tauri dev. Download a book. Then disconnect from the network (disable WiFi or unplug ethernet). Right-click the downloaded book and confirm it plays from the local file with working transport controls (pause, seek, speed). Confirm non-downloaded books cannot be played while offline. Re-enable the network and confirm online playback still works for non-downloaded books. Then commit with the message: feat(downloads): Phase D — offline playback via local file with LibVLC file:/// URI
+**Phase F: Storage management and downloads settings**
+
+Comment every block and non-obvious line.
+
+**Part 1 — Wire real data into Downloads settings:**
+
+Open `src/components/settings/DownloadsSection.tsx`. The section currently has WIP placeholders. Replace them with real content:
+
+1. **Cache location row** — already implemented with the Reveal button. Confirm it still works and leave it unchanged.
+2. **Storage used** — in the section header, show the total size of all downloads from the registry. Calculate by summing `record.fileSize` across all `DownloadRecord` entries from `getDownloads()`. Format as MB or GB to one decimal place.
+3. **Downloads list** — a scrollable list of Glass rows, one per downloaded book. Each row:
+    - Book cover thumbnail (40px × 40px, from cover cache)
+    - Book title in 14px body text
+    - Author in 11px muted text below title
+    - File size formatted as MB/GB
+    - Download date as relative time (e.g. `2 days ago`)
+    - A delete button (trash icon) that calls `removeDownload(record.itemId)` with a `ConfirmDialog` before deletion, then refreshes the list
+4. **Maximum cache size** row — remove the WIP badge. Show the current total used vs no limit. Add a note: `"No limit set — manage individual downloads below."` This is sufficient for v0.1.0; a configurable limit can be a future feature.
+5. **Auto-download next book in series** row — keep WIP badge. Leave as-is.
+6. **Keep downloaded books after finishing** row — keep WIP badge. Leave as-is.
+7. **Clear all downloads** button — wire it to call `removeDownload` for every entry in the registry in sequence, with a single `ConfirmDialog` warning: `"This will delete all downloaded audio files from your device. This cannot be undone."`. Show a success toast when complete.
+
+**Part 2 — Refresh downloads list after delete:**
+
+Ensure that after any individual or bulk delete, the downloads list and storage total both refresh immediately without requiring a page navigation.
+
+**Part 3 — Show download count in nav:**
+
+Open `src/screens/Settings.tsx`. In the Downloads nav item label, append a count badge showing how many books are downloaded — e.g. `Downloads (3)`. Read from `st.downloads.length`. Show nothing when zero.
+
+After completing, run `pnpm tauri dev`, navigate to Settings → Downloads, and confirm:
+
+- The storage total shows the correct sum
+- Each downloaded book appears with title, size, and date
+- Deleting a book removes the file and updates the list and total
+- Clear all works with confirmation
+- The nav badge shows the correct count
+
+Then commit with the message: `feat(downloads): Phase F — wire Downloads settings with real registry data, delete, and storage total`
+
+
+
+
