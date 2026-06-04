@@ -16,7 +16,7 @@
 - 
 
 # Items that need claude design touches
-	- Login page
+	- 
 	- match page
 	- add to collection page
 	- Context menu
