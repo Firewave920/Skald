@@ -144,7 +144,8 @@
       "Bash(pkill -f \"tauri\")",
       "Bash(pkill -f \"pnpm\")",
       "Bash(taskkill /IM skald.exe /F)",
-      "Bash(taskkill /IM Skald.exe /F)"
+      "Bash(taskkill /IM Skald.exe /F)",
+      "PowerShell(cd \"c:\\\\Users\\\\fireb\\\\Documents\\\\Skald\"; pnpm tauri build 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\skald-build2.log\"; Write-Host \"Exit: $LASTEXITCODE\")"
     ]
   }
 }
