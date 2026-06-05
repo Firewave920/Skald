@@ -150,17 +150,16 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
           )}
         </div>
 
-        {/* Width-bounded container — gives pill a definite constraint so overflowX:auto can trigger */}
-        <div style={{ flex: 1, minWidth: 0, maxWidth: '100%', overflow: 'hidden' }}>
+        {/* Wrapper clips the pill — flex-allocated width gives overflowX:auto a definite bound */}
+        <div style={{ flex: 1, minWidth: 0, overflow: 'hidden', display: 'flex', justifyContent: 'center' }}>
           <div
             className="shelf-tab-pill"
             style={{
-              display: 'inline-flex', /* Sizes to content; maxWidth caps it at parent */
+              display: 'flex',
               alignItems: 'center', gap: 4, padding: '4px',
               background: 'var(--onyx-glass)', border: '1px solid var(--onyx-glass-edge)',
               borderRadius: 10,
               flexWrap: 'nowrap',
-              maxWidth: '100%',  /* Cannot exceed parent — triggers internal scroll */
               overflowX: 'auto',
               scrollbarWidth: 'none',
               msOverflowStyle: 'none' as 'none',
