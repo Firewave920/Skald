@@ -1,6 +1,7 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
 import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookAuthor, bookSeries, bookDurSecs } from '../../../state/onyx';
+import type { SeriesObject } from '../../../api/abs';
 import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
 import CoverFan from '../CoverFan';
@@ -14,16 +15,29 @@ interface SeriesGroup {
   books: LibraryItem[];
 }
 
-function seriesNameOf(s: string | undefined): string {
-  return (s || '').replace(/#\d+.*$/, '').replace(/\s*·\s*\d+.*$/, '').trim();
+// Extract series name from the full series object (preferred) or fall back to flat seriesName.
+function seriesNameOf(b: LibraryItem): string {
+  const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
+  if (s) {
+    const first = Array.isArray(s) ? s[0] : s;
+    if (first?.name) return first.name;
+  }
+  return bookSeries(b) ?? '';
 }
 
-function seriesVolOf(s: string | undefined): number {
-  const hashMatch = (s || '').match(/#(\d+)/);
-  if (hashMatch) return parseInt(hashMatch[1], 10);
-  const dotMatch = (s || '').match(/·\s*(\d+)/);
-  if (dotMatch) return parseInt(dotMatch[1], 10);
-  return 0;
+function seriesVolOf(b: LibraryItem): number {
+  const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
+  if (s) {
+    const first = Array.isArray(s) ? s[0] : s;
+    const seq = first?.sequence;
+    if (typeof seq === 'number') return seq;
+    if (typeof seq === 'string') return parseFloat(seq) || 0;
+  }
+  const flat = bookSeries(b) ?? '';
+  const h = flat.match(/#(\d+)/);
+  if (h) return parseInt(h[1], 10);
+  const d = flat.match(/·\s*(\d+)/);
+  return d ? parseInt(d[1], 10) : 0;
 }
 
 
@@ -35,7 +49,7 @@ export interface SeriesViewProps {
 export default function SeriesView({ st, inline = false }: SeriesViewProps) {
   const groups: Record<string, LibraryItem[]> = {};
   for (const b of st.library) {
-    const name = seriesNameOf(bookSeries(b));
+    const name = seriesNameOf(b);
     if (!name) continue;
     if (!groups[name]) groups[name] = [];
     groups[name].push(b);
@@ -44,7 +58,7 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
   let seriesList: SeriesGroup[] = Object.entries(groups)
     .map(([name, books]) => ({
       name,
-      books: books.slice().sort((a, b) => seriesVolOf(bookSeries(a)) - seriesVolOf(bookSeries(b))),
+      books: books.slice().sort((a, b) => seriesVolOf(a) - seriesVolOf(b)),
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
