@@ -150,13 +150,20 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
           )}
         </div>
 
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', minWidth: 0, overflow: 'visible' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 4, padding: '4px',
-            background: 'var(--onyx-glass)', border: '1px solid var(--onyx-glass-edge)',
-            borderRadius: 10, alignSelf: 'flex-start',
-            minWidth: 0, overflow: 'visible', flexWrap: 'nowrap',
-          }}>
+        {/* Clip the scroll container — tabs scroll inside, not the page */}
+        <div style={{ flex: 1, display: 'flex', minWidth: 0, overflow: 'hidden' }}>
+          <div
+            className="shelf-tab-pill"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4, padding: '4px',
+              background: 'var(--onyx-glass)', border: '1px solid var(--onyx-glass-edge)',
+              borderRadius: 10, alignSelf: 'flex-start',
+              flexWrap: 'nowrap',
+              overflowX: 'auto',
+              scrollbarWidth: 'none',       /* Firefox — hide scrollbar while keeping scroll behaviour */
+              msOverflowStyle: 'none' as 'none',  /* IE/Edge legacy */
+            }}
+          >
             {TABS.map(t => {
               const active = st.shelfTab === t.id;
               return (

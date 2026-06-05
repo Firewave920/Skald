@@ -191,3 +191,8 @@ input:focus-visible {
 .saga-cta:not(:disabled):active {
   transform: translateY(0);
 }
+
+/* Hide scrollbar on the shelf tab pill while keeping horizontal scroll behaviour */
+.shelf-tab-pill::-webkit-scrollbar {
+  display: none;
+}
