@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { OnyxState, LibraryItem } from '../../state/onyx';
+import { getSeriesItems } from '../../api/abs';
 import {
   bookTitle, bookAuthor, bookSeries, bookNarrator, bookGenre,
   bookDur, bookDurSecs, bookProgress,
@@ -208,6 +209,22 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   const [filesItem, setFilesItem] = useState<LibraryItem | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Books for the active series filter, fetched server-side via get_series_items.
+  // st.library books lack series IDs (minified shape), so client-side series matching is not possible.
+  const [seriesBooks, setSeriesBooks] = useState<LibraryItem[] | null>(null);
+
+  useEffect(() => {
+    const f = st.contextFilter;
+    if (f?.kind === 'series' && f.seriesId && st.serverUrl && st.currentLibraryId) {
+      // Fetch this series' books directly from the server using the verified Base64 filter command.
+      getSeriesItems(st.serverUrl, st.currentLibraryId, f.seriesId)
+        .then(setSeriesBooks)
+        .catch(console.error);
+    } else {
+      setSeriesBooks(null);
+    }
+  }, [st.contextFilter, st.serverUrl, st.currentLibraryId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const onContextMenu = (e: React.MouseEvent, item: LibraryItem) => {
     e.preventDefault();
     setSelectedId(item.id);
@@ -215,10 +232,15 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
     setContextMenu({ x: e.pageX, y: e.pageY, item });
   };
 
-  const filtered = st.library.filter(b => {
+  // When a series filter is active, use the server-fetched list (empty array while loading).
+  // st.library books carry only the flat seriesName string, not series IDs, so client-side
+  // series matching always fails — the server-side filter endpoint is the only correct path.
+  const sourceBooks = (st.contextFilter?.kind === 'series') ? (seriesBooks ?? []) : st.library;
+
+  const filtered = sourceBooks.filter(b => {
     if (st.contextFilter) {
       const { kind, value, bookIds } = st.contextFilter;
-      if (kind === 'series'     && seriesNameOf(bookSeries(b)) !== value)   return false;
+      // Series filtering is handled by sourceBooks selection above — do not re-filter here.
       if (kind === 'author'     && bookAuthor(b)   !== value)                return false;
       if (kind === 'narrator'   && bookNarrator(b) !== value)                return false;
       if (kind === 'collection' && !(bookIds ?? []).includes(b.id))          return false;
