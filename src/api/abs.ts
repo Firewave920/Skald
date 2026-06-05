@@ -370,6 +370,10 @@ export function closeAllOpenSessions(serverUrl: string): Promise<number> {
   return invoke('close_all_open_sessions', { serverUrl });
 }
 
+export function getContinueListening(serverUrl: string, libraryId: string): Promise<LibraryItem[]> {
+  return invoke('get_continue_listening', { serverUrl, libraryId });
+}
+
 export function closeActiveSession(): Promise<void> {
   return invoke('close_active_session');
 }

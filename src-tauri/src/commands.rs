@@ -217,6 +217,19 @@ pub async fn fetch_library_items(
 }
 
 #[tauri::command]
+pub async fn get_continue_listening(
+    server_url: String,
+    library_id: String,
+) -> Result<Vec<models::LibraryItem>, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url)
+        .with_token(token)
+        .get_continue_listening(&library_id)
+        .await
+}
+
+#[tauri::command]
 pub async fn fetch_item(
     server_url: String,
     item_id: String,

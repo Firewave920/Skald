@@ -9,7 +9,7 @@ import Cover from './Cover';
 import Icon from './Icon';
 import ContextMenu from './ContextMenu';
 import { buildItemContextMenu } from './shelf/buildItemContextMenu';
-import { pauseAudio } from '../api/abs'; // needed to halt playback before switching books
+import { pauseAudio, getContinueListening } from '../api/abs';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -19,7 +19,14 @@ export interface PickItUpProps {
 }
 
 export default function PickItUp({ st }: PickItUpProps) {
-  const inProg = st.library.filter(b => bookProgress(b, st.mediaProgress) > 0);
+  const [continueItems, setContinueItems] = useState<LibraryItem[]>([]);
+
+  useEffect(() => {
+    if (!st.serverUrl || !st.currentLibraryId) return;
+    getContinueListening(st.serverUrl, st.currentLibraryId)
+      .then(setContinueItems)
+      .catch(console.error);
+  }, [st.serverUrl, st.currentLibraryId]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ startX: number; startScrollLeft: number; didDrag: boolean } | null>(null);
@@ -41,7 +48,7 @@ export default function PickItUp({ st }: PickItUpProps) {
     return () => window.removeEventListener('mouseup', onWindowMouseUp);
   }, []);
 
-  if (inProg.length === 0 || st.search || st.contextFilter) {
+  if (continueItems.length === 0 || st.search || st.contextFilter) {
     return null;
   }
 
@@ -119,7 +126,7 @@ export default function PickItUp({ st }: PickItUpProps) {
             Pick it up
           </div>
           <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            {inProg.length} in progress
+            {continueItems.length} in progress
           </div>
         </button>
       </div>
@@ -133,7 +140,7 @@ export default function PickItUp({ st }: PickItUpProps) {
           className="pickitup-scroll"
           style={{ display: 'flex', flexDirection: 'row', width: '100%', minWidth: 0, gap: 14, overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch', paddingBottom: 8, cursor: isDragging ? 'grabbing' : 'grab', userSelect: isDragging ? 'none' : undefined }}
         >
-          {inProg.map(b => {
+          {continueItems.map(b => {
             const prog = bookProgress(b, st.mediaProgress);
             // Cached once per card — used for badge presence and server-deleted variant.
             const dlRecord = st.downloads.find(d => d.itemId === b.id);
