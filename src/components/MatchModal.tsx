@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import type { LibraryItem } from '../state/onyx';
 import { bookAuthor } from '../state/onyx';
@@ -7,6 +8,21 @@ import Cover from './Cover';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO  = "'JetBrains Mono', ui-monospace, monospace";
+const SANS  = "'Inter', system-ui, -apple-system, sans-serif";
+
+/* Local design tokens for the match review screen — see design-handoff/metadata_match/shared.jsx */
+const MATCH_ONYX = {
+  bg: '#0b0b0e', bgDeep: '#08080b', panel: '#131319', panel2: '#1a1a22',
+  line: 'rgba(255,255,255,0.06)', lineStrong: 'rgba(255,255,255,0.12)',
+  text: '#ebe7df', textDim: 'rgba(235,231,223,0.62)', textMute: 'rgba(235,231,223,0.38)',
+  accent: '#d4a64a', accentBright: '#e9bb5e', accentDeep: '#a37d2e',
+  accentDim: 'rgba(212,166,74,0.18)', accentEdge: 'rgba(212,166,74,0.35)',
+  glass: 'rgba(255,255,255,0.04)', glassStrong: 'rgba(255,255,255,0.07)', glassEdge: 'rgba(255,255,255,0.09)',
+  add: '#5ac88a', addDim: 'rgba(90,200,138,0.14)', addEdge: 'rgba(90,200,138,0.32)',
+  sans: '"Inter", -apple-system, system-ui, sans-serif',
+  serif: '"Source Serif Pro", Georgia, serif',
+  mono: '"JetBrains Mono", ui-monospace, Menlo, monospace',
+};
 
 const PROVIDERS = [
   { label: 'Audible.com',  value: 'audible'    },
@@ -15,6 +31,26 @@ const PROVIDERS = [
   { label: 'Open Library', value: 'openlibrary' },
   { label: 'FantLab.ru',   value: 'fantlab'     },
 ];
+
+/* Match modal local tokens — extends global Onyx theme */
+const MX = {
+  bg:          '#0b0b0e',
+  panel2:      '#1a1a22',
+  line:        'rgba(255,255,255,0.06)',
+  lineStrong:  'rgba(255,255,255,0.12)',
+  text:        '#ebe7df',
+  textDim:     'rgba(235,231,223,0.62)',
+  textMute:    'rgba(235,231,223,0.38)',
+  accent:      '#d4a64a',
+  accentDim:   'rgba(212,166,74,0.18)',
+  accentEdge:  'rgba(212,166,74,0.35)',
+  glass:       'rgba(255,255,255,0.04)',
+  glassStrong: 'rgba(255,255,255,0.07)',
+  glassEdge:   'rgba(255,255,255,0.09)',
+  add:         '#5ac88a',
+  addDim:      'rgba(90,200,138,0.14)',
+  addEdge:     'rgba(90,200,138,0.32)',
+};
 
 interface SearchResult {
   title?: string;
@@ -34,11 +70,336 @@ interface SearchResult {
   confidence?: number;
 }
 
+type FieldType = 'text' | 'longtext' | 'mono' | 'chips' | 'cover';
+type FieldStatus = 'same' | 'added' | 'changed';
+
+interface MatchField {
+  key: string;
+  label: string;
+  type: FieldType;
+  current: unknown;
+  incoming: unknown;
+  status: FieldStatus;
+}
+
 function seriesStr(s: SearchResult['series']): string {
   if (!s) return '';
   if (typeof s === 'string') return s;
   return s.map(x => [x.name, x.sequence].filter(Boolean).join(' #')).join(', ');
 }
+
+// Normalize a value for comparison — arrays joined with null byte, strings trimmed.
+function normVal(v: unknown): string {
+  if (Array.isArray(v)) return v.join('\0');
+  if (v == null) return '';
+  return v.toString().trim();
+}
+
+function fieldStatus(f: Omit<MatchField, 'status'>): FieldStatus {
+  if (f.type === 'cover') return 'changed';
+  const c = normVal(f.current), i = normVal(f.incoming);
+  if (c === i) return 'same';
+  if (!c) return 'added';
+  return 'changed';
+}
+
+// Parse "Series Name #Sequence" or "Series Name · Sequence" back into parts.
+function splitSeries(s: string): { name: string; sequence: string } {
+  const hashIdx = s.lastIndexOf('#');
+  if (hashIdx > 0) return { name: s.slice(0, hashIdx).trim(), sequence: s.slice(hashIdx + 1).trim() };
+  const dotIdx = s.lastIndexOf('·');
+  if (dotIdx > 0) return { name: s.slice(0, dotIdx).trim(), sequence: s.slice(dotIdx + 1).trim() };
+  return { name: s.trim(), sequence: '' };
+}
+
+// ── Option B atoms — see design-handoff/metadata_match ────────────────────────
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function Glyph({ name, size = 16, color = 'currentColor', sw = 1.6 }: {
+  name: string; size?: number; color?: string; sw?: number;
+}): JSX.Element | null {
+  const s: CSSProperties = { width: size, height: size, display: 'block', flexShrink: 0 };
+  const p = { fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  switch (name) {
+    case 'close':   return <svg style={s} viewBox="0 0 16 16"><path d="M4 4 L12 12 M12 4 L4 12" {...p} /></svg>;
+    case 'back':    return <svg style={s} viewBox="0 0 16 16"><path d="M9 3 L4 8 L9 13 M4 8 L13 8" {...p} /></svg>;
+    case 'left':    return <svg style={s} viewBox="0 0 16 16"><path d="M10 3 L5 8 L10 13" {...p} strokeWidth={sw + 0.2} /></svg>;
+    case 'right':   return <svg style={s} viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" {...p} strokeWidth={sw + 0.2} /></svg>;
+    case 'down':    return <svg style={s} viewBox="0 0 16 16"><path d="M3 6 L8 11 L13 6" {...p} /></svg>;
+    case 'check':   return <svg style={s} viewBox="0 0 16 16"><path d="M3 8 L7 12 L13 4" {...p} strokeWidth={sw + 0.3} /></svg>;
+    case 'arrow':   return <svg style={s} viewBox="0 0 16 16"><path d="M3 8 L13 8 M9 4 L13 8 L9 12" {...p} /></svg>;
+    case 'revert':  return <svg style={s} viewBox="0 0 16 16"><path d="M6 3 L3 6 L6 9 M3 6 L11 6 Q13 6 13 9 L13 13" {...p} /></svg>;
+    case 'edit':    return <svg style={s} viewBox="0 0 16 16"><path d="M11 2.5 L13.5 5 L6 12.5 L3 13 L3.5 10 Z" {...p} /></svg>;
+    case 'sparkle': return <svg style={s} viewBox="0 0 16 16"><path d="M8 2 L9.2 6.2 L13 8 L9.2 9.8 L8 14 L6.8 9.8 L3 8 L6.8 6.2 Z" fill={color} stroke="none" /></svg>;
+    case 'bolt':    return <svg style={s} viewBox="0 0 16 16"><path d="M9 2 L4 9 L7.5 9 L7 14 L12 7 L8.5 7 Z" fill={color} stroke="none" /></svg>;
+    default: return null;
+  }
+}
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function StatusTag({ status, style }: { status: string; style?: CSSProperties }) {
+  const map: Record<string, { t: string; c: string; bg: string; e: string }> = {
+    added:   { t: 'NEW',     c: MX.add,      bg: MX.addDim,     e: MX.addEdge   },
+    changed: { t: 'CHANGED', c: MX.accent,   bg: MX.accentDim,  e: MX.accentEdge },
+    edited:  { t: 'EDITED',  c: MX.text,     bg: MX.glassStrong, e: MX.lineStrong },
+    same:    { t: 'MATCH',   c: MX.textMute, bg: 'transparent', e: MX.line      },
+  };
+  const m = map[status] ?? map.same;
+  return (
+    <span style={{
+      fontFamily: MONO, fontSize: 8.5, letterSpacing: '0.13em', color: m.c,
+      background: m.bg, border: `1px solid ${m.e}`, borderRadius: 3,
+      padding: '1.5px 5px', lineHeight: 1, whiteSpace: 'nowrap' as const, ...style,
+    }}>{m.t}</span>
+  );
+}
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function MatchCheck({ on, onClick, size = 17, accent = MX.accent }: {
+  on: boolean; onClick: () => void; size?: number; accent?: string;
+}) {
+  return (
+    <button onClick={onClick} aria-pressed={on} style={{
+      width: size, height: size, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: on ? accent : 'transparent',
+      border: `1.5px solid ${on ? accent : MX.lineStrong}`,
+      transition: 'background .12s, border-color .12s',
+    }}>
+      {on && <Glyph name="check" size={size * 0.62} color={MX.bg} sw={2} />}
+    </button>
+  );
+}
+
+/* Local design tokens for the match review screen — see design-handoff/metadata_match/shared.jsx */
+function Check({ on, onClick, size = 17, accent = MATCH_ONYX.accent }: {
+  on: boolean; onClick: () => void; size?: number; accent?: string;
+}) {
+  return (
+    <button onClick={onClick} aria-pressed={on} style={{
+      width: size, height: size, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: on ? accent : 'transparent',
+      border: `1.5px solid ${on ? accent : MATCH_ONYX.lineStrong}`,
+      transition: 'background .12s, border-color .12s',
+    }}>
+      {on && (
+        <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 16 16">
+          <path d="M3 8 L7 12 L13 4" fill="none" stroke={MATCH_ONYX.bg} strokeWidth="2.2"
+            strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function ValueCell({ field, side, value, dim, strike, coverItem, coverServerUrl }: {
+  field: MatchField; side: 'current' | 'incoming'; value: unknown;
+  dim?: boolean; strike?: boolean;
+  coverItem?: LibraryItem; coverServerUrl?: string;
+}) {
+  if (field.type === 'cover') {
+    if (side === 'current' && coverItem && coverServerUrl) {
+      return <Cover item={coverItem} size={46} serverUrl={coverServerUrl} />;
+    }
+    if (side === 'incoming' && value && typeof value === 'string') {
+      return <img src={value} alt="" style={{ width: 46, height: 46, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />;
+    }
+    return <div style={{ width: 46, height: 46, borderRadius: 4, background: MX.glassStrong, flexShrink: 0 }} />;
+  }
+  const empty = Array.isArray(value) ? value.length === 0 : !value;
+  if (field.type === 'chips') {
+    if (empty) return <span style={{ fontSize: 11, color: MX.textMute, fontStyle: 'italic' }}>none</span>;
+    return (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {(value as string[]).map((t, i) => (
+          <span key={i} style={{
+            fontSize: 10.5, padding: '2px 7px', borderRadius: 20,
+            color: dim ? MX.textMute : MX.textDim, background: MX.glass, border: `1px solid ${MX.line}`,
+          }}>{t}</span>
+        ))}
+      </div>
+    );
+  }
+  if (empty) {
+    return <span style={{ fontSize: 12, color: MX.textMute, fontStyle: 'italic', fontFamily: SANS }}>empty</span>;
+  }
+  const isLong = field.type === 'longtext';
+  return (
+    <span style={{
+      fontSize: isLong ? 11.5 : 12.5, lineHeight: isLong ? 1.45 : 1.3,
+      fontFamily: field.type === 'mono' ? MONO : SANS,
+      color: dim ? MX.textMute : MX.textDim,
+      textDecoration: strike ? 'line-through' : 'none',
+      textDecorationColor: 'rgba(235,231,223,0.25)',
+      display: '-webkit-box' as const, WebkitLineClamp: isLong ? 4 : 2,
+      WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+    }}>{value as string}</span>
+  );
+}
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function EditField({ field, value, onSave, onCancel }: {
+  field: MatchField; value: unknown;
+  onSave: (v: unknown) => void; onCancel: () => void;
+}) {
+  const initial = field.type === 'chips'
+    ? (Array.isArray(value) ? value.join(', ') : String(value ?? ''))
+    : String(value ?? '');
+  const [draft, setDraft] = useState(initial);
+  const ref = useRef<HTMLTextAreaElement & HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) { ref.current.focus(); ref.current.select?.(); }
+  }, []);
+  const commit = () => {
+    const out = field.type === 'chips'
+      ? draft.split(',').map(s => s.trim()).filter(Boolean)
+      : draft;
+    onSave(out);
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
+    else if (e.key === 'Enter' && (field.type !== 'longtext' || e.metaKey || e.ctrlKey)) { e.preventDefault(); commit(); }
+  };
+  const inputStyle: CSSProperties = {
+    width: '100%', boxSizing: 'border-box', background: MX.panel2,
+    border: `1px solid ${MX.accentEdge}`, borderRadius: 6, color: MX.text,
+    fontFamily: field.type === 'mono' ? MONO : SANS,
+    fontSize: field.type === 'longtext' ? 11.5 : 12.5, lineHeight: 1.4,
+    padding: '7px 9px', outline: 'none', resize: 'vertical' as const,
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
+      {field.type === 'longtext' ? (
+        <textarea ref={ref} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey} rows={4} style={inputStyle} />
+      ) : (
+        <input ref={ref} value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={onKey}
+          style={inputStyle} placeholder={field.type === 'chips' ? 'comma, separated, tags' : ''} />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <button onClick={commit} style={{
+          display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6,
+          border: 'none', cursor: 'pointer', background: MX.accent, color: MX.bg,
+          fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase' as const, fontWeight: 600,
+        }}>
+          <Glyph name="check" size={11} color={MX.bg} sw={2} />Save
+        </button>
+        <button onClick={onCancel} style={{
+          padding: '4px 10px', borderRadius: 6, border: `1px solid ${MX.glassEdge}`,
+          cursor: 'pointer', background: 'transparent', color: MX.textDim,
+          fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+        }}>Cancel</button>
+        <span style={{ flex: 1 }} />
+        <span style={{ fontFamily: MONO, fontSize: 8.5, color: MX.textMute, letterSpacing: '0.04em' }}>
+          {field.type === 'longtext' ? '⌘↵ save · esc' : '↵ save · esc'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* Metadata Match Option B — see design-handoff/metadata_match */
+function CompareRow({ field, base, resolved, edited, applied, editing,
+                      onToggle, onStartEdit, onSaveEdit, onCancelEdit, onRevert,
+                      coverItem, coverServerUrl }: {
+  field: MatchField; base: 'incoming' | 'current' | undefined;
+  resolved: unknown; edited: boolean; applied: boolean; editing: boolean;
+  onToggle: () => void; onStartEdit: () => void;
+  onSaveEdit: (v: unknown) => void; onCancelEdit: () => void; onRevert: () => void;
+  coverItem?: LibraryItem; coverServerUrl?: string;
+}) {
+  const changed = field.status !== 'same';
+  const accent = field.status === 'added' ? MX.add : MX.accent;
+  const tintBg = !applied ? 'transparent'
+    : edited ? 'rgba(255,255,255,0.05)'
+    : field.status === 'added' ? MX.addDim : 'rgba(212,166,74,0.07)';
+  const tintBar = edited ? MX.textDim : accent;
+  const canEdit = field.type !== 'cover';
+
+  return (
+    <div style={{
+      display: 'grid', gridTemplateColumns: '78px 1fr 38px 1fr',
+      alignItems: editing ? 'start' : 'center',
+      borderBottom: `1px solid ${MX.line}`, minHeight: 50,
+    }}>
+      {/* label + status tag */}
+      <div style={{ padding: '12px 10px 12px 16px', display: 'flex', flexDirection: 'column', gap: 5 }}>
+        <span style={{
+          fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em',
+          textTransform: 'uppercase' as const, lineHeight: 1.2,
+          color: (changed || edited) ? MX.textDim : MX.textMute,
+        }}>{field.label}</span>
+        {edited
+          ? <StatusTag status="edited" style={{ alignSelf: 'flex-start' }} />
+          : changed && <StatusTag status={field.status} style={{ alignSelf: 'flex-start' }} />}
+      </div>
+      {/* current value */}
+      <div style={{ padding: '12px 14px', minWidth: 0 }}>
+        <ValueCell field={field} side="current" value={field.current}
+          dim strike={applied} coverItem={coverItem} coverServerUrl={coverServerUrl} />
+      </div>
+      {/* accept toggle / revert button */}
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', paddingTop: editing ? 12 : 0 }}>
+        {edited ? (
+          <button onClick={onRevert} title="Revert to source value" style={{
+            width: 26, height: 26, borderRadius: 13, cursor: 'pointer', padding: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'transparent', border: `1.5px solid ${MX.lineStrong}`,
+          }}>
+            <Glyph name="revert" size={13} color={MX.textDim} />
+          </button>
+        ) : changed ? (
+          <button onClick={onToggle}
+            title={base === 'incoming' ? 'Using new value' : 'Keeping current'}
+            style={{
+              width: 26, height: 26, borderRadius: 13, cursor: 'pointer', padding: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: base === 'incoming' ? accent : 'transparent',
+              border: `1.5px solid ${base === 'incoming' ? accent : MX.lineStrong}`,
+              transition: 'all .12s',
+            }}>
+            <Glyph name={base === 'incoming' ? 'check' : 'right'} size={13}
+              color={base === 'incoming' ? MX.bg : MX.textMute} sw={2} />
+          </button>
+        ) : (
+          <Glyph name="check" size={12} color={MX.textMute} />
+        )}
+      </div>
+      {/* result cell — read or edit mode */}
+      <div style={{
+        padding: editing ? '10px 16px 12px 14px' : '12px 16px 12px 14px', minWidth: 0,
+        alignSelf: 'stretch', display: 'flex', alignItems: editing ? 'stretch' : 'center', gap: 8,
+        background: editing ? 'transparent' : tintBg,
+        boxShadow: (!editing && applied) ? `inset 2px 0 0 ${tintBar}` : 'none',
+      }}>
+        {editing ? (
+          <EditField field={field} value={resolved} onSave={onSaveEdit} onCancel={onCancelEdit} />
+        ) : (
+          <>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <ValueCell field={field} side="incoming" value={resolved}
+                dim={!applied && !edited} coverItem={coverItem} coverServerUrl={coverServerUrl} />
+            </div>
+            {canEdit && (
+              <button onClick={onStartEdit} title={`Edit ${field.label}`} style={{
+                background: 'none', border: 'none', cursor: 'pointer', padding: 3, marginRight: -3,
+                display: 'flex', color: MX.textMute, flexShrink: 0, alignSelf: 'flex-start',
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = MX.accent; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = MX.textMute; }}
+              >
+                <Glyph name="edit" size={13} />
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Confidence badge for search results ───────────────────────────────────────
 
 function ConfBadge({ score }: { score?: number }) {
   if (score == null) return null;
@@ -50,6 +411,8 @@ function ConfBadge({ score }: { score?: number }) {
   );
 }
 
+// ── Props ─────────────────────────────────────────────────────────────────────
+
 export interface MatchModalProps {
   item: LibraryItem;
   serverUrl: string;
@@ -59,61 +422,115 @@ export interface MatchModalProps {
   onRefresh: () => void;
 }
 
+// ── MatchModal ────────────────────────────────────────────────────────────────
+
 export default function MatchModal({ item, serverUrl, library, onClose, onComplete, onRefresh }: MatchModalProps) {
   const meta = item.media.metadata;
 
-  const [provider, setProvider]         = useState('audible');
-  const [queryTitle, setQueryTitle]     = useState(meta.title ?? '');
-  const [queryAuthor, setQueryAuthor]   = useState(bookAuthor(item));
-  const [searching, setSearching]       = useState(false);
-  const [searchErr, setSearchErr]       = useState<string | null>(null);
-  const [results, setResults]           = useState<SearchResult[]>([]);
-  const [selected, setSelected]         = useState<SearchResult | null>(null);
-  const [screen, setScreen]             = useState<'search' | 'review'>('search');
-  const [submitting, setSubmitting]     = useState(false);
-  const [checked, setChecked]           = useState<Record<string, boolean>>({});
-  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  // ── Search screen state ───────────────────────────────────────────────────
+  const [provider, setProvider]       = useState('audible');
+  const [queryTitle, setQueryTitle]   = useState(meta.title ?? '');
+  const [queryAuthor, setQueryAuthor] = useState(bookAuthor(item));
+  const [searching, setSearching]     = useState(false);
+  const [searchErr, setSearchErr]     = useState<string | null>(null);
+  const [results, setResults]         = useState<SearchResult[]>([]);
+  const [selected, setSelected]       = useState<SearchResult | null>(null);
+  const [screen, setScreen]           = useState<'search' | 'review'>('search');
+  const [submitting, setSubmitting]   = useState(false);
 
-  // ── Autocomplete sources derived from the library ─────────────────────────
+  // ── Option B review state (replaces checked / editedValues) ───────────────
+  const [base, setBase]               = useState<Record<string, 'incoming' | 'current'>>({});
+  const [edits, setEdits]             = useState<Record<string, unknown>>({});
+  const [editingKey, setEditingKey]   = useState<string | null>(null);
+  const [onlyChanges, setOnlyChanges] = useState(true);
 
+  // ── Autocomplete options (derived from library) ───────────────────────────
   const seriesOptions = useMemo(() => {
     const names = new Set<string>();
     for (const b of library) {
       const s = b.media.metadata.seriesName;
-      if (s) {
-        // Strip trailing " #N" or " · N" volume suffix
-        const name = s.replace(/\s*[#·]\s*[\d.]+$/, '').trim();
-        if (name) names.add(name);
-      }
+      if (s) { const name = s.replace(/\s*[#·]\s*[\d.]+$/, '').trim(); if (name) names.add(name); }
     }
     return Array.from(names).sort();
   }, [library]);
 
   const genreOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const b of library) {
-      for (const g of b.media.metadata.genres ?? []) {
-        if (g) names.add(g);
-      }
-    }
+    for (const b of library) for (const g of b.media.metadata.genres ?? []) if (g) names.add(g);
     return Array.from(names).sort();
   }, [library]);
 
   const tagOptions = useMemo(() => {
     const names = new Set<string>();
-    for (const b of library) {
-      for (const t of b.media.tags ?? []) {
-        if (t) names.add(t);
-      }
-    }
+    for (const b of library) for (const t of b.media.tags ?? []) if (t) names.add(t);
     return Array.from(names).sort();
   }, [library]);
+
+  // ── Field definitions — derived from item + selected ─────────────────────
+  const fields = useMemo((): MatchField[] => {
+    if (!selected) return [];
+    const incomingSeries = seriesStr(selected.series);
+    const raw: Omit<MatchField, 'status'>[] = [
+      { key: 'cover',       label: 'Cover',       type: 'cover',    current: null,                                         incoming: selected.cover ?? null },
+      { key: 'title',       label: 'Title',       type: 'text',     current: meta.title ?? '',                             incoming: selected.title ?? '' },
+      { key: 'subtitle',    label: 'Subtitle',    type: 'text',     current: meta.subtitle ?? '',                          incoming: selected.subtitle ?? '' },
+      { key: 'author',      label: 'Author',      type: 'text',     current: bookAuthor(item),                             incoming: selected.author ?? '' },
+      { key: 'narrator',    label: 'Narrator',    type: 'text',     current: meta.narratorName ?? '',                      incoming: selected.narrator ?? '' },
+      { key: 'series',      label: 'Series',      type: 'text',     current: meta.seriesName ?? '',                        incoming: incomingSeries },
+      { key: 'publisher',   label: 'Publisher',   type: 'text',     current: meta.publisher ?? '',                         incoming: selected.publisher ?? '' },
+      { key: 'year',        label: 'Year',        type: 'text',     current: meta.publishedYear ?? '',                     incoming: selected.publishedYear ?? '' },
+      { key: 'genres',      label: 'Genres',      type: 'chips',    current: meta.genres ?? [],                            incoming: selected.genres ?? [] },
+      { key: 'tags',        label: 'Tags',        type: 'chips',    current: item.media.tags ?? [],                        incoming: selected.tags ?? [] },
+      { key: 'language',    label: 'Language',    type: 'text',     current: meta.language ?? '',                          incoming: selected.language ?? '' },
+      { key: 'isbn',        label: 'ISBN',        type: 'mono',     current: meta.isbn ?? (meta as Record<string, unknown>).isbn13 as string ?? (meta as Record<string, unknown>).isbn10 as string ?? '', incoming: selected.isbn ?? '' },
+      { key: 'asin',        label: 'ASIN',        type: 'mono',     current: '',                                           incoming: selected.asin ?? '' },
+      { key: 'description', label: 'Description', type: 'longtext', current: meta.description ?? '',                       incoming: selected.description ?? '' },
+    ];
+    return raw.map(f => ({ ...f, status: fieldStatus(f) }));
+  }, [selected, item]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const changedFields = useMemo(() => fields.filter(f => f.status !== 'same'), [fields]);
+  const sameFields    = useMemo(() => fields.filter(f => f.status === 'same'),  [fields]);
+
+  // Initialize base whenever a new result is selected (fields recomputes).
+  useEffect(() => {
+    if (fields.length === 0) return;
+    setBase(Object.fromEntries(changedFields.map(f => [f.key, 'incoming' as const])));
+    setEdits({});
+    setEditingKey(null);
+  }, [fields]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Option B helpers ──────────────────────────────────────────────────────
+  const resolve = (f: MatchField): unknown => {
+    if (edits[f.key] !== undefined) return edits[f.key];
+    if (f.status === 'same') return f.current;
+    return base[f.key] === 'incoming' ? f.incoming : f.current;
+  };
+  const isEdited  = (f: MatchField) => edits[f.key] !== undefined && normVal(edits[f.key]) !== normVal(f.incoming);
+  const isApplied = (f: MatchField) => normVal(resolve(f)) !== normVal(f.current);
+
+  const toggle   = (k: string) => setBase(b => ({ ...b, [k]: b[k] === 'incoming' ? 'current' : 'incoming' }));
+  const saveEdit = (k: string, v: unknown) => { setEdits(e => ({ ...e, [k]: v })); setEditingKey(null); };
+  const revert   = (k: string) => setEdits(e => { const n = { ...e }; delete n[k]; return n; });
+
+  const visible      = onlyChanges ? changedFields : fields;
+  const appliedCount = fields.filter(isApplied).length;
+  const editedCount  = fields.filter(isEdited).length;
+  const allOn        = changedFields.length > 0 && changedFields.every(f => base[f.key] === 'incoming' && edits[f.key] === undefined);
+
+  const acceptAll = () => {
+    if (allOn) {
+      setBase(Object.fromEntries(changedFields.map(f => [f.key, 'current' as const])));
+    } else {
+      setBase(Object.fromEntries(changedFields.map(f => [f.key, 'incoming' as const])));
+      setEdits({}); setEditingKey(null);
+    }
+  };
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSearch = useCallback(async () => {
-    setSearching(true);
-    setSearchErr(null);
+    setSearching(true); setSearchErr(null);
     try {
       const raw = await searchBooks(serverUrl, queryTitle, queryAuthor, provider);
       const arr = Array.isArray(raw)
@@ -129,72 +546,39 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
 
   const handleSelect = useCallback((result: SearchResult) => {
     setSelected(result);
-
-    const cur = item.media.metadata;
-    const curAuthor = bookAuthor(item);
-    const differs = (nv: string, cv: string) => !!nv && nv !== cv;
-
-    const seriesObj = Array.isArray(result.series) ? result.series[0] : null;
-    const seriesName = seriesObj?.name ?? (typeof result.series === 'string' ? result.series : '');
-    const seriesSequence = seriesObj?.sequence ?? '';
-
-    const ev: Record<string, string> = {
-      title:          result.title         ?? '',
-      subtitle:       result.subtitle      ?? '',
-      author:         result.author        ?? '',
-      narrator:       result.narrator      ?? '',
-      publisher:      result.publisher     ?? '',
-      year:           result.publishedYear ?? '',
-      seriesName,
-      seriesSequence,
-      genres:         (result.genres ?? []).join(', '),
-      tags:           (result.tags   ?? []).join(', '),
-      language:       result.language      ?? '',
-      isbn:           result.isbn          ?? '',
-      asin:           result.asin          ?? '',
-      description:    result.description  ?? '',
-    };
-    setEditedValues(ev);
-
-    setChecked({
-      cover:       !!(result.cover),
-      title:       differs(ev.title,       cur.title          ?? ''),
-      subtitle:    differs(ev.subtitle,    cur.subtitle       ?? ''),
-      author:      differs(ev.author,      curAuthor),
-      narrator:    differs(ev.narrator,    cur.narratorName   ?? ''),
-      publisher:   differs(ev.publisher,   cur.publisher      ?? ''),
-      year:        differs(ev.year,        cur.publishedYear  ?? ''),
-      series:      differs(ev.seriesName,  cur.seriesName     ?? '') || !!ev.seriesSequence,
-      genres:      !!(result.genres?.length),
-      tags:        !!(result.tags?.length),
-      language:    differs(ev.language,    cur.language       ?? ''),
-      isbn:        differs(ev.isbn,        cur.isbn13 ?? cur.isbn10 ?? cur.isbn ?? ''),
-      asin:        !!(result.asin),
-      description: differs(ev.description, cur.description    ?? ''),
-    });
-
+    setOnlyChanges(true);
     setScreen('review');
-  }, [item]);
+    // base/edits reset handled by the useEffect on [fields]
+  }, []);
 
   const handleSubmit = useCallback(async () => {
     if (!selected) return;
     setSubmitting(true);
     try {
       const metadata: Record<string, unknown> = {};
-      if (checked.title)       metadata.title         = editedValues.title;
-      if (checked.subtitle)    metadata.subtitle      = editedValues.subtitle;
-      if (checked.author)      metadata.authors       = editedValues.author.split(',').map(n => ({ name: n.trim() })).filter(o => o.name);
-      if (checked.narrator)    metadata.narrators     = editedValues.narrator.split(',').map(n => n.trim()).filter(Boolean);
-      if (checked.publisher)   metadata.publisher     = editedValues.publisher;
-      if (checked.year)        metadata.publishedYear = editedValues.year;
-      if (checked.series)      metadata.series        = [{ name: editedValues.seriesName, sequence: editedValues.seriesSequence }];
-      if (checked.genres)      metadata.genres        = editedValues.genres.split(',').map(g => g.trim()).filter(Boolean);
-      if (checked.tags)        metadata.tags          = editedValues.tags.split(',').map(t => t.trim()).filter(Boolean);
-      if (checked.language)    metadata.language      = editedValues.language;
-      if (checked.isbn)        metadata.isbn          = editedValues.isbn;
-      if (checked.asin)        metadata.asin          = editedValues.asin;
-      if (checked.description) metadata.description   = editedValues.description;
-
+      for (const f of fields) {
+        if (f.key === 'cover') continue; // cover update requires separate endpoint
+        if (!isApplied(f)) continue;
+        const val = resolve(f);
+        switch (f.key) {
+          case 'title':       metadata.title         = val; break;
+          case 'subtitle':    metadata.subtitle      = val; break;
+          case 'author':      metadata.authors       = String(val).split(',').map(n => ({ name: n.trim() })).filter(o => o.name); break;
+          case 'narrator':    metadata.narrators     = String(val).split(',').map(n => n.trim()).filter(Boolean); break;
+          case 'publisher':   metadata.publisher     = val; break;
+          case 'year':        metadata.publishedYear = val; break;
+          case 'series': {
+            const { name, sequence } = splitSeries(String(val));
+            metadata.series = [{ name, sequence }]; break;
+          }
+          case 'genres':      metadata.genres        = Array.isArray(val) ? val : String(val).split(',').map(g => g.trim()).filter(Boolean); break;
+          case 'tags':        metadata.tags          = Array.isArray(val) ? val : String(val).split(',').map(t => t.trim()).filter(Boolean); break;
+          case 'language':    metadata.language      = val; break;
+          case 'isbn':        metadata.isbn          = val; break;
+          case 'asin':        metadata.asin          = val; break;
+          case 'description': metadata.description   = val; break;
+        }
+      }
       await updateMedia(serverUrl, item.id, metadata);
       const updated = await fetchItem(serverUrl, item.id);
       onComplete(updated);
@@ -204,24 +588,23 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
     } finally {
       setSubmitting(false);
     }
-  }, [serverUrl, item.id, selected, checked, editedValues, onComplete, onRefresh]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverUrl, item.id, selected, fields, base, edits, onComplete, onRefresh]);
 
-  const toggleCheck = (key: string) => setChecked(c => ({ ...c, [key]: !c[key] }));
-  const setField = (key: string, v: string) => setEditedValues(c => ({ ...c, [key]: v }));
-
-  const inputStyle: React.CSSProperties = {
+  // ── Style constants ───────────────────────────────────────────────────────
+  const inputStyle: CSSProperties = {
     padding: '8px 12px', background: 'rgba(0,0,0,0.35)', borderRadius: 8,
     color: 'var(--onyx-text)', border: '1px solid var(--onyx-glass-edge)',
     outline: 'none', fontFamily: 'inherit', fontSize: 13,
   };
-  const labelStyle: React.CSSProperties = {
+  const labelStyle: CSSProperties = {
     fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: 'var(--onyx-text-mute)',
-    marginBottom: 5,
+    textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginBottom: 5,
   };
 
   const providerLabel = PROVIDERS.find(p => p.value === provider)?.label ?? provider;
 
+  // ── Modal JSX ─────────────────────────────────────────────────────────────
   const modal = (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -238,27 +621,17 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
         display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
 
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <div style={{ padding: '18px 24px 16px', borderBottom: '1px solid var(--onyx-line)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          {screen === 'review' && (
-            <button onClick={() => setScreen('search')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-text-dim)', padding: '4px 8px 4px 0', fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-              ← Back
-            </button>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500 }}>
-              {screen === 'search' ? 'Match Book' : 'Review Changes'}
+        {/* ── Search screen header (only when in search mode) ─────────── */}
+        {screen === 'search' && (
+          <div style={{ padding: '18px 24px 16px', borderBottom: '1px solid var(--onyx-line)', display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500 }}>Match Book</div>
             </div>
-            {screen === 'review' && (
-              <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em', marginTop: 2 }}>
-                via {providerLabel}
-              </div>
-            )}
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-text-mute)', fontSize: 18, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-text-mute)', fontSize: 18, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
-        </div>
+        )}
 
-        {/* ── Search screen ──────────────────────────────────────── */}
+        {/* ── Search screen ──────────────────────────────────────────────── */}
         {screen === 'search' && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid var(--onyx-line)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', flexShrink: 0 }}>
@@ -314,57 +687,127 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
           </div>
         )}
 
-        {/* ── Review screen ──────────────────────────────────────── */}
+        {/* ── Review screen — Option B side-by-side diff ─────────────────── */}
         {screen === 'review' && selected && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {/* Column header */}
-            <div style={{ display: 'grid', gridTemplateColumns: '32px 96px 1fr', padding: '8px 24px 6px 16px', borderBottom: '1px solid var(--onyx-line)', flexShrink: 0 }}>
-              <div />
-              <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>Field</div>
-              <div style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-accent)' }}>New Value</div>
+
+            {/* Header */}
+            <div style={{ position: 'relative', padding: '16px 18px 0', borderBottom: `1px solid ${MX.line}`, flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, paddingBottom: 14 }}>
+                {/* Back */}
+                <button onClick={() => setScreen('search')} title="Back to search"
+                  style={{ background: 'none', border: 'none', color: MX.textDim, cursor: 'pointer', padding: 4, marginLeft: -4, display: 'flex', flexShrink: 0 }}>
+                  <Glyph name="back" size={17} />
+                </button>
+                {/* Title block */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 600, lineHeight: 1.1 }}>Review Match</div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: MX.textMute, marginTop: 5, letterSpacing: '0.04em' }}>
+                    {providerLabel}
+                    {selected.confidence != null && ` · ${Math.round(selected.confidence * 100)}% match`}
+                    {` · ${changedFields.length} differ · edit any field`}
+                  </div>
+                </div>
+                {/* Segmented filter */}
+                <div style={{ display: 'flex', background: 'rgba(0,0,0,0.3)', borderRadius: 8, padding: 3, border: `1px solid ${MX.line}`, flexShrink: 0 }}>
+                  {(['Changes', 'All fields'] as const).map((lbl, idx) => {
+                    const v = idx === 0;
+                    return (
+                      <button key={lbl} onClick={() => setOnlyChanges(v)} style={{
+                        padding: '5px 11px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                        fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.05em', textTransform: 'uppercase' as const,
+                        background: onlyChanges === v ? MX.accentDim : 'transparent',
+                        color: onlyChanges === v ? MX.accent : MX.textMute, transition: 'all .12s',
+                      }}>{lbl}</button>
+                    );
+                  })}
+                </div>
+                {/* Close */}
+                <button onClick={onClose} title="Close"
+                  style={{ background: 'none', border: 'none', color: MX.textDim, cursor: 'pointer', padding: 4, marginRight: -4, display: 'flex', flexShrink: 0 }}>
+                  <Glyph name="close" size={16} />
+                </button>
+              </div>
+              {/* Column heads */}
+              <div style={{ display: 'grid', gridTemplateColumns: '78px 1fr 38px 1fr', alignItems: 'center' }}>
+                <span />
+                <span style={{ padding: '8px 14px', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', color: MX.textMute }}>CURRENT</span>
+                <span />
+                <span style={{ padding: '8px 16px', fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', color: MX.accent, display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Glyph name="sparkle" size={9} color={MX.accent} />RESULT
+                  <span style={{ color: MX.textMute, letterSpacing: '0.04em' }}>· editable</span>
+                </span>
+              </div>
             </div>
 
+            {/* Rows */}
             <div style={{ flex: 1, overflowY: 'auto' }}>
-              {/* Cover */}
-              {selected.cover && (
-                <CoverRow label="Cover" checked={!!checked.cover} onToggle={() => toggleCheck('cover')}
-                  cover={selected.cover} item={item} serverUrl={serverUrl}
+              {visible.map(f => (
+                <CompareRow
+                  key={f.key} field={f}
+                  base={base[f.key] as 'incoming' | 'current' | undefined}
+                  resolved={resolve(f)} edited={isEdited(f)} applied={isApplied(f)}
+                  editing={editingKey === f.key}
+                  onToggle={() => toggle(f.key)}
+                  onStartEdit={() => setEditingKey(f.key)}
+                  onSaveEdit={v => saveEdit(f.key, v)}
+                  onCancelEdit={() => setEditingKey(null)}
+                  onRevert={() => revert(f.key)}
+                  coverItem={item} coverServerUrl={serverUrl}
                 />
+              ))}
+              {/* "N more match" footer strip — only in Changes mode */}
+              {onlyChanges && sameFields.length > 0 && (
+                <div style={{ padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Glyph name="check" size={12} color={MX.textMute} />
+                  <span style={{ fontFamily: MONO, fontSize: 10, color: MX.textMute, letterSpacing: '0.05em' }}>
+                    {sameFields.length} more field{sameFields.length === 1 ? '' : 's'} already match
+                  </span>
+                  <button onClick={() => setOnlyChanges(false)} style={{
+                    background: 'none', border: 'none', color: MX.accent, cursor: 'pointer',
+                    fontFamily: MONO, fontSize: 10, letterSpacing: '0.05em', padding: 0,
+                  }}>show all</button>
+                </div>
               )}
-              <EditableField label="Title"       checked={!!checked.title}       onToggle={() => toggleCheck('title')}       value={editedValues.title       ?? ''} onChange={v => setField('title',       v)} />
-              <EditableField label="Subtitle"    checked={!!checked.subtitle}    onToggle={() => toggleCheck('subtitle')}    value={editedValues.subtitle    ?? ''} onChange={v => setField('subtitle',    v)} />
-              <EditableField label="Author"      checked={!!checked.author}      onToggle={() => toggleCheck('author')}      value={editedValues.author      ?? ''} onChange={v => setField('author',      v)} />
-              <EditableField label="Narrator"    checked={!!checked.narrator}    onToggle={() => toggleCheck('narrator')}    value={editedValues.narrator    ?? ''} onChange={v => setField('narrator',    v)} />
-              <EditableField label="Publisher"   checked={!!checked.publisher}   onToggle={() => toggleCheck('publisher')}   value={editedValues.publisher   ?? ''} onChange={v => setField('publisher',   v)} />
-              <EditableField label="Year"        checked={!!checked.year}        onToggle={() => toggleCheck('year')}        value={editedValues.year        ?? ''} onChange={v => setField('year',        v)} />
-              <SeriesAutocompleteField
-                label="Series" checked={!!checked.series} onToggle={() => toggleCheck('series')}
-                value={editedValues.seriesName ?? ''} onChange={v => setField('seriesName', v)}
-                options={seriesOptions}
-              />
-              <EditableField label="Vol."        checked={!!checked.series}      onToggle={() => toggleCheck('series')}      value={editedValues.seriesSequence ?? ''} onChange={v => setField('seriesSequence', v)} />
-              <PillTagField
-                label="Genres" checked={!!checked.genres} onToggle={() => toggleCheck('genres')}
-                value={editedValues.genres ?? ''} onChange={v => setField('genres', v)}
-                options={genreOptions}
-              />
-              <PillTagField
-                label="Tags" checked={!!checked.tags} onToggle={() => toggleCheck('tags')}
-                value={editedValues.tags ?? ''} onChange={v => setField('tags', v)}
-                options={tagOptions}
-              />
-              <EditableField label="Language"    checked={!!checked.language}    onToggle={() => toggleCheck('language')}    value={editedValues.language    ?? ''} onChange={v => setField('language',    v)} />
-              <EditableField label="ISBN"        checked={!!checked.isbn}        onToggle={() => toggleCheck('isbn')}        value={editedValues.isbn        ?? ''} onChange={v => setField('isbn',        v)} />
-              {selected.asin && <EditableField label="ASIN" checked={!!checked.asin} onToggle={() => toggleCheck('asin')} value={editedValues.asin ?? ''} onChange={v => setField('asin', v)} />}
-              <EditableField label="Description" checked={!!checked.description} onToggle={() => toggleCheck('description')} value={editedValues.description ?? ''} onChange={v => setField('description', v)} multiline />
             </div>
 
-            <div style={{ padding: '16px 24px', borderTop: '1px solid var(--onyx-line)', display: 'flex', justifyContent: 'flex-end', gap: 10, flexShrink: 0 }}>
-              <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: 8, background: 'transparent', border: '1px solid var(--onyx-glass-edge)', color: 'var(--onyx-text-dim)', fontFamily: MONO, fontSize: 11, cursor: 'pointer', letterSpacing: '0.06em' }}>
-                Cancel
-              </button>
-              <button onClick={handleSubmit} disabled={submitting} style={{ padding: '8px 22px', borderRadius: 8, cursor: submitting ? 'default' : 'pointer', background: 'var(--onyx-accent)', border: 'none', color: 'var(--onyx-bg)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.06em', fontWeight: 600, opacity: submitting ? 0.6 : 1 }}>
-                {submitting ? 'Applying…' : 'Apply Selected Fields'}
+            {/* Footer */}
+            <div style={{
+              padding: '12px 18px', borderTop: `1px solid ${MX.line}`,
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: 'rgba(8,8,11,0.6)', flexShrink: 0,
+            }}>
+              {/* Accept all */}
+              <div onClick={acceptAll} style={{
+                display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer',
+                fontFamily: MONO, fontSize: 10, letterSpacing: '0.06em', textTransform: 'uppercase' as const,
+                color: allOn ? MX.accent : MX.textDim,
+              }}>
+                <MatchCheck on={allOn} onClick={() => {}} size={15} /> Accept all
+              </div>
+              <span style={{ flex: 1 }} />
+              {/* Change count */}
+              <span style={{ fontSize: 11.5, color: MX.textMute }}>
+                <strong style={{ color: MX.text, fontWeight: 600 }}>{appliedCount}</strong> change{appliedCount === 1 ? '' : 's'}
+                {editedCount > 0 && <span style={{ color: MX.textMute }}> · {editedCount} edited</span>}
+              </span>
+              {/* Cancel */}
+              <button onClick={onClose} style={{
+                padding: '9px 18px', borderRadius: 8, background: 'transparent',
+                border: `1px solid ${MX.glassEdge}`, color: MX.textDim, cursor: 'pointer',
+                fontFamily: SANS, fontSize: 13,
+              }}>Cancel</button>
+              {/* Apply */}
+              <button onClick={handleSubmit} disabled={submitting || appliedCount === 0} style={{
+                padding: '9px 18px', borderRadius: 8, border: 'none',
+                cursor: (submitting || appliedCount === 0) ? 'default' : 'pointer',
+                background: appliedCount > 0 ? MX.accent : MX.glassStrong,
+                color: appliedCount > 0 ? MX.bg : MX.textMute,
+                fontFamily: SANS, fontSize: 13, fontWeight: 600,
+                display: 'flex', alignItems: 'center', gap: 7,
+              }}>
+                <Glyph name="check" size={14} color={appliedCount > 0 ? MX.bg : MX.textMute} sw={2} />
+                {submitting ? 'Applying…' : `Apply ${appliedCount}`}
               </button>
             </div>
           </div>
@@ -374,235 +817,4 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
   );
 
   return ReactDOM.createPortal(modal, document.body);
-}
-
-// ── Cover row (image-only, no current column) ─────────────────────────────────
-
-function CoverRow({ label, checked, onToggle, cover, item, serverUrl }: {
-  label: string; checked: boolean; onToggle: () => void;
-  cover: string; item: LibraryItem; serverUrl: string;
-}) {
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '32px 96px 1fr',
-      alignItems: 'center', padding: '10px 24px 10px 16px',
-      borderBottom: '1px solid var(--onyx-line)',
-      borderLeft: checked ? '3px solid var(--onyx-accent-edge)' : '3px solid transparent',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} style={{ accentColor: 'var(--onyx-accent)', width: 14, height: 14, cursor: 'pointer' }} />
-      </div>
-      <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <img src={cover} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 4 }} />
-        <span style={{ fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>→</span>
-        <Cover item={item} size={56} serverUrl={serverUrl} />
-      </div>
-    </div>
-  );
-}
-
-// ── Plain editable field (no current column) ──────────────────────────────────
-
-function EditableField({ label, value, onChange, checked, onToggle, multiline }: {
-  label: string;
-  value: string; onChange: (v: string) => void;
-  checked: boolean; onToggle: () => void; multiline?: boolean;
-}) {
-  if (!value) return null;
-
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '32px 96px 1fr',
-      alignItems: multiline ? 'start' : 'center',
-      padding: multiline ? '10px 24px 10px 16px' : '7px 24px 7px 16px',
-      borderBottom: '1px solid var(--onyx-line)',
-      borderLeft: checked ? '3px solid var(--onyx-accent-edge)' : '3px solid transparent',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center', paddingTop: multiline ? 8 : 0 }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} style={{ accentColor: 'var(--onyx-accent)', width: 14, height: 14, cursor: 'pointer' }} />
-      </div>
-      <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)', paddingTop: multiline ? 8 : 0 }}>{label}</div>
-      <div>
-        {multiline ? (
-          <textarea value={value} onChange={e => onChange(e.target.value)} rows={4}
-            style={{ width: '100%', resize: 'vertical', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text)', fontFamily: 'inherit', fontSize: 12, padding: '6px 10px', outline: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
-          />
-        ) : (
-          <input value={value} onChange={e => onChange(e.target.value)}
-            style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text)', fontFamily: 'inherit', fontSize: 12.5, padding: '5px 10px', outline: 'none', boxSizing: 'border-box' }}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Series field with autocomplete dropdown ───────────────────────────────────
-
-function SeriesAutocompleteField({ label, value, onChange, checked, onToggle, options }: {
-  label: string; value: string; onChange: (v: string) => void;
-  checked: boolean; onToggle: () => void; options: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const filtered = useMemo(() =>
-    value.length > 0
-      ? options.filter(o => o.toLowerCase().includes(value.toLowerCase()))
-      : options,
-    [options, value],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '32px 96px 1fr',
-      alignItems: 'center', padding: '7px 24px 7px 16px',
-      borderBottom: '1px solid var(--onyx-line)',
-      borderLeft: checked ? '3px solid var(--onyx-accent-edge)' : '3px solid transparent',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} style={{ accentColor: 'var(--onyx-accent)', width: 14, height: 14, cursor: 'pointer' }} />
-      </div>
-      <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)' }}>{label}</div>
-      <div ref={containerRef} style={{ position: 'relative' }}>
-        <input
-          value={value}
-          onChange={e => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          placeholder="Series name…"
-          style={{ width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text)', fontFamily: 'inherit', fontSize: 12.5, padding: '5px 10px', outline: 'none', boxSizing: 'border-box' }}
-        />
-        {open && filtered.length > 0 && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-line)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 10, maxHeight: 200, overflowY: 'auto' }}>
-            {filtered.map(opt => (
-              <button key={opt}
-                onMouseDown={e => { e.preventDefault(); onChange(opt); setOpen(false); }}
-                style={{ display: 'block', width: '100%', padding: '7px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--onyx-text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── Multi-select pill field for genres and tags ───────────────────────────────
-
-function PillTagField({ label, value, onChange, checked, onToggle, options }: {
-  label: string; value: string; onChange: (v: string) => void;
-  checked: boolean; onToggle: () => void; options: string[];
-}) {
-  const [inputText, setInputText] = useState('');
-  const [open, setOpen] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const pills = useMemo(() =>
-    value.split(',').map(v => v.trim()).filter(Boolean),
-    [value],
-  );
-
-  const filtered = useMemo(() => {
-    const q = inputText.toLowerCase();
-    return options.filter(o =>
-      !pills.includes(o) &&
-      (q.length === 0 || o.toLowerCase().includes(q)),
-    );
-  }, [options, pills, inputText]);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  const addPill = (tag: string) => {
-    const t = tag.trim();
-    if (!t || pills.includes(t)) return;
-    onChange([...pills, t].join(', '));
-    setInputText('');
-    setOpen(false);
-  };
-
-  const removePill = (tag: string) => {
-    onChange(pills.filter(p => p !== tag).join(', '));
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if ((e.key === 'Enter' || e.key === ',') && inputText.trim()) {
-      e.preventDefault();
-      addPill(inputText);
-    } else if (e.key === 'Backspace' && !inputText && pills.length > 0) {
-      removePill(pills[pills.length - 1]);
-    }
-  };
-
-  return (
-    <div style={{
-      display: 'grid', gridTemplateColumns: '32px 96px 1fr',
-      alignItems: 'start', padding: '7px 24px 7px 16px',
-      borderBottom: '1px solid var(--onyx-line)',
-      borderLeft: checked ? '3px solid var(--onyx-accent-edge)' : '3px solid transparent',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 8 }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} style={{ accentColor: 'var(--onyx-accent)', width: 14, height: 14, cursor: 'pointer' }} />
-      </div>
-      <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)', paddingTop: 8 }}>{label}</div>
-      <div ref={containerRef} style={{ position: 'relative' }}>
-        <div
-          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: '4px 6px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, cursor: 'text', minHeight: 34 }}
-          onClick={() => containerRef.current?.querySelector('input')?.focus()}
-        >
-          {pills.map(p => (
-            <span key={p} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: 'var(--onyx-accent-dim)', border: '1px solid var(--onyx-accent-edge)', borderRadius: 999, fontFamily: MONO, fontSize: 10, color: 'var(--onyx-accent)', letterSpacing: '0.04em' }}>
-              {p}
-              <button
-                onMouseDown={e => { e.preventDefault(); removePill(p); }}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-accent)', padding: 0, fontSize: 12, lineHeight: 1, display: 'flex', alignItems: 'center' }}
-              >×</button>
-            </span>
-          ))}
-          <input
-            value={inputText}
-            onChange={e => { setInputText(e.target.value); setOpen(true); }}
-            onFocus={() => setOpen(true)}
-            onKeyDown={handleKeyDown}
-            placeholder={pills.length === 0 ? 'Add tags…' : ''}
-            style={{ flex: 1, minWidth: 80, background: 'none', border: 'none', outline: 'none', color: 'var(--onyx-text)', fontFamily: 'inherit', fontSize: 12.5, padding: '2px 4px' }}
-          />
-        </div>
-        {open && filtered.length > 0 && (
-          <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-line)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.5)', zIndex: 10, maxHeight: 180, overflowY: 'auto' }}>
-            {filtered.map(opt => (
-              <button key={opt}
-                onMouseDown={e => { e.preventDefault(); addPill(opt); }}
-                style={{ display: 'block', width: '100%', padding: '7px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit', fontSize: 12.5, color: 'var(--onyx-text)' }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
 }
