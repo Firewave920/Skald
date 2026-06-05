@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { getAudioDevices, setAudioDevice as setAudioDeviceCmd } from '../../api/abs';
 import type { AudioDevice } from '../../api/abs';
 import Icon from '../Icon';
-import { SectionHead, Row, MONO } from './shared';
+import { SectionHead, Row } from './shared';
+import Dropdown from './Dropdown';
 
 export interface AudioSectionProps {}
 
@@ -24,31 +25,37 @@ export default function AudioSection() {
     setAudioDeviceCmd(id).catch(console.error);
   }
 
+  // The currently selected device — used to label the trigger button.
+  const currentDevice = devices.find(d => d.id === selectedId);
+
   return (
     <div>
       <SectionHead title="Audio" subtitle="Output device and signal-chain preferences." />
 
       <Row label="Output device" hint="Active right now. Pick a different device any time from the toolbar." align="top">
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'stretch', gap: 8, width: '100%' }}>
-          {devices.length === 0 ? (
-            <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', padding: '8px 12px', letterSpacing: '0.06em' }}>
-              Loading devices…
-            </div>
-          ) : devices.map(d => (
-            <button key={d.id} onClick={() => selectDevice(d.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', width: '100%',
-              borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' as const,
-              background: d.id === selectedId ? 'var(--onyx-accent-dim)' : 'var(--onyx-glass)',
-              border: `1px solid ${d.id === selectedId ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
-            }}>
-              <Icon name="headphones" size={14} color={d.id === selectedId ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)'} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 12, color: d.id === selectedId ? 'var(--onyx-accent)' : 'var(--onyx-text)', fontWeight: d.id === selectedId ? 500 : 400 }}>{d.name}</div>
-              </div>
-              {d.id === selectedId && <Icon name="dot" size={10} color="var(--onyx-accent)" />}
-            </button>
-          ))}
-        </div>
+        {devices.length === 0 ? (
+          // Loading state — shown before the Tauri command resolves.
+          <div style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontSize: 11, color: 'var(--onyx-text-mute)', padding: '8px 12px', letterSpacing: '0.06em' }}>
+            Loading devices…
+          </div>
+        ) : (
+          // Popout dropdown — breaks out of the Glass panel's overflow clipping
+          // using position: fixed so the list is never cropped by the settings pane.
+          <Dropdown
+            // Trigger shows the selected device name and a headphones icon.
+            trigger={
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Icon name="headphones" size={13} color="var(--onyx-text-dim)" />
+                <span>{currentDevice?.name ?? 'Select device'}</span>
+              </span>
+            }
+            // Map AudioDevice to the generic DropdownItem shape.
+            items={devices.map(d => ({ id: d.id, name: d.name, sub: d.sub, icon: 'headphones' }))}
+            selected={selectedId}
+            onChange={selectDevice}
+            align="right"
+          />
+        )}
       </Row>
     </div>
   );
