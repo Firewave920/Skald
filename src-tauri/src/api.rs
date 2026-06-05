@@ -120,6 +120,35 @@ impl AbsClient {
         Ok(body.results)
     }
 
+    /// GET /api/libraries/{id}/personalized — returns the continue-listening shelf entities.
+    /// The endpoint returns multiple named shelves; we extract only "continue-listening".
+    pub async fn get_continue_listening(&self, library_id: &str) -> Result<Vec<LibraryItem>, String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/libraries/{library_id}/personalized", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_continue_listening failed: HTTP {}", resp.status()));
+        }
+
+        let shelves: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+        let entities = shelves
+            .as_array()
+            .and_then(|arr| arr.iter().find(|s| s["id"] == "continue-listening"))
+            .and_then(|shelf| shelf["entities"].as_array())
+            .cloned()
+            .unwrap_or_default();
+
+        Ok(entities
+            .into_iter()
+            .filter_map(|v| serde_json::from_value(v).ok())
+            .collect())
+    }
+
     /// GET /api/items/{id}
     pub async fn get_item(&self, item_id: &str) -> Result<LibraryItem, String> {
         let resp = self
