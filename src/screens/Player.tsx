@@ -504,8 +504,26 @@ export default function Player({ st }: PlayerProps) {
           <div style={{ marginTop: 32, textAlign: 'center', position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%' }}>
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 8 }}>{bSeries}</div>
             <div style={{ fontFamily: SERIF, fontSize: 48, fontWeight: 500, lineHeight: 1, letterSpacing: '-0.02em' }}>{bookTitle(b)}</div>
-            <div style={{ marginTop: 10, fontSize: 16, color: 'var(--onyx-text-dim)' }}>by {bookAuthor(b)}</div>
-            <div style={{ marginTop: 2, fontSize: 13, color: 'var(--onyx-text-mute)' }}>narrated by {bookNarrator(b)}</div>
+            <div style={{ marginTop: 10, fontSize: 16, color: 'var(--onyx-text-dim)' }}>
+              by{' '}
+              <span
+                onClick={() => { st.setContextFilter({ kind: 'author', value: bookAuthor(b) }); st.setShelfTab('library'); st.setScreen('library'); }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.textDecorationColor = 'var(--onyx-text-dim)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.textDecorationColor = 'transparent'; }}
+                style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'text-decoration-color 0.15s' }}
+              >{bookAuthor(b)}</span>
+            </div>
+            <div style={{ marginTop: 2, fontSize: 13, color: 'var(--onyx-text-mute)' }}>
+              {bookNarrator(b) && <>
+                narrated by{' '}
+                <span
+                  onClick={() => { st.setContextFilter({ kind: 'narrator', value: bookNarrator(b) }); st.setShelfTab('library'); st.setScreen('library'); }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.textDecorationColor = 'var(--onyx-text-mute)'; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.textDecorationColor = 'transparent'; }}
+                  style={{ cursor: 'pointer', textDecoration: 'underline', textDecorationColor: 'transparent', transition: 'text-decoration-color 0.15s' }}
+                >{bookNarrator(b)}</span>
+              </>}
+            </div>
 
             {/* Synopsis */}
             <div style={{ marginTop: 24, width: '100%', textAlign: 'left', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
