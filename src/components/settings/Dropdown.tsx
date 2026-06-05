@@ -103,9 +103,9 @@ export default function Dropdown({ trigger, items, selected, onChange, align = '
   }
 
   return (
-    // The outer div is just an inline anchor; the popout itself is fixed so
-    // it escapes whatever overflow context this ancestor might be in.
-    <div style={{ display: 'inline-block', position: 'relative' }}>
+    // Inline wrapper — no positioning applied here. The popout uses position: fixed
+    // with viewport coordinates so it does not anchor to this element at all.
+    <div style={{ display: 'inline-block' }}>
       {/* Trigger button — toggles the popout */}
       <button
         ref={triggerRef}
