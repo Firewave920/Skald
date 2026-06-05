@@ -6,7 +6,6 @@
 
 - The in focus view should always lead to the currently playing book's view
 
-* The series view is broken*
 
 
 
