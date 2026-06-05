@@ -25,12 +25,23 @@ export interface AuthorObject {
 // Mirrors the AuthorField untagged enum: string | object | array of objects.
 export type AuthorField = string | AuthorObject | AuthorObject[];
 
+// ABS series object — present on full responses; may be a single object or an array.
+export interface SeriesObject {
+  id: string;
+  name: string;
+  // Volume/sequence — may be a number, a decimal string ("1.5"), or absent.
+  sequence?: string | number | null;
+}
+
 export interface BookMetadata {
   title: string | null;
   subtitle: string | null;
   authorName: AuthorField | null;
   narratorName: string | null;
   seriesName: string | null;
+  // Full series object(s) — present on expanded API responses (single item fetch, personalized shelf, etc.)
+  // Use this in preference to seriesName for correct name extraction.
+  series?: SeriesObject | SeriesObject[] | null;
   genres: string[];
   description?: string | null;
   publisher?: string | null;

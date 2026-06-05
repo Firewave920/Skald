@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
-import type { OnyxState } from '../../state/onyx';
+import type { OnyxState, LibraryItem } from '../../state/onyx';
 import {
   bookTitle, bookAuthor, bookSeries, bookNarrator, bookProgress,
 } from '../../state/onyx';
+import type { SeriesObject } from '../../api/abs';
 import ViewModeToggle from './ViewModeToggle';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
@@ -23,8 +24,33 @@ const FILTER_PILLS = [
   { id: 'finished', l: 'Finished' },
 ];
 
-function seriesNameOf(s: string | undefined) { return (s || '').replace(/#\d+.*$/, '').replace(/\s*·\s*\d+.*$/, '').trim(); }
-function seriesVolOf(s: string | undefined)  { const h = (s || '').match(/#(\d+)/); if (h) return parseInt(h[1], 10); const d = (s || '').match(/·\s*(\d+)/); return d ? parseInt(d[1], 10) : 0; }
+// Extract series name from the full series object (preferred) or fall back to the flat seriesName string.
+// ABS series field may be a single object or an array — handle both shapes.
+function seriesNameOf(b: LibraryItem): string {
+  const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
+  if (s) {
+    const first = Array.isArray(s) ? s[0] : s;
+    if (first?.name) return first.name;
+  }
+  // Fall back to flat seriesName for minified responses that omit the object.
+  return bookSeries(b) ?? '';
+}
+
+function seriesVolOf(b: LibraryItem): number {
+  const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
+  if (s) {
+    const first = Array.isArray(s) ? s[0] : s;
+    const seq = first?.sequence;
+    if (typeof seq === 'number') return seq;
+    if (typeof seq === 'string') return parseFloat(seq) || 0;
+  }
+  // Fall back to parsing the flat seriesName string for legacy responses.
+  const flat = bookSeries(b) ?? '';
+  const h = flat.match(/#(\d+)/);
+  if (h) return parseInt(h[1], 10);
+  const d = flat.match(/·\s*(\d+)/);
+  return d ? parseInt(d[1], 10) : 0;
+}
 
 export interface ShelfHeaderProps {
   st: OnyxState;
@@ -50,7 +76,7 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
   const filtered = st.library.filter(b => {
     if (st.contextFilter) {
       const { kind, value, bookIds } = st.contextFilter;
-      if (kind === 'series'     && seriesNameOf(bookSeries(b)) !== value)       return false;
+      if (kind === 'series'     && seriesNameOf(b) !== value)                   return false;
       if (kind === 'author'     && bookAuthor(b)   !== value)                    return false;
       if (kind === 'narrator'   && bookNarrator(b) !== value)                    return false;
       if (kind === 'collection' && !(bookIds ?? []).includes(b.id))              return false;
@@ -72,7 +98,7 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
   });
 
   if (st.contextFilter?.kind === 'series') {
-    filtered.sort((a, b) => seriesVolOf(bookSeries(a)) - seriesVolOf(bookSeries(b)));
+    filtered.sort((a, b) => seriesVolOf(a) - seriesVolOf(b));
   } else if (st.librarySort === 'title') {
     filtered.sort((a, b) => bookTitle(a).localeCompare(bookTitle(b)));
   } else if (st.librarySort === 'author') {
@@ -86,7 +112,7 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
   const subtitleText = (() => {
     switch (st.shelfTab) {
       case 'series': {
-        const n = new Set(st.library.map(b => seriesNameOf(bookSeries(b))).filter(Boolean)).size;
+        const n = new Set(st.library.map(b => seriesNameOf(b)).filter(Boolean)).size;
         return `${n} series`;
       }
       case 'authors': {
