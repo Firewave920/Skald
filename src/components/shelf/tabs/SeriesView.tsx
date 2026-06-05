@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
 import { groupMatchesFilter } from '../../../lib/shelfFilters';
-import { bookTitle, bookAuthor, bookSeries, bookDurSecs } from '../../../state/onyx';
+import { bookTitle, bookAuthor, bookDurSecs } from '../../../state/onyx';
 import type { SeriesObject, Series } from '../../../api/abs';
 import { getLibrarySeries } from '../../../api/abs';
 import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
@@ -18,29 +18,12 @@ interface SeriesGroup {
   books: LibraryItem[];
 }
 
-// Extract series name from the full series object (preferred) or fall back to flat seriesName.
-function seriesNameOf(b: LibraryItem): string {
-  const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
-  if (s) {
-    const first = Array.isArray(s) ? s[0] : s;
-    if (first?.name) return first.name;
-  }
-  return bookSeries(b) ?? '';
-}
-
+// Series sequence lives at media.metadata.series.sequence as a string (decimals possible).
+// When series is an array, use the first entry.
 function seriesVolOf(b: LibraryItem): number {
   const s = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
-  if (s) {
-    const first = Array.isArray(s) ? s[0] : s;
-    const seq = first?.sequence;
-    if (typeof seq === 'number') return seq;
-    if (typeof seq === 'string') return parseFloat(seq) || 0;
-  }
-  const flat = bookSeries(b) ?? '';
-  const h = flat.match(/#(\d+)/);
-  if (h) return parseInt(h[1], 10);
-  const d = flat.match(/·\s*(\d+)/);
-  return d ? parseInt(d[1], 10) : 0;
+  const first = Array.isArray(s) ? s?.[0] : s;
+  return parseFloat((first?.sequence as string | number | undefined | null) as string ?? '0') || 0;
 }
 
 
@@ -59,23 +42,15 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
       .catch(console.error);
   }, [st.serverUrl, st.currentLibraryId]);
 
-  // For each fetched series, find matching books from the local library by series ID.
-  // Falls back to name matching for books whose series field lacks an ID (minified responses).
-  let seriesList: SeriesGroup[] = fetchedSeries.map(s => {
-    const books = st.library
-      .filter(b => {
-        const bSeries = b.media?.metadata?.series as SeriesObject | SeriesObject[] | null | undefined;
-        if (bSeries) {
-          const arr = Array.isArray(bSeries) ? bSeries : [bSeries];
-          if (arr.some(so => so.id === s.id)) return true;
-        }
-        // Fallback: match by cleaned name if series object/ID is absent (bulk library endpoint).
-        return seriesNameOf(b) === s.name;
-      })
-      .slice()
-      .sort((a, b) => seriesVolOf(a) - seriesVolOf(b));
-    return { id: s.id, name: s.name, books };
-  }).filter(s => s.books.length > 0);
+  // Use the books array returned directly by the series endpoint.
+  // Each series from getLibrarySeries already includes its full books list —
+  // no client-side matching against st.library is needed or correct.
+  let seriesList: SeriesGroup[] = fetchedSeries.map(s => ({
+    id: s.id,
+    name: s.name,
+    // Sort by series sequence so volumes appear in reading order.
+    books: s.books.slice().sort((a, b) => seriesVolOf(a) - seriesVolOf(b)),
+  }));
 
   if (st.search) {
     const q = st.search.toLowerCase();
@@ -94,8 +69,6 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
     st.setShelfTab('library');
     st.setScreen('library');
   };
-
-  console.log('[SeriesView] series count:', seriesList.length, 'first item:', seriesList[0]);
 
   return (
     <BrowseView st={st} title="Series" subtitle={`${seriesList.length} series in your library`} showModeToggle inline={inline}>
