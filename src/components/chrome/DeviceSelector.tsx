@@ -15,8 +15,20 @@ export interface DeviceSelectorProps {
 
 export default function DeviceSelector({ st, compact, style }: DeviceSelectorProps) {
   const [devices, setDevices] = useState<AudioDevice[]>([]);
-  const ref = useRef<HTMLDivElement>(null);
   const mono = "'JetBrains Mono', ui-monospace, monospace";
+
+  // Ref on the outer wrapper — used to detect clicks on the trigger area.
+  const ref = useRef<HTMLDivElement>(null);
+  // Ref on the trigger button — measured with getBoundingClientRect() when the
+  // dropdown opens so the fixed panel can be anchored to the button's position.
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // Ref on the dropdown panel — needed for outside-click detection now that the
+  // panel is fixed-positioned and is no longer a DOM child of the wrapper div.
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // Viewport-relative position for the fixed dropdown panel.
+  // Updated each time the dropdown opens so it tracks any scroll or resize.
+  const [dropPos, setDropPos] = useState<{ top: number; right: number }>({ top: 0, right: 0 });
 
   useEffect(() => {
     getAudioDevices()
@@ -29,10 +41,15 @@ export default function DeviceSelector({ st, compact, style }: DeviceSelectorPro
       .catch(e => console.error('[DeviceSelector] getAudioDevices failed:', e));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Outside-click handler — must check BOTH the trigger wrapper and the dropdown
+  // panel because the panel is now fixed-positioned and not inside ref.current.
   useEffect(() => {
     if (!st.deviceOpen) return;
     const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) st.setDeviceOpen(false);
+      const target = e.target as Node;
+      // Clicks on the trigger wrapper or the floating panel are not "outside".
+      if (ref.current?.contains(target) || panelRef.current?.contains(target)) return;
+      st.setDeviceOpen(false);
     };
     window.addEventListener('mousedown', onDown);
     return () => window.removeEventListener('mousedown', onDown);
@@ -41,10 +58,20 @@ export default function DeviceSelector({ st, compact, style }: DeviceSelectorPro
   const current = devices.find(d => d.id === st.device) ?? devices[0];
 
   return (
-    // Outer style prop allows the parent to constrain width (e.g. maxWidth: 120 in compact slot).
-    <div ref={ref} style={{ position: 'relative', ...style }}>
+    // position: relative removed — the fixed panel uses viewport coordinates
+    // directly, so it does not need a positioned ancestor.
+    <div ref={ref} style={{ ...style }}>
       <button
-        onClick={() => st.setDeviceOpen(!st.deviceOpen)}
+        ref={triggerRef}
+        onClick={() => {
+          // Measure the trigger's viewport rect before opening so the dropdown
+          // panel is positioned flush below the button regardless of scroll.
+          if (!st.deviceOpen && triggerRef.current) {
+            const r = triggerRef.current.getBoundingClientRect();
+            setDropPos({ top: r.bottom + 6, right: window.innerWidth - r.right });
+          }
+          st.setDeviceOpen(!st.deviceOpen);
+        }}
         style={{
           display: 'flex', alignItems: 'center', gap: compact ? 6 : 10,
           padding: compact ? '6px 10px' : '6px 10px 6px 12px',
@@ -74,14 +101,24 @@ export default function DeviceSelector({ st, compact, style }: DeviceSelectorPro
       </button>
 
       {st.deviceOpen && (
-        <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 300,
-          background: 'var(--onyx-panel2)',
-          border: '1px solid var(--onyx-line)',
-          borderRadius: 10,
-          boxShadow: '0 16px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,166,74,0.08)',
-          padding: 6, zIndex: 100,
-        }}>
+        // Fixed positioning with viewport coordinates so the panel escapes any
+        // overflow-clipping ancestor (Glass panels, scrollable containers, etc.).
+        <div
+          ref={panelRef}
+          style={{
+            position: 'fixed',
+            top: dropPos.top,
+            right: dropPos.right,
+            width: 300,
+            background: 'var(--onyx-panel2)',
+            border: '1px solid var(--onyx-line)',
+            borderRadius: 10,
+            boxShadow: '0 16px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(212,166,74,0.08)',
+            padding: 6,
+            // Elevated above all panels, Glass layers, and compact tab strips.
+            zIndex: 9999,
+          }}
+        >
           <div style={{ fontFamily: mono, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.12em', padding: '6px 8px 4px' }}>OUTPUT DEVICE</div>
           {devices.length === 0 ? (
             <div style={{ padding: '8px', fontFamily: mono, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>Loading devices…</div>
