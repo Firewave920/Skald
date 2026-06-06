@@ -50,7 +50,7 @@ export default function AudioSection() {
               </span>
             }
             // Map AudioDevice to the generic DropdownItem shape.
-            items={devices.map(d => ({ id: d.id, name: d.name, sub: d.sub, icon: 'headphones' }))}
+            items={devices.map(d => ({ id: d.id, name: d.name, icon: 'headphones' }))}
             selected={selectedId}
             onChange={selectDevice}
             align="right"

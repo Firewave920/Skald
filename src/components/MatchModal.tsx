@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import type { LibraryItem } from '../state/onyx';
 import { bookAuthor } from '../state/onyx';
-import { searchBooks, updateMedia, fetchItem } from '../api/abs';
+import { searchBooks, updateMedia, fetchItem, getCover } from '../api/abs';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO  = "'JetBrains Mono', ui-monospace, monospace";
@@ -81,10 +81,16 @@ interface MatchField {
   status: FieldStatus;
 }
 
-function seriesStr(s: SearchResult['series']): string {
-  if (!s) return '';
-  if (typeof s === 'string') return s;
-  return s.map(x => [x.name, x.sequence].filter(Boolean).join(' #')).join(', ');
+// Normalise a series value to a display string.
+// Search results use { series, sequence }; library metadata uses { name, sequence }.
+function seriesStr(v: unknown): string {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  const arr = Array.isArray(v) ? v : [v];
+  return arr.map((s: Record<string, string>) => {
+    const name = s.series ?? s.name ?? '';
+    return s.sequence ? `${name} #${s.sequence}` : name;
+  }).join(', ');
 }
 
 // Normalize a value for comparison — arrays joined with null byte, strings trimmed.
@@ -116,7 +122,7 @@ function splitSeries(s: string): { name: string; sequence: string } {
 /* Metadata Match Option B — see design-handoff/metadata_match */
 function Glyph({ name, size = 16, color = 'currentColor', sw = 1.6 }: {
   name: string; size?: number; color?: string; sw?: number;
-}): JSX.Element | null {
+}) {
   const s: CSSProperties = { width: size, height: size, display: 'block', flexShrink: 0 };
   const p = { fill: 'none', stroke: color, strokeWidth: sw, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (name) {
@@ -166,28 +172,6 @@ function MatchCheck({ on, onClick, size = 17, accent = MX.accent }: {
       transition: 'background .12s, border-color .12s',
     }}>
       {on && <Glyph name="check" size={size * 0.62} color={MX.bg} sw={2} />}
-    </button>
-  );
-}
-
-/* Local design tokens for the match review screen — see design-handoff/metadata_match/shared.jsx */
-function Check({ on, onClick, size = 17, accent = MATCH_ONYX.accent }: {
-  on: boolean; onClick: () => void; size?: number; accent?: string;
-}) {
-  return (
-    <button onClick={onClick} aria-pressed={on} style={{
-      width: size, height: size, borderRadius: 4, flexShrink: 0, cursor: 'pointer', padding: 0,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: on ? accent : 'transparent',
-      border: `1.5px solid ${on ? accent : MATCH_ONYX.lineStrong}`,
-      transition: 'background .12s, border-color .12s',
-    }}>
-      {on && (
-        <svg width={size * 0.62} height={size * 0.62} viewBox="0 0 16 16">
-          <path d="M3 8 L7 12 L13 4" fill="none" stroke={MATCH_ONYX.bg} strokeWidth="2.2"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
     </button>
   );
 }
@@ -411,7 +395,7 @@ function ConfBadge({ score }: { score?: number }) {
 export interface MatchModalProps {
   item: LibraryItem;
   serverUrl: string;
-  library: LibraryItem[];
+
   onClose: () => void;
   onComplete: (updatedItem: LibraryItem) => void;
   onRefresh: () => void;
@@ -419,7 +403,7 @@ export interface MatchModalProps {
 
 // ── MatchModal ────────────────────────────────────────────────────────────────
 
-export default function MatchModal({ item, serverUrl, library, onClose, onComplete, onRefresh }: MatchModalProps) {
+export default function MatchModal({ item, serverUrl, onClose, onComplete, onRefresh }: MatchModalProps) {
   const meta = item.media.metadata;
 
   // ── Search screen state ───────────────────────────────────────────────────
@@ -432,34 +416,26 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
   const [selected, setSelected]       = useState<SearchResult | null>(null);
   const [screen, setScreen]           = useState<'search' | 'review'>('search');
   const [submitting, setSubmitting]   = useState(false);
+  const [currentCoverUrl, setCurrentCoverUrl] = useState<string | null>(null);
+
+  // Fetch current item cover as data URL (same pattern as Cover.tsx)
+  useEffect(() => {
+    let cancelled = false;
+    getCover(serverUrl, item.id)
+      .then(bytes => {
+        if (cancelled) return;
+        const binary = new Uint8Array(bytes).reduce((s, b) => s + String.fromCharCode(b), '');
+        setCurrentCoverUrl(`data:image/jpeg;base64,${btoa(binary)}`);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [serverUrl, item.id]);
 
   // ── Option B review state (replaces checked / editedValues) ───────────────
   const [base, setBase]               = useState<Record<string, 'incoming' | 'current'>>({});
   const [edits, setEdits]             = useState<Record<string, unknown>>({});
   const [editingKey, setEditingKey]   = useState<string | null>(null);
   const [onlyChanges, setOnlyChanges] = useState(true);
-
-  // ── Autocomplete options (derived from library) ───────────────────────────
-  const seriesOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const b of library) {
-      const s = b.media.metadata.seriesName;
-      if (s) { const name = s.replace(/\s*[#·]\s*[\d.]+$/, '').trim(); if (name) names.add(name); }
-    }
-    return Array.from(names).sort();
-  }, [library]);
-
-  const genreOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const b of library) for (const g of b.media.metadata.genres ?? []) if (g) names.add(g);
-    return Array.from(names).sort();
-  }, [library]);
-
-  const tagOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const b of library) for (const t of b.media.tags ?? []) if (t) names.add(t);
-    return Array.from(names).sort();
-  }, [library]);
 
   /* Maps live item + search result into Option B field shape */
   const buildFields = (src: SearchResult): MatchField[] => {
@@ -560,6 +536,7 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
     if (!selected) return;
     setSubmitting(true);
     try {
+      /* Builds metadata patch from Option B resolved field values */
       const metadata: Record<string, unknown> = {};
       for (const f of fields) {
         if (f.key === 'cover') continue; // cover update requires separate endpoint
@@ -694,7 +671,7 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
 
         {/* ── Review screen — Option B side-by-side diff ─────────────────── */}
         {screen === 'review' && selected && (
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: MATCH_ONYX.bg }}>
 
             {/* Header */}
             <div style={{ position: 'relative', padding: '16px 18px 0', borderBottom: `1px solid ${MX.line}`, flexShrink: 0 }}>
@@ -706,7 +683,7 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
                 </button>
                 {/* Title block */}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 600, lineHeight: 1.1 }}>Review Match</div>
+                  <div style={{ fontFamily: MATCH_ONYX.serif, fontSize: 19, fontWeight: 600, lineHeight: 1.1 }}>Review Match</div>
                   <div style={{ fontFamily: MONO, fontSize: 10, color: MX.textMute, marginTop: 5, letterSpacing: '0.04em' }}>
                     {providerLabel}
                     {selected.confidence != null && ` · ${Math.round(selected.confidence * 100)}% match`}
@@ -758,6 +735,7 @@ export default function MatchModal({ item, serverUrl, library, onClose, onComple
                   onSaveEdit={v => saveEdit(f.key, v)}
                   onCancelEdit={() => setEditingKey(null)}
                   onRevert={() => revert(f.key)}
+                  currentCoverUrl={currentCoverUrl ?? undefined}
                   incomingCoverUrl={selected.cover}
                 />
               ))}
