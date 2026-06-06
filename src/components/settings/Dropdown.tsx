@@ -5,7 +5,7 @@
 // is anchored correctly regardless of scroll position.
 
 import { useRef, useState, useEffect, type ReactNode } from 'react';
-import Icon from '../Icon';
+import Icon, { type IconName } from '../Icon';
 import { MONO } from './shared';
 
 export interface DropdownItem {
@@ -177,7 +177,7 @@ export default function Dropdown({ trigger, items, selected, onChange, align = '
                 {/* Device icon — only rendered when the item provides one */}
                 {item.icon && (
                   <Icon
-                    name={item.icon}
+                    name={item.icon as IconName}
                     size={14}
                     color={active ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)'}
                   />

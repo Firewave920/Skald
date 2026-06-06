@@ -368,7 +368,6 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <MatchModal
           item={matchItem}
           serverUrl={st.serverUrl}
-          library={st.library}
           onClose={() => setMatchItem(null)}
           onComplete={updated => {
             st.updateLibraryItem(updated);
