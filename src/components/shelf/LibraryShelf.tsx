@@ -450,6 +450,17 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
     });
   }
 
+  // Identity of the current dataset. Changing it remounts the virtualized child
+  // (list/grid prefix included so a view switch also forces a fresh virtualizer).
+  const shelfKey = [
+    st.libraryView,
+    st.filter,
+    st.showFinished,
+    st.contextFilter?.kind ?? '',
+    st.contextFilter?.value ?? '',
+    st.search,
+  ].join('|');
+
   const openBook = (id: string) => {
     if (selectedId === id) {
       st.setScreen('player');
@@ -473,10 +484,17 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         ref={scrollRef}
         style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: st.libraryView === 'list' ? '12px 14px' : '20px 18px' }}
       >
+        {/* Remount the virtualized child whenever the dataset identity changes
+            (filter, context filter, search, hide-finished). The shared flex:1
+            scroll container never changes its own size on a filter toggle, so the
+            virtualizer's ResizeObserver never re-fires and can latch a stale
+            viewport rect — leaving getVirtualItems() empty while getTotalSize()
+            stays tall (empty body + scrollbar). A fresh virtualizer measures the
+            settled layout; this is the same remount the grid/list toggle relies on. */}
         {st.libraryView === 'list' ? (
-          <ShelfList books={shelfBooks} st={st} openBook={openBook} onContextMenu={onContextMenu} scrollRef={scrollRef} />
+          <ShelfList key={shelfKey} books={shelfBooks} st={st} openBook={openBook} onContextMenu={onContextMenu} scrollRef={scrollRef} />
         ) : (
-          <ShelfGrid books={shelfBooks} st={st} coverW={coverW} selectedId={selectedId} openBook={openBook} onContextMenu={onContextMenu} scrollRef={scrollRef} />
+          <ShelfGrid key={shelfKey} books={shelfBooks} st={st} coverW={coverW} selectedId={selectedId} openBook={openBook} onContextMenu={onContextMenu} scrollRef={scrollRef} />
         )}
       </div>
       {contextMenu && (
