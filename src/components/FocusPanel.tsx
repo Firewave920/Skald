@@ -281,6 +281,11 @@ export default function FocusPanel({ st }: FocusPanelProps) {
 
   const openBook = (id: string) => {
     st.setCurrentBookId(id);
+    // Align focusedBookId with the book the panel displays. The Player renders
+    // `focusedBook ?? currentBook`, so without this the player would show a
+    // stale focused book (e.g. one selected in the shelf) rather than the book
+    // shown in this panel.
+    st.setFocusedBookId(id);
     if (id !== st.currentBookId) {
       const b = st.library.find(x => x.id === id);
       if (b) st.setPosition(bookCurrentTime(b, st.mediaProgress));

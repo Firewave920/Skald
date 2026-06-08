@@ -177,7 +177,13 @@
       "Bash(git check-ignore *)",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('src-tauri/tauri.conf.json','utf8'\\)\\); console.log\\('tauri.conf.json: valid JSON'\\)\")",
       "PowerShell(pnpm add @tanstack/react-virtual)",
-      "PowerShell(pnpm exec tsc --noEmit -p tsconfig.json)"
+      "PowerShell(pnpm exec tsc --noEmit -p tsconfig.json)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const d=JSON.parse\\(fs.readFileSync\\('C:/Users/fireb/AppData/Local/Skald/Skald/cache/library_cache.json','utf8'\\)\\);console.log\\('count',d.length\\);const m=d[0].media.metadata;console.log\\('keys',Object.keys\\(m\\)\\);console.log\\('authorName',JSON.stringify\\(m.authorName\\)\\);console.log\\('seriesName',JSON.stringify\\(m.seriesName\\)\\);console.log\\('series',JSON.stringify\\(m.series\\)\\);console.log\\('authors',JSON.stringify\\(m.authors\\)\\);\")",
+      "Bash(node -e ' *)",
+      "Read(//c/Users/fireb/AppData/Local/Skald/Skald/cache/**)",
+      "Read(//c/Users/fireb/AppData/Roaming/**)",
+      "Bash(powershell -NoProfile -Command \"\\(Get-Item 'src-tauri\\\\target\\\\debug\\\\skald.exe'\\).LastWriteTime\")",
+      "Bash(powershell -NoProfile -Command \"Get-Item 'src-tauri\\\\src\\\\api.rs','src-tauri\\\\src\\\\commands.rs','src-tauri\\\\src\\\\lib.rs' | Select-Object Name,LastWriteTime\")"
     ],
     "additionalDirectories": [
       "C:\\Program Files\\VideoLAN\\VLC"
