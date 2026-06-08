@@ -480,13 +480,14 @@ impl AbsClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
-    /// GET /api/search/providers?mediaType=…
-    pub async fn search_providers(&self, media_type: &str) -> Result<serde_json::Value, String> {
+    /// GET /api/search/providers — no query params; returns
+    /// `{ providers: { books: [{value, text}], booksCovers: [...], podcasts: [...] } }`
+    /// (confirmed against SearchController.js getAllProviders)
+    pub async fn search_providers(&self) -> Result<serde_json::Value, String> {
         let resp = self
             .http
             .get(format!("{}/api/search/providers", self.root()))
             .header("Authorization", self.auth_header()?)
-            .query(&[("mediaType", media_type)])
             .send()
             .await
             .map_err(|e| e.to_string())?;
