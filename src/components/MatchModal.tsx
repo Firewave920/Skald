@@ -439,17 +439,20 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
     return () => { cancelled = true; };
   }, [serverUrl, item.id]);
 
-  // Fetch the live provider list from GET /api/search/providers?mediaType=book
-  // (Bearer-authenticated via the existing invoke wrapper). Falls back to a
-  // minimal hardcoded list on failure or an empty response.
+  // Fetch the live provider list from GET /api/search/providers (Bearer-
+  // authenticated via the existing invoke wrapper). The endpoint returns
+  // { providers: { books: [{ value, text }], booksCovers: [...], podcasts: [...] } } —
+  // see SearchController.js getAllProviders. Match is a book-search flow, so we
+  // read the "books" array and map { value, text } to the { id, name } shape used
+  // here. Falls back to a minimal hardcoded list on failure or an empty response.
   useEffect(() => {
     let cancelled = false;
-    searchProviders(serverUrl, 'book')
+    searchProviders(serverUrl)
       .then(raw => {
         if (cancelled) return;
-        const arr = Array.isArray(raw)
-          ? raw as { id: string; name: string }[]
-          : ((raw as Record<string, unknown>)?.providers as { id: string; name: string }[] ?? []);
+        const books = (((raw as Record<string, unknown>)?.providers as Record<string, unknown>)
+          ?.books as { value: string; text: string }[] | undefined) ?? [];
+        const arr = books.map(p => ({ id: p.value, name: p.text }));
         const list = arr.length > 0 ? arr : (() => {
           console.warn('[MatchModal] /api/search/providers returned no providers — using fallback list');
           return FALLBACK_PROVIDERS;
