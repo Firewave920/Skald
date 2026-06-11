@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 use tauri::Emitter; // .emit() on AppHandle is a trait method — must be in scope
 use tokio_util::sync::CancellationToken;
 
-use crate::{api::AbsClient, auth, cover_cache, downloads, models, session::SessionManager, socket};
+use crate::{api::AbsClient, audio, auth, cover_cache, downloads, eq::EqSettings, models, session::SessionManager, socket};
 
 // Close an async file handle and delete the file from disk.
 // On Windows, an open file handle prevents remove_file from succeeding, so the
@@ -1535,5 +1535,107 @@ pub async fn create_playlist_from_collection(
         .with_token(token)
         .create_playlist_from_collection(&collection_id)
         .await
+}
+
+// ── Equalizer commands ────────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_eq_presets() -> Result<Vec<models::EqPreset>, String> {
+    Ok(audio::eq_preset_names()
+        .into_iter()
+        .enumerate()
+        .map(|(i, name)| models::EqPreset { index: i as u32, name })
+        .collect())
+}
+
+#[tauri::command]
+pub fn get_eq_band_frequencies() -> Result<Vec<f32>, String> {
+    Ok(audio::eq_band_frequencies())
+}
+
+#[tauri::command]
+pub fn get_eq_settings() -> Result<EqSettings, String> {
+    Ok(EqSettings::load())
+}
+
+#[tauri::command]
+pub async fn set_eq_enabled(
+    enabled: bool,
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    let mut settings = EqSettings::load();
+    settings.enabled = enabled;
+    if let Some(p) = guard.as_ref() {
+        p.apply_eq_settings(&settings);
+    }
+    settings.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_eq_band(
+    band: u32,
+    gain: f32,
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    let mut settings = EqSettings::load();
+    if (band as usize) < settings.bands.len() {
+        settings.bands[band as usize] = gain;
+        settings.preset_name = None; // manual band adjust → clear preset label
+    }
+    if let Some(p) = guard.as_ref() {
+        p.set_eq_band(band, gain);
+    }
+    settings.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_eq_preamp(
+    gain: f32,
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    let mut settings = EqSettings::load();
+    settings.preamp = gain;
+    if let Some(p) = guard.as_ref() {
+        p.set_eq_preamp(gain);
+    }
+    settings.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn apply_eq_preset(
+    index: u32,
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    let settings = EqSettings::from_preset(index);
+    if let Some(p) = guard.as_ref() {
+        p.apply_eq_settings(&settings);
+    }
+    settings.save();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn reset_eq(
+    state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
+) -> Result<(), String> {
+    let player_arc = Arc::clone(&state.lock().await.player);
+    let guard = player_arc.lock().unwrap();
+    let settings = EqSettings::default();
+    if let Some(p) = guard.as_ref() {
+        p.apply_eq_settings(&settings); // applies zeros + disables (enabled: false)
+    }
+    settings.save();
+    Ok(())
 }
 
