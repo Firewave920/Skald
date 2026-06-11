@@ -59,10 +59,21 @@ impl SessionManager {
 
         // Initialize the audio player on first call (deferred to avoid
         // requiring libvlc.dll on PATH at startup).
-        {
+        let player_newly_created = {
             let mut p = self.player.lock().unwrap();
             if p.is_none() {
                 *p = Some(AudioPlayer::new()?);
+                true
+            } else {
+                false
+            }
+        };
+        // Restore persisted EQ settings outside the mutex so the file I/O and
+        // FFI cost don't extend the same lock that holds Instance::new().
+        if player_newly_created {
+            let guard = self.player.lock().unwrap();
+            if let Some(p) = guard.as_ref() {
+                p.restore_eq();
             }
         }
 
@@ -185,10 +196,19 @@ impl SessionManager {
         self.local_item_id = Some(item_id.to_string());
 
         // Initialize the audio player on first call (deferred init matches start_session).
-        {
+        let player_newly_created = {
             let mut p = self.player.lock().unwrap();
             if p.is_none() {
                 *p = Some(AudioPlayer::new()?);
+                true
+            } else {
+                false
+            }
+        };
+        if player_newly_created {
+            let guard = self.player.lock().unwrap();
+            if let Some(p) = guard.as_ref() {
+                p.restore_eq();
             }
         }
 

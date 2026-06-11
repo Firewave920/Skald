@@ -64,9 +64,7 @@ impl AudioPlayer {
         let media_player = MediaPlayer::new(&instance)
             .ok_or_else(|| "Failed to create LibVLC media player".to_string())?;
         let eq_handle = unsafe { libvlc_audio_equalizer_new() };
-        let player = Self { instance, media_player, eq_handle };
-        player.apply_eq_settings(&EqSettings::load());
-        Ok(player)
+        Ok(Self { instance, media_player, eq_handle })
     }
 
     /// Load media from `url`. The caller must append `?token={jwt}` before
@@ -191,6 +189,13 @@ impl AudioPlayer {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         false
+    }
+
+    /// Re-apply persisted EQ settings to this player. Called once from session.rs
+    /// immediately after the player is first constructed, outside the player mutex,
+    /// so the file I/O and FFI cost don't extend the same lock that holds Instance::new().
+    pub fn restore_eq(&self) {
+        self.apply_eq_settings(&EqSettings::load());
     }
 
     /// Update a single EQ band gain and re-apply the equalizer to the live player.
