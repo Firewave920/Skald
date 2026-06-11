@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, UpdateLibraryPayload, User, UserStats};
+use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, FsDirectory, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, UpdateLibraryPayload, User, UserStats};
 
 #[derive(Clone)]
 pub struct AbsClient {
@@ -1095,6 +1095,26 @@ impl AbsClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
+    /// GET /api/filesystem?path={path} — lists subdirectories on the ABS server at `path`.
+    /// Admin-only; the server returns 403 for non-admin callers.
+    /// Pass "/" to start at the server root.
+    pub async fn get_filesystem(&self, path: &str) -> Result<FsDirectory, String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/filesystem", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .query(&[("path", path)])
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_filesystem failed: HTTP {}", resp.status()));
+        }
+
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
     // ── Library management endpoints (admin only) ────────────────────────────
     // All four endpoints require an admin or root token. Ordinary users will
     // receive HTTP 403 from the ABS server.
@@ -1110,8 +1130,10 @@ impl AbsClient {
             .await
             .map_err(|e| e.to_string())?;
 
-        if !resp.status().is_success() {
-            return Err(format!("create_library failed: HTTP {}", resp.status()));
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("create_library failed: HTTP {status} — {body}"));
         }
 
         resp.json().await.map_err(|e| e.to_string())
@@ -1133,19 +1155,19 @@ impl AbsClient {
             .await
             .map_err(|e| e.to_string())?;
 
-        if !resp.status().is_success() {
-            return Err(format!("update_library failed: HTTP {}", resp.status()));
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            eprintln!("[update_library] HTTP {status} — ABS said: {body}");
+            return Err(format!("update_library failed: HTTP {status} — {body}"));
         }
 
         resp.json().await.map_err(|e| e.to_string())
     }
 
     /// DELETE /api/libraries/{id} — permanently deletes a library and all its items.
-    /// ABS wraps the deleted library in { "library": {...} } on success.
-    pub async fn delete_library(&self, library_id: &str) -> Result<Library, String> {
-        #[derive(serde::Deserialize)]
-        struct Wrapper { library: Library }
-
+    /// ABS response shape varies by version; we only need the success status.
+    pub async fn delete_library(&self, library_id: &str) -> Result<(), String> {
         let resp = self
             .http
             .delete(format!("{}/api/libraries/{library_id}", self.root()))
@@ -1154,12 +1176,13 @@ impl AbsClient {
             .await
             .map_err(|e| e.to_string())?;
 
-        if !resp.status().is_success() {
-            return Err(format!("delete_library failed: HTTP {}", resp.status()));
+        let status = resp.status();
+        if !status.is_success() {
+            let body = resp.text().await.unwrap_or_default();
+            return Err(format!("delete_library failed: HTTP {status} — {body}"));
         }
 
-        let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
-        Ok(body.library)
+        Ok(())
     }
 
     /// POST /api/libraries/{id}/scan — triggers a server-side scan.

@@ -1644,6 +1644,18 @@ pub async fn reset_eq(
 // All five commands require an admin or root token. ABS enforces this server-side
 // and returns HTTP 403 for unauthorized callers.
 
+/// Lists subdirectories on the ABS server at `path` (admin only).
+/// Returns the directory listing so the frontend can build a server-side folder picker.
+#[tauri::command]
+pub async fn browse_server_filesystem(
+    server_url: String,
+    path: String,
+) -> Result<models::FsDirectory, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    AbsClient::new(server_url).with_token(token).get_filesystem(&path).await
+}
+
 /// Returns all libraries with the full expanded shape (folders, settings, timestamps).
 /// Functionally identical to fetch_libraries now that Library carries all fields,
 /// but exposed under a distinct command name so the LibrariesSection can call it
@@ -1684,12 +1696,12 @@ pub async fn update_library(
     AbsClient::new(server_url).with_token(token).update_library(&library_id, &payload).await
 }
 
-/// Permanently deletes a library and all its items. Returns the deleted Library.
+/// Permanently deletes a library and all its items.
 #[tauri::command]
 pub async fn delete_library(
     server_url: String,
     library_id: String,
-) -> Result<models::Library, String> {
+) -> Result<(), String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
     AbsClient::new(server_url).with_token(token).delete_library(&library_id).await

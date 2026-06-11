@@ -262,9 +262,7 @@ export interface ListeningSessionsSectionProps {
 
 export default function ListeningSessionsSection({ st }: ListeningSessionsSectionProps) {
   // Admin gate — drives the user-filter dropdown and the delete button.
-  // st?.user?.type uses optional chaining on st itself to survive HMR transient renders
-  // where st may be undefined before the parent has re-rendered with valid props.
-  const isAdmin = st?.user?.type === 'admin' || st?.user?.type === 'root';
+  const isAdmin = st.isAdmin;
 
   // ── Historical sessions state ───────────────────────────────────────────
   const [sessions, setSessions]           = useState<ListeningSession[]>([]);

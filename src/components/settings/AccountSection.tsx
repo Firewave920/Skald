@@ -339,7 +339,7 @@ export interface AccountSectionProps {
 
 export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
   // Admin check — used to gate the user-list section and the "Add User" button.
-  const isAdmin = st.user?.type === 'admin' || st.user?.type === 'root';
+  const isAdmin = st.isAdmin;
 
   // Profile display values — used in the avatar block for all users.
   const displayName = st.user?.username ?? '';

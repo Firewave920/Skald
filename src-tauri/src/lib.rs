@@ -43,6 +43,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(move |app, shortcut, event| {
@@ -202,6 +203,7 @@ pub fn run() {
             commands::apply_eq_preset,
             commands::reset_eq,
             // Library management (admin/root only — ABS enforces this server-side)
+            commands::browse_server_filesystem,
             commands::get_libraries_full,
             commands::create_library,
             commands::update_library,
