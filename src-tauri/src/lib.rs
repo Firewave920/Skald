@@ -1,6 +1,7 @@
 pub mod models;
 pub mod api;
 pub mod auth;
+pub mod eq;
 pub mod audio;
 pub mod commands;
 pub mod session;
@@ -191,6 +192,15 @@ pub fn run() {
             commands::batch_add_to_playlist,
             commands::batch_remove_from_playlist,
             commands::create_playlist_from_collection,
+            // Equalizer commands
+            commands::get_eq_presets,
+            commands::get_eq_band_frequencies,
+            commands::get_eq_settings,
+            commands::set_eq_enabled,
+            commands::set_eq_band,
+            commands::set_eq_preamp,
+            commands::apply_eq_preset,
+            commands::reset_eq,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -18,6 +18,13 @@ pub struct AudioDevice {
     pub name: String,
 }
 
+/// A named LibVLC built-in EQ preset.
+#[derive(Debug, Serialize)]
+pub struct EqPreset {
+    pub index: u32,
+    pub name: String,
+}
+
 /// Stored server connection — url and auth token.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]

@@ -7,6 +7,7 @@
 use std::ffi::{CStr, CString, c_void};
 use std::os::raw::c_char;
 use vlc::{Instance, Media, MediaPlayer, MediaPlayerAudioEx, State};
+use crate::eq::EqSettings;
 
 // vlc-rs 0.3.0 does not wrap libvlc_media_add_option; call it directly.
 // The symbol is already present in the link graph via the vlc-rs dependency.
@@ -15,6 +16,18 @@ extern "C" {
     fn libvlc_audio_output_device_enum(p_mi: *mut c_void) -> *mut LibVlcAudioOutputDevice;
     fn libvlc_audio_output_device_list_release(p_list: *mut LibVlcAudioOutputDevice);
     fn libvlc_audio_output_device_set(p_mi: *mut c_void, psz_aout: *const c_char, psz_device: *const c_char);
+    fn libvlc_audio_equalizer_new() -> *mut c_void;
+    fn libvlc_audio_equalizer_new_from_preset(index: u32) -> *mut c_void;
+    fn libvlc_audio_equalizer_release(p_equalizer: *mut c_void);
+    fn libvlc_audio_equalizer_set_preamp(p_eq: *mut c_void, f_preamp: f32) -> i32;
+    fn libvlc_audio_equalizer_get_preamp(p_eq: *mut c_void) -> f32;
+    fn libvlc_audio_equalizer_set_amp_at_index(p_eq: *mut c_void, amp: f32, band: u32) -> i32;
+    fn libvlc_audio_equalizer_get_amp_at_index(p_eq: *mut c_void, band: u32) -> f32;
+    fn libvlc_audio_equalizer_get_band_count() -> u32;
+    fn libvlc_audio_equalizer_get_band_frequency(index: u32) -> f32;
+    fn libvlc_audio_equalizer_get_preset_count() -> u32;
+    fn libvlc_audio_equalizer_get_preset_name(index: u32) -> *const c_char;
+    fn libvlc_media_player_set_equalizer(mp: *mut c_void, p_eq: *mut c_void) -> i32;
 }
 
 // Mirror of libvlc_audio_output_device_t (linked list node).
@@ -28,6 +41,7 @@ struct LibVlcAudioOutputDevice {
 pub struct AudioPlayer {
     instance: Instance,
     media_player: MediaPlayer,
+    eq_handle: *mut c_void,
 }
 
 // SAFETY: libvlc is internally thread-safe. The vlc-rs wrappers are thin raw-pointer
@@ -35,13 +49,24 @@ pub struct AudioPlayer {
 unsafe impl Send for AudioPlayer {}
 unsafe impl Sync for AudioPlayer {}
 
+impl Drop for AudioPlayer {
+    fn drop(&mut self) {
+        if !self.eq_handle.is_null() {
+            unsafe { libvlc_audio_equalizer_release(self.eq_handle); }
+        }
+    }
+}
+
 impl AudioPlayer {
     pub fn new() -> Result<Self, String> {
         let instance = Instance::new()
             .ok_or_else(|| "Failed to initialize LibVLC instance".to_string())?;
         let media_player = MediaPlayer::new(&instance)
             .ok_or_else(|| "Failed to create LibVLC media player".to_string())?;
-        Ok(Self { instance, media_player })
+        let eq_handle = unsafe { libvlc_audio_equalizer_new() };
+        let player = Self { instance, media_player, eq_handle };
+        player.apply_eq_settings(&EqSettings::load());
+        Ok(player)
     }
 
     /// Load media from `url`. The caller must append `?token={jwt}` before
@@ -166,5 +191,96 @@ impl AudioPlayer {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
         false
+    }
+
+    /// Update a single EQ band gain and re-apply the equalizer to the live player.
+    pub fn set_eq_band(&self, band: u32, gain: f32) {
+        if self.eq_handle.is_null() { return; }
+        unsafe {
+            libvlc_audio_equalizer_set_amp_at_index(self.eq_handle, gain, band);
+            libvlc_media_player_set_equalizer(self.media_player.raw() as *mut c_void, self.eq_handle);
+        }
+    }
+
+    /// Update the preamp gain and re-apply the equalizer to the live player.
+    pub fn set_eq_preamp(&self, gain: f32) {
+        if self.eq_handle.is_null() { return; }
+        unsafe {
+            libvlc_audio_equalizer_set_preamp(self.eq_handle, gain);
+            libvlc_media_player_set_equalizer(self.media_player.raw() as *mut c_void, self.eq_handle);
+        }
+    }
+
+    /// Bulk-apply an EqSettings struct. Enables or disables the EQ on the live
+    /// player according to `settings.enabled`.
+    pub fn apply_eq_settings(&self, settings: &EqSettings) {
+        if self.eq_handle.is_null() { return; }
+        unsafe {
+            libvlc_audio_equalizer_set_preamp(self.eq_handle, settings.preamp);
+            for (i, &gain) in settings.bands.iter().enumerate() {
+                libvlc_audio_equalizer_set_amp_at_index(self.eq_handle, gain, i as u32);
+            }
+            if settings.enabled {
+                libvlc_media_player_set_equalizer(self.media_player.raw() as *mut c_void, self.eq_handle);
+            } else {
+                libvlc_media_player_set_equalizer(self.media_player.raw() as *mut c_void, std::ptr::null_mut());
+            }
+        }
+    }
+
+    /// Remove the equalizer from the live player (pass NULL to libvlc).
+    pub fn disable_eq(&self) {
+        unsafe {
+            libvlc_media_player_set_equalizer(self.media_player.raw() as *mut c_void, std::ptr::null_mut());
+        }
+    }
+
+    /// Returns the names of all LibVLC built-in presets. Static query — no
+    /// player state needed.
+    pub fn get_preset_names(&self) -> Vec<String> {
+        unsafe {
+            let count = libvlc_audio_equalizer_get_preset_count();
+            (0..count)
+                .filter_map(|i| {
+                    let ptr = libvlc_audio_equalizer_get_preset_name(i);
+                    if ptr.is_null() { None }
+                    else { Some(CStr::from_ptr(ptr).to_string_lossy().into_owned()) }
+                })
+                .collect()
+        }
+    }
+
+    /// Returns the center frequency (Hz) for each EQ band. Static query.
+    pub fn get_band_frequencies(&self) -> Vec<f32> {
+        unsafe {
+            let count = libvlc_audio_equalizer_get_band_count();
+            (0..count)
+                .map(|i| libvlc_audio_equalizer_get_band_frequency(i))
+                .collect()
+        }
+    }
+}
+
+/// Returns the names of all LibVLC built-in presets. Does not require a live player.
+pub fn eq_preset_names() -> Vec<String> {
+    unsafe {
+        let count = libvlc_audio_equalizer_get_preset_count();
+        (0..count)
+            .filter_map(|i| {
+                let ptr = libvlc_audio_equalizer_get_preset_name(i);
+                if ptr.is_null() { None }
+                else { Some(CStr::from_ptr(ptr).to_string_lossy().into_owned()) }
+            })
+            .collect()
+    }
+}
+
+/// Returns the center frequency (Hz) for each EQ band. Does not require a live player.
+pub fn eq_band_frequencies() -> Vec<f32> {
+    unsafe {
+        let count = libvlc_audio_equalizer_get_band_count();
+        (0..count)
+            .map(|i| libvlc_audio_equalizer_get_band_frequency(i))
+            .collect()
     }
 }
