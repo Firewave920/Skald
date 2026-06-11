@@ -216,6 +216,8 @@ export interface OnyxState {
   // Auth
   user: User | null;
   setUser: (user: User | null) => void;
+  // True when the logged-in user is admin or root. Derived from user.type.
+  isAdmin: boolean;
   // Library
   library: LibraryItem[];
   libraryLoading: boolean;
@@ -1031,6 +1033,7 @@ export function useOnyxState(): OnyxState {
     userId, setUserId,
     authToken, setAuthToken,
     user, setUser,
+    isAdmin: user?.type === 'admin' || user?.type === 'root',
     library, libraryLoading, isOffline, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, listeningStats, bookmarks, setBookmarks, currentLibraryId,
     downloads, setDownloads,
     isLocalPlayback, setIsLocalPlayback,

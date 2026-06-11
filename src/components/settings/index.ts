@@ -17,3 +17,5 @@ export { default as IntegrationsSection } from './IntegrationsSection';
 export type { IntegrationsSectionProps } from './IntegrationsSection';
 export { default as SyncSection } from './SyncSection';
 export type { SyncSectionProps } from './SyncSection';
+export { default as LibrariesSection } from './LibrariesSection';
+export type { LibrariesSectionProps } from './LibrariesSection';

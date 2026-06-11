@@ -11,11 +11,76 @@ export interface User {
   type?: string;
 }
 
+export interface LibraryFolder {
+  id: string | null;
+  fullPath: string;
+  libraryId: string | null;
+  addedAt: number | null;
+}
+
+export interface LibrarySettings {
+  coverAspectRatio: number | null;
+  disableWatcher: boolean | null;
+  autoScanCronExpression: string | null;
+  audiobooksOnly: boolean | null;
+  hideSingleBookSeries: boolean | null;
+  onlyShowLaterBooksInContinueSeries: boolean | null;
+  skipMatchingMediaWithAsin: boolean | null;
+  skipMatchingMediaWithIsbn: boolean | null;
+  metadataPrecedence: string[] | null;
+  markAsFinishedPercentComplete: number | null;
+  markAsFinishedTimeRemaining: number | null;
+  podcastSearchRegion: string | null;
+  epubsAllowScriptedContent: boolean | null;
+}
+
 export interface Library {
   id: string;
   name: string;
   mediaType: string;
+  icon: string | null;
+  provider: string | null;
+  displayOrder: number | null;
+  folders: LibraryFolder[];
+  settings: LibrarySettings | null;
+  lastScan: number | null;
+  createdAt: number | null;
+  lastUpdate: number | null;
 }
+
+/** Minimal folder entry used in create/update request bodies — only fullPath is sent. */
+export interface FolderInput {
+  fullPath: string;
+}
+
+/** Request body for updateLibrary — all fields are optional (sparse patch). */
+export interface UpdateLibraryPayload {
+  name?: string;
+  icon?: string;
+  provider?: string;
+  folders?: FolderInput[];
+  settings?: LibrarySettings;
+}
+
+// Valid metadata providers for book libraries (confirmed against ABS SearchController.js).
+export const LIBRARY_PROVIDERS_BOOK = [
+  'google', 'audible', 'audible.uk', 'audible.ca', 'audible.au',
+  'audible.fr', 'audible.de', 'audible.jp', 'audible.it', 'audible.in',
+  'audible.es', 'openlibrary', 'itunes', 'fantlab', 'audiobookcovers',
+] as const;
+export type LibraryProviderBook = typeof LIBRARY_PROVIDERS_BOOK[number];
+
+// Valid metadata providers for podcast libraries.
+export const LIBRARY_PROVIDERS_PODCAST = ['itunes'] as const;
+export type LibraryProviderPodcast = typeof LIBRARY_PROVIDERS_PODCAST[number];
+
+// Valid icon slugs for libraries (ABS built-in icon set).
+export const LIBRARY_ICONS = [
+  'database', 'book', 'audiobook', 'podcast', 'music', 'comic', 'manga',
+  'paper', 'magazine', 'pirate', 'crystal-ball', 'alien', 'astronaut',
+  'cat', 'dog', 'heart', 'star', 'moon',
+] as const;
+export type LibraryIcon = typeof LIBRARY_ICONS[number];
 
 export interface AuthorObject {
   id: string;
@@ -841,5 +906,79 @@ export function createPlaylistFromCollection(
   collectionId: string,
 ): Promise<Playlist> {
   return invoke('create_playlist_from_collection', { serverUrl, collectionId });
+}
+
+// ── Server filesystem browser ──────────────────────────────────────────────────
+
+/** A single directory entry from the server's filesystem. */
+export interface FsEntry {
+  /** Full path on the server, e.g. "/audiobooks" */
+  path: string;
+  dirname: string;
+  level: number;
+}
+
+/** Response from GET /api/filesystem — subdirectories at a given server path. */
+export interface FsDirectory {
+  posix: boolean;
+  directories: FsEntry[];
+}
+
+/** Lists subdirectories on the ABS server at `path`. Pass "/" for the root.
+ *  Admin-only — ABS returns 403 for non-admin callers. */
+export function browseServerFilesystem(serverUrl: string, path: string): Promise<FsDirectory> {
+  return invoke('browse_server_filesystem', { serverUrl, path });
+}
+
+// ── Library management wrappers (admin/root only) ─────────────────────────────
+// ABS enforces admin/root access server-side; calling these as a regular user
+// returns HTTP 403. The frontend admin guard (Phase 7) prevents the UI from
+// rendering these controls at all, but the server check is the authoritative gate.
+
+/** GET /api/libraries — all libraries with the full expanded shape (folders, settings, timestamps). */
+export function getLibrariesFull(serverUrl: string): Promise<Library[]> {
+  return invoke('get_libraries_full', { serverUrl });
+}
+
+/** POST /api/libraries — creates a new library and returns the created Library. */
+export function createLibrary(
+  serverUrl: string,
+  name: string,
+  mediaType: string,
+  folders: FolderInput[],
+  icon?: string | null,
+  provider?: string | null,
+  settings?: LibrarySettings | null,
+): Promise<Library> {
+  return invoke('create_library', {
+    serverUrl,
+    name,
+    mediaType,
+    folders,
+    icon: icon ?? null,
+    provider: provider ?? null,
+    settings: settings ?? null,
+  });
+}
+
+/** PATCH /api/libraries/{id} — partially updates a library; only set fields are sent. */
+export function updateLibrary(
+  serverUrl: string,
+  libraryId: string,
+  payload: UpdateLibraryPayload,
+): Promise<Library> {
+  return invoke('update_library', { serverUrl, libraryId, payload });
+}
+
+/** DELETE /api/libraries/{id} — permanently removes the library and all its items.
+ *  Returns the deleted Library so callers can confirm what was removed. */
+export function deleteLibrary(serverUrl: string, libraryId: string): Promise<void> {
+  return invoke('delete_library', { serverUrl, libraryId });
+}
+
+/** POST /api/libraries/{id}/scan — triggers a server-side scan.
+ *  force=true requests a full rescan; force=false runs incremental. Fire-and-forget. */
+export function scanLibrary(serverUrl: string, libraryId: string, force: boolean): Promise<void> {
+  return invoke('scan_library', { serverUrl, libraryId, force });
 }
 

@@ -94,6 +94,26 @@ pub struct LibrarySeriesResponse {
     pub results: Vec<LibrarySeries>,
 }
 
+/// A single directory entry returned by GET /api/filesystem.
+/// ABS response shape: { path: "/audiobooks", dirname: "audiobooks", level: 0 }
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FsEntry {
+    pub path: String,
+    pub dirname: String,
+    #[serde(default)]
+    pub level: i32,
+}
+
+/// Response from GET /api/filesystem?path={path}.
+/// Top-level has no path/fullPath — only `posix` and `directories`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FsDirectory {
+    #[serde(default)]
+    pub posix: bool,
+    #[serde(default)]
+    pub directories: Vec<FsEntry>,
+}
+
 /// A single folder path attached to a library (response shape).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -107,35 +127,38 @@ pub struct LibraryFolder {
     pub added_at: Option<i64>,
 }
 
-/// Per-library settings block returned by GET /api/libraries and relatives.
+/// Per-library settings block — used for both reading (GET) and writing (POST/PATCH).
+/// All fields are Option so missing keys deserialize as None (reading).
+/// skip_serializing_if ensures None fields are omitted from request bodies (writing)
+/// so ABS never receives null for fields it validates as typed (e.g. coverAspectRatio).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LibrarySettings {
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cover_aspect_ratio: Option<i32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub disable_watcher: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auto_scan_cron_expression: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audiobooks_only: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub hide_single_book_series: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub only_show_later_books_in_continue_series: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_matching_media_with_asin: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skip_matching_media_with_isbn: Option<bool>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata_precedence: Option<Vec<String>>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mark_as_finished_percent_complete: Option<f32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mark_as_finished_time_remaining: Option<f32>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub podcast_search_region: Option<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epubs_allow_scripted_content: Option<bool>,
 }
 

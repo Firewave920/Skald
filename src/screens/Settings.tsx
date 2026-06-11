@@ -11,6 +11,7 @@ import {
   SyncSection,
   AudioSection,
   LibrarySection,
+  LibrariesSection,
   DownloadsSection,
   AppearanceSection,
   KeyboardSection,
@@ -24,9 +25,9 @@ export interface SettingsProps { st: OnyxState; onLogout: () => void; }
 
 type SectionId =
   | 'account' | 'server' | 'playback' | 'sync' | 'audio'
-  | 'library' | 'downloads' | 'appearance' | 'keyboard' | 'about' | 'integrations';
+  | 'library' | 'libraries' | 'downloads' | 'appearance' | 'keyboard' | 'about' | 'integrations';
 
-interface NavSection { id: SectionId; label: string; icon: IconName; }
+interface NavSection { id: SectionId; label: string; icon: IconName; adminOnly?: boolean; }
 
 const NAV: NavSection[] = [
   { id: 'account',    label: 'Account',    icon: 'home'       },
@@ -35,6 +36,7 @@ const NAV: NavSection[] = [
   { id: 'sync',       label: 'Sync',       icon: 'airplay'    },
   { id: 'audio',      label: 'Audio',      icon: 'headphones' },
   { id: 'library',    label: 'Library',    icon: 'grid'       },
+  { id: 'libraries',  label: 'Libraries',  icon: 'list',  adminOnly: true },
   { id: 'downloads',  label: 'Downloads',  icon: 'bookmark'   },
   { id: 'appearance', label: 'Appearance', icon: 'speaker'    },
   { id: 'keyboard',   label: 'Keyboard',   icon: 'kbd'        },
@@ -72,8 +74,8 @@ export default function Settings({ st, onLogout }: SettingsProps) {
       <div style={{ flex: 1, display: 'flex', gap: 24, minHeight: 0 }}>
         {/* Sidebar */}
         <Glass translucent={st.translucent} style={{ width: 260, padding: '20px 14px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-          {/* Nav items */}
-          {NAV.map(s => {
+          {/* Nav items — adminOnly entries are hidden for non-admin users */}
+          {NAV.filter(s => !s.adminOnly || st.isAdmin).map(s => {
             // Build the label — append a count badge for Downloads when books are present.
             // This gives the user an at-a-glance view of how many books are stored offline.
             const downloadCount = s.id === 'downloads' ? st.downloads.length : 0;
@@ -111,6 +113,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           {section === 'sync'       && <SyncSection st={st} />}
           {section === 'audio'      && <AudioSection />}
           {section === 'library'    && <LibrarySection st={st} />}
+          {section === 'libraries'  && st.isAdmin && <LibrariesSection st={st} />}
           {section === 'downloads'  && <DownloadsSection st={st} />}
           {section === 'appearance' && <AppearanceSection st={st} />}
           {section === 'keyboard'      && <KeyboardSection />}
