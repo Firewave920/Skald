@@ -11,6 +11,7 @@ import { SeriesView } from '../components/shelf/tabs';
 import { AuthorsView } from '../components/shelf/tabs';
 import { NarratorsView } from '../components/shelf/tabs';
 import { CollectionsView } from '../components/shelf/tabs';
+import { PlaylistsView } from '../components/shelf/tabs';
 import { prefetchReviews } from '../api/reviewCache';
 
 export interface LibraryProps {
@@ -58,6 +59,7 @@ export default function Library({ st }: LibraryProps) {
         {st.shelfTab === 'authors'     && <AuthorsView     st={st} inline />}
         {st.shelfTab === 'narrators'   && <NarratorsView   st={st} inline />}
         {st.shelfTab === 'collections' && <CollectionsView st={st} inline />}
+        {st.shelfTab === 'playlists'   && <PlaylistsView   st={st} inline />}
       </div>
     </div>
   );
