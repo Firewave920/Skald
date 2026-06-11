@@ -156,6 +156,15 @@ pub fn run() {
             // Local stop-point log — position safety net independent of the server
             commands::record_stop_point,
             commands::get_stop_points,
+            // Playlists — per-user, private (unlike collections which are library-wide)
+            commands::get_playlists,
+            commands::get_playlist,
+            commands::create_playlist,
+            commands::update_playlist,
+            commands::delete_playlist,
+            commands::batch_add_to_playlist,
+            commands::batch_remove_from_playlist,
+            commands::create_playlist_from_collection,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
