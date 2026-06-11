@@ -16,6 +16,7 @@ const TABS = [
   { id: 'authors',     label: 'Authors'     },
   { id: 'narrators',   label: 'Narrators'   },
   { id: 'collections', label: 'Collections' },
+  { id: 'playlists',   label: 'Playlists'   },
 ];
 
 const FILTER_PILLS = [
@@ -107,7 +108,7 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
       }
       if (kind === 'author'     && bookAuthor(b)   !== value)                    return false;
       if (kind === 'narrator'   && bookNarrator(b) !== value)                    return false;
-      if (kind === 'collection' && !(bookIds ?? []).includes(b.id))              return false;
+      if ((kind === 'collection' || kind === 'playlist') && !(bookIds ?? []).includes(b.id)) return false;
     }
     const prog = bookProgress(b, st.mediaProgress);
     if (!st.showFinished && prog >= 0.98 && st.filter !== 'finished') return false;
@@ -155,6 +156,8 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
       }
       case 'collections':
         return 'collections';
+      case 'playlists':
+        return 'playlists';
       default: {
         let t = `${filtered.length} title${filtered.length === 1 ? '' : 's'}`;
         if (st.search) t += ` matching "${st.search}"`;
@@ -214,10 +217,10 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
           }}>
             {TABS
               .filter(t => {
-                // Hide Collections tab when horizontal space is insufficient.
+                // Hide Collections and Playlists tabs when horizontal space is insufficient.
                 // containerWidth measures the full ShelfHeader; 400px leaves enough room
                 // for all other tabs. Adjust threshold after testing if needed.
-                if (t.id === 'collections' && containerWidth <= 400) return false;
+                if ((t.id === 'collections' || t.id === 'playlists') && containerWidth <= 400) return false;
                 return true;
               })
               .map(t => {

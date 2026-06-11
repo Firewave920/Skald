@@ -14,6 +14,7 @@ import ContextMenu from '../ContextMenu';
 import { buildItemContextMenu } from './buildItemContextMenu';
 import MatchModal from '../MatchModal';
 import CollectionPicker from '../CollectionPicker';
+import PlaylistPicker from '../PlaylistPicker';
 import FilesModal from './FilesModal';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
@@ -369,6 +370,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   const [matchItem, setMatchItem] = useState<LibraryItem | null>(null);
   const [collectionItem, setCollectionItem] = useState<LibraryItem | null>(null);
   const [filesItem, setFilesItem] = useState<LibraryItem | null>(null);
+  const [playlistItem, setPlaylistItem] = useState<LibraryItem | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Ref to the inner scroll container — required by the virtualizer, which must
@@ -410,7 +412,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
       // Series filtering is handled by sourceBooks selection above — do not re-filter here.
       if (kind === 'author'     && bookAuthor(b)   !== value)                return false;
       if (kind === 'narrator'   && bookNarrator(b) !== value)                return false;
-      if (kind === 'collection' && !(bookIds ?? []).includes(b.id))          return false;
+      if ((kind === 'collection' || kind === 'playlist') && !(bookIds ?? []).includes(b.id)) return false;
     }
     const prog = bookProgress(b, st.mediaProgress);
     if (!st.showFinished && prog >= 0.98 && st.filter !== 'finished') return false;
@@ -501,7 +503,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem)}
+          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem)}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -522,6 +524,13 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
           item={collectionItem}
           serverUrl={st.serverUrl}
           onClose={() => setCollectionItem(null)}
+        />
+      )}
+      {playlistItem && (
+        <PlaylistPicker
+          item={playlistItem}
+          serverUrl={st.serverUrl}
+          onClose={() => setPlaylistItem(null)}
         />
       )}
       {filesItem && (

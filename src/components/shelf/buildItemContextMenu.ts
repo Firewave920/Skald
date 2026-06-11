@@ -13,6 +13,7 @@ export function buildItemContextMenu(
   setMatchItem?: (item: LibraryItem) => void,
   setCollectionItem?: (item: LibraryItem) => void,
   setFilesItem?: (item: LibraryItem) => void,
+  setPlaylistItem?: (item: LibraryItem) => void,
 ): ContextMenuItem[] {
   const isAdmin = st.user?.type === 'root' || st.user?.type === 'admin';
   // Used to toggle the first menu item between Download and Delete Download.
@@ -114,6 +115,11 @@ export function buildItemContextMenu(
           pendingItems.delete(item.id);
         }
       },
+    },
+    {
+      label: 'Add to Playlist',
+      onClick: () => setPlaylistItem?.(item),
+      disabled: !setPlaylistItem,
     },
     {
       label: 'Remove from Continue Listening',
