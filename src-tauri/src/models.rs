@@ -459,3 +459,49 @@ pub struct ListeningSessionsResponse {
     #[serde(default)]
     pub items_per_page: u32,
 }
+
+/// Minimal item reference used in create/update/batch playlist request bodies.
+/// `episode_id` is omitted from the JSON when None (book playlists have no episode).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistItemInput {
+    pub library_item_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub episode_id: Option<String>,
+}
+
+/// A single item inside a playlist response — book or podcast episode.
+/// `library_item` is populated when the server returns expanded item data.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistItem {
+    pub library_item_id: String,
+    #[serde(default)]
+    pub episode_id: Option<String>,
+    #[serde(default)]
+    pub library_item: Option<LibraryItem>,
+}
+
+/// A user playlist — private to the owning user, unlike collections which are library-wide.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Playlist {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub library_id: String,
+    pub user_id: String,
+    #[serde(default)]
+    pub items: Vec<PlaylistItem>,
+    pub last_update: i64,
+    pub created_at: i64,
+}
+
+/// Wrapper for GET /api/libraries/{id}/playlists response.
+#[derive(Debug, Deserialize)]
+pub struct PlaylistsResponse {
+    pub results: Vec<Playlist>,
+    #[serde(default)]
+    pub total: u32,
+}
