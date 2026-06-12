@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { OnyxState, ServerSettings } from '../../state/onyx';
-import { SectionHead, Row, Toggle, MONO } from './shared';
+import { SectionHead, Row, Toggle, MONO, SERIF } from './shared';
 import {
   updateServerSettings,
   updateSortingPrefixes,
@@ -8,7 +8,12 @@ import {
   LOG_LEVELS,
 } from '../../api/abs';
 
-export interface ServerSettingsSectionProps { st: OnyxState; }
+export interface ServerSettingsSectionProps {
+  st: OnyxState;
+  /** When true, render as a sub-section under the Server panel (a lighter
+   *  divider heading) instead of a standalone panel with its own SectionHead. */
+  embedded?: boolean;
+}
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -46,7 +51,7 @@ function Dropdown<T extends string | number>({
       }}
       style={{
         fontFamily: MONO, fontSize: 11,
-        background: 'var(--onyx-bg2)',
+        background: 'var(--onyx-panel2)',
         color: 'var(--onyx-text)',
         border: '1px solid var(--onyx-glass-edge)',
         borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
@@ -85,7 +90,7 @@ function NumInput({
         }}
         style={{
           fontFamily: MONO, fontSize: 11,
-          background: 'var(--onyx-bg2)',
+          background: 'var(--onyx-panel2)',
           color: 'var(--onyx-text)',
           border: '1px solid var(--onyx-glass-edge)',
           borderRadius: 6, padding: '5px 10px',
@@ -116,7 +121,7 @@ function CronInput({
         placeholder="e.g. 0 * * * *"
         style={{
           fontFamily: MONO, fontSize: 11,
-          background: 'var(--onyx-bg2)',
+          background: 'var(--onyx-panel2)',
           color: 'var(--onyx-text)',
           border: '1px solid var(--onyx-glass-edge)',
           borderRadius: 6, padding: '5px 10px', width: 180,
@@ -190,7 +195,7 @@ function PrefixEditor({
         placeholder="+ add"
         style={{
           fontFamily: MONO, fontSize: 11,
-          background: 'var(--onyx-bg2)',
+          background: 'var(--onyx-panel2)',
           color: 'var(--onyx-text)',
           border: '1px solid var(--onyx-glass-edge)',
           borderRadius: 6, padding: '4px 10px',
@@ -203,7 +208,7 @@ function PrefixEditor({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function ServerSettingsSection({ st }: ServerSettingsSectionProps) {
+export default function ServerSettingsSection({ st, embedded = false }: ServerSettingsSectionProps) {
   // Local copy of settings — mutated optimistically on each toggle/change.
   // Seeded from st.serverSettings, which is captured at login and refreshed on
   // every app launch via POST /api/authorize (ABS has no standalone GET endpoint
@@ -212,6 +217,19 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
 
   // Admin guard — non-admin users should never reach this section
   if (!st.isAdmin) return null;
+
+  // Heading: a standalone SectionHead when used as its own panel, or a lighter
+  // divider sub-heading when embedded under the Server panel.
+  const head = embedded ? (
+    <div style={{ marginTop: 32, paddingTop: 24, borderTop: '1px solid var(--onyx-line)', marginBottom: 8 }}>
+      <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500 }}>Server administration</div>
+      <div style={{ marginTop: 4, fontSize: 12.5, color: 'var(--onyx-text-dim)' }}>
+        Global Audiobookshelf server configuration. Admin only.
+      </div>
+    </div>
+  ) : (
+    <SectionHead title="Server Settings" subtitle="Global Audiobookshelf server configuration. Admin only." />
+  );
 
   // Keep local state in sync if the parent state is updated externally
   // (e.g. a successful PATCH updates st.serverSettings via setServerSettings).
@@ -248,7 +266,7 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
   if (!settings) {
     return (
       <div>
-        <SectionHead title="Server Settings" subtitle="Global Audiobookshelf server configuration." />
+        {head}
         <div style={{
           fontFamily: MONO, fontSize: 11,
           color: 'var(--onyx-text-mute)',
@@ -272,10 +290,7 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
 
   return (
     <div>
-      <SectionHead
-        title="Server Settings"
-        subtitle="Global Audiobookshelf server configuration. Admin only."
-      />
+      {head}
 
       {/* ── Scanner ──────────────────────────────────────────────────────── */}
       <GroupHead label="Scanner" />
