@@ -792,24 +792,49 @@ impl AbsClient {
             .map_err(|e| e.to_string())
     }
 
-    /// PATCH /api/items/{item_id}/media — writes metadata via the object-array structures
-    /// the server reads from (authors, narrators, series), not the computed flat strings.
+    /// PATCH /api/items/{item_id}/media — writes the full media payload. ABS reads
+    /// `metadata` (with object-array authors/narrators/series, not flat strings) and
+    /// top-level siblings like `tags`, so callers pass the whole `{ metadata, tags }`
+    /// object rather than a bare metadata object.
     pub async fn update_media(
         &self,
         item_id: &str,
-        metadata: serde_json::Value,
+        payload: serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         let resp = self
             .http
             .patch(format!("{}/api/items/{item_id}/media", self.root()))
             .header("Authorization", self.auth_header()?)
-            .json(&serde_json::json!({ "metadata": metadata }))
+            .json(&payload)
             .send()
             .await
             .map_err(|e| e.to_string())?;
 
         if !resp.status().is_success() {
             return Err(format!("update_media failed: HTTP {}", resp.status()));
+        }
+
+        resp.json().await.map_err(|e| e.to_string())
+    }
+
+    /// PATCH /api/items/{item_id}/chapters — replace the chapter markers.
+    /// `chapters` is a JSON array of { start, end, title }. Requires canUpdate.
+    pub async fn update_chapters(
+        &self,
+        item_id: &str,
+        chapters: serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let resp = self
+            .http
+            .patch(format!("{}/api/items/{item_id}/chapters", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({ "chapters": chapters }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("update_chapters failed: HTTP {}", resp.status()));
         }
 
         resp.json().await.map_err(|e| e.to_string())

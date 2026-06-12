@@ -130,6 +130,7 @@ pub fn run() {
             commands::set_audio_device,
             commands::delete_progress,
             commands::update_media,
+            commands::update_chapters,
             commands::search_books,
             commands::search_providers,
             commands::get_cache_dir,

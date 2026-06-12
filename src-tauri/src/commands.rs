@@ -611,14 +611,38 @@ pub async fn get_cover(
 pub async fn update_media(
     server_url: String,
     item_id: String,
-    metadata: serde_json::Value,
+    payload: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    println!("[Metadata] update_media item={item_id} keys={:?}", payload.as_object().map(|o| o.keys().collect::<Vec<_>>()));
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
-    AbsClient::new(server_url)
+    let result = AbsClient::new(server_url)
         .with_token(token)
-        .update_media(&item_id, metadata)
-        .await
+        .update_media(&item_id, payload)
+        .await;
+    if let Err(e) = &result { println!("[Metadata] update_media FAILED: {e}"); }
+    result
+}
+
+/// PATCH /api/items/:id/chapters — replace the chapter markers.
+#[tauri::command]
+pub async fn update_chapters(
+    server_url: String,
+    item_id: String,
+    chapters: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    println!("[Metadata] update_chapters item={item_id} count={}", chapters.as_array().map(|a| a.len()).unwrap_or(0));
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    let result = AbsClient::new(server_url)
+        .with_token(token)
+        .update_chapters(&item_id, chapters)
+        .await;
+    match &result {
+        Ok(_) => println!("[Metadata] update_chapters OK"),
+        Err(e) => println!("[Metadata] update_chapters FAILED: {e}"),
+    }
+    result
 }
 
 #[tauri::command]

@@ -575,8 +575,11 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
     if (!selected) return;
     setSubmitting(true);
     try {
-      /* Builds metadata patch from Option B resolved field values */
+      /* Builds metadata patch from Option B resolved field values. Tags live at
+         the top level of the media payload (ABS reads mediaPayload.tags, not
+         metadata.tags), so they're collected separately. */
       const metadata: Record<string, unknown> = {};
+      let tags: string[] | undefined;
       for (const f of fields) {
         if (f.key === 'cover') continue; // cover update requires separate endpoint
         if (!isApplied(f)) continue;
@@ -593,14 +596,14 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
             metadata.series = [{ name, sequence }]; break;
           }
           case 'genres':      metadata.genres        = Array.isArray(val) ? val : String(val).split(',').map(g => g.trim()).filter(Boolean); break;
-          case 'tags':        metadata.tags          = Array.isArray(val) ? val : String(val).split(',').map(t => t.trim()).filter(Boolean); break;
+          case 'tags':        tags                   = Array.isArray(val) ? val : String(val).split(',').map(t => t.trim()).filter(Boolean); break;
           case 'language':    metadata.language      = val; break;
           case 'isbn':        metadata.isbn          = val; break;
           case 'asin':        metadata.asin          = val; break;
           case 'description': metadata.description   = val; break;
         }
       }
-      await updateMedia(serverUrl, item.id, metadata);
+      await updateMedia(serverUrl, item.id, tags ? { metadata, tags } : { metadata });
       const updated = await fetchItem(serverUrl, item.id);
       onComplete(updated);
       onRefresh();

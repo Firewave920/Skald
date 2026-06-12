@@ -389,12 +389,25 @@ export function closeSession(
   return invoke('close_session', { serverUrl, sessionId, currentTime, timeListened });
 }
 
+/** PATCH /api/items/:id/media — writes the full media payload. Pass the whole
+ *  `{ metadata: {…}, tags?: [...] }` object (ABS reads tags at the top level,
+ *  not inside metadata). */
 export function updateMedia(
   serverUrl: string,
   itemId: string,
-  metadata: Record<string, unknown>,
+  payload: Record<string, unknown>,
 ): Promise<unknown> {
-  return invoke('update_media', { serverUrl, itemId, metadata });
+  return invoke('update_media', { serverUrl, itemId, payload });
+}
+
+/** PATCH /api/items/:id/chapters — replace the chapter markers. Each chapter is
+ *  { start, end, title }. Requires the canUpdate permission (admin by default). */
+export function updateChapters(
+  serverUrl: string,
+  itemId: string,
+  chapters: { start: number; end: number; title: string }[],
+): Promise<unknown> {
+  return invoke('update_chapters', { serverUrl, itemId, chapters });
 }
 
 export interface ShortcutBinding {
