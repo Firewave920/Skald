@@ -221,29 +221,23 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
   // ── Per-field update helpers ──────────────────────────────────────────────
 
   async function patch(partial: Partial<ServerSettings>) {
-    console.log('[ServerSettings] patch →', partial);
     try {
       const updated = await updateServerSettings(st.serverUrl, partial);
-      console.log('[ServerSettings] patch ← OK:', updated);
       setSettings(updated);
       st.setServerSettings(updated);
       st.setToast({ message: 'Server setting saved.', type: 'success' });
     } catch (e) {
-      console.error('[ServerSettings] patch failed:', e);
       st.setToast({ message: `Failed to save: ${e}`, type: 'error' });
     }
   }
 
   async function patchPrefixes(prefixes: string[]) {
-    console.log('[ServerSettings] patchPrefixes →', prefixes);
     try {
       const updated = await updateSortingPrefixes(st.serverUrl, prefixes);
-      console.log('[ServerSettings] patchPrefixes ← OK:', updated);
       setSettings(updated);
       st.setServerSettings(updated);
       st.setToast({ message: 'Sort prefixes updated. Re-index triggered on server.', type: 'success' });
     } catch (e) {
-      console.error('[ServerSettings] patchPrefixes failed:', e);
       st.setToast({ message: `Failed to save: ${e}`, type: 'error' });
     }
   }
@@ -292,7 +286,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.scannerFindCovers ?? false}
           onChange={v => {
-            console.log('[ServerSettings] scannerFindCovers toggled →', v);
             setSettings(prev => ({ ...prev, scannerFindCovers: v }));
             patch({ scannerFindCovers: v });
           }}
@@ -304,7 +297,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
           value={s.scannerCoverProvider ?? 'google'}
           options={coverProviderOptions}
           onChange={v => {
-            console.log('[ServerSettings] scannerCoverProvider changed →', v);
             setSettings(prev => ({ ...prev, scannerCoverProvider: v }));
             patch({ scannerCoverProvider: v });
           }}
@@ -318,7 +310,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.scannerParseSubtitle ?? false}
           onChange={v => {
-            console.log('[ServerSettings] scannerParseSubtitle toggled →', v);
             setSettings(prev => ({ ...prev, scannerParseSubtitle: v }));
             patch({ scannerParseSubtitle: v });
           }}
@@ -332,7 +323,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.scannerPreferMatchedMetadata ?? false}
           onChange={v => {
-            console.log('[ServerSettings] scannerPreferMatchedMetadata toggled →', v);
             setSettings(prev => ({ ...prev, scannerPreferMatchedMetadata: v }));
             patch({ scannerPreferMatchedMetadata: v });
           }}
@@ -346,7 +336,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.scannerDisableWatcher ?? false}
           onChange={v => {
-            console.log('[ServerSettings] scannerDisableWatcher toggled →', v);
             setSettings(prev => ({ ...prev, scannerDisableWatcher: v }));
             patch({ scannerDisableWatcher: v });
           }}
@@ -363,7 +352,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.storeCoverWithItem ?? false}
           onChange={v => {
-            console.log('[ServerSettings] storeCoverWithItem toggled →', v);
             setSettings(prev => ({ ...prev, storeCoverWithItem: v }));
             patch({ storeCoverWithItem: v });
           }}
@@ -377,7 +365,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.storeMetadataWithItem ?? false}
           onChange={v => {
-            console.log('[ServerSettings] storeMetadataWithItem toggled →', v);
             setSettings(prev => ({ ...prev, storeMetadataWithItem: v }));
             patch({ storeMetadataWithItem: v });
           }}
@@ -394,7 +381,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.sortingIgnorePrefix ?? false}
           onChange={v => {
-            console.log('[ServerSettings] sortingIgnorePrefix toggled →', v);
             setSettings(prev => ({ ...prev, sortingIgnorePrefix: v }));
             patch({ sortingIgnorePrefix: v });
           }}
@@ -409,7 +395,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <PrefixEditor
           prefixes={prefixes}
           onChange={newPrefixes => {
-            console.log('[ServerSettings] sortingPrefixes changed →', newPrefixes);
             setSettings(prev => ({ ...prev, sortingPrefixes: newPrefixes }));
             patchPrefixes(newPrefixes);
           }}
@@ -427,7 +412,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <CronInput
           value={s.podcastEpisodeSchedule ?? '0 * * * *'}
           onChange={v => {
-            console.log('[ServerSettings] podcastEpisodeSchedule changed →', v);
             setSettings(prev => ({ ...prev, podcastEpisodeSchedule: v }));
             patch({ podcastEpisodeSchedule: v });
           }}
@@ -444,7 +428,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
         <Toggle
           on={s.chromecastEnabled ?? false}
           onChange={v => {
-            console.log('[ServerSettings] chromecastEnabled toggled →', v);
             setSettings(prev => ({ ...prev, chromecastEnabled: v }));
             patch({ chromecastEnabled: v });
           }}
@@ -459,7 +442,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
           value={s.logLevel ?? 1}
           options={logLevelOptions}
           onChange={v => {
-            console.log('[ServerSettings] logLevel changed →', v);
             setSettings(prev => ({ ...prev, logLevel: v }));
             patch({ logLevel: v });
           }}
@@ -473,7 +455,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
           max={90}
           suffix="days"
           onChange={v => {
-            console.log('[ServerSettings] loggerDailyLogsToKeep changed →', v);
             setSettings(prev => ({ ...prev, loggerDailyLogsToKeep: v }));
             patch({ loggerDailyLogsToKeep: v });
           }}
@@ -486,7 +467,6 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
           min={1}
           max={30}
           onChange={v => {
-            console.log('[ServerSettings] loggerScannerLogsToKeep changed →', v);
             setSettings(prev => ({ ...prev, loggerScannerLogsToKeep: v }));
             patch({ loggerScannerLogsToKeep: v });
           }}
