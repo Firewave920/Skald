@@ -35,7 +35,6 @@ export default function LogsSection({ st }: LogsSectionProps) {
       setLogs(data.currentDailyLogs);
       setError(null);
     } catch (e) {
-      console.error('[Logs] seed failed:', e);
       setError(String(e));
     } finally {
       setLoading(false);
@@ -51,7 +50,6 @@ export default function LogsSection({ st }: LogsSectionProps) {
     if (!liveSyncOn) return;
     let unlisten: (() => void) | undefined;
     let active = true;
-    console.log('[Logs] starting live stream at level', minLevel);
     void startLogStream(minLevel);
     listen<string>('server-log', e => {
       try {
