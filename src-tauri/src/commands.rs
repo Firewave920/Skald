@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 use tauri::Emitter; // .emit() on AppHandle is a trait method — must be in scope
 use tokio_util::sync::CancellationToken;
 
-use crate::{api::AbsClient, audio, auth, cover_cache, downloads, eq::EqSettings, models::{self, NotificationSettings, NotificationsResponse, ServerSettings}, session::SessionManager, socket};
+use crate::{api::AbsClient, audio, auth, cover_cache, downloads, eq::EqSettings, models::{self, BackupsResponse, NotificationSettings, NotificationsResponse, ServerSettings}, session::SessionManager, socket};
 
 // Close an async file handle and delete the file from disk.
 // On Windows, an open file handle prevents remove_file from succeeding, so the
@@ -188,6 +188,65 @@ pub async fn fire_test_notification_event(server_url: String) -> Result<(), Stri
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated".to_string())?;
     AbsClient::new(server_url).with_token(token).fire_test_event().await
+}
+
+// ── Backups (admin only) ─────────────────────────────────────────────────────
+// Diagnostic logging is retained for the whole backup roadmap per CLAUDE.md,
+// then stripped in a final cleanup pass once the feature is validated.
+
+/// GET /api/backups — list backups + the backup directory location.
+#[tauri::command]
+pub async fn get_backups(server_url: String) -> Result<BackupsResponse, String> {
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated".to_string())?;
+    let result = AbsClient::new(server_url).with_token(token).get_backups().await;
+    match &result {
+        Ok(r) => println!("[Backups] get_backups OK — {} backup(s), location={}", r.backups.len(), r.backup_location),
+        Err(e) => println!("[Backups] get_backups FAILED: {e}"),
+    }
+    result
+}
+
+/// POST /api/backups — create a backup now.
+#[tauri::command]
+pub async fn create_backup(server_url: String) -> Result<BackupsResponse, String> {
+    println!("[Backups] create_backup requested");
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated".to_string())?;
+    let result = AbsClient::new(server_url).with_token(token).create_backup().await;
+    match &result {
+        Ok(r) => println!("[Backups] create_backup OK — now {} backup(s)", r.backups.len()),
+        Err(e) => println!("[Backups] create_backup FAILED: {e}"),
+    }
+    result
+}
+
+/// DELETE /api/backups/:id — delete a backup.
+#[tauri::command]
+pub async fn delete_backup(server_url: String, id: String) -> Result<BackupsResponse, String> {
+    println!("[Backups] delete_backup id={id}");
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated".to_string())?;
+    let result = AbsClient::new(server_url).with_token(token).delete_backup(&id).await;
+    match &result {
+        Ok(r) => println!("[Backups] delete_backup OK — now {} backup(s)", r.backups.len()),
+        Err(e) => println!("[Backups] delete_backup FAILED: {e}"),
+    }
+    result
+}
+
+/// GET /api/backups/:id/apply — restore from a backup (destructive; restarts ABS).
+#[tauri::command]
+pub async fn apply_backup(server_url: String, id: String) -> Result<(), String> {
+    println!("[Backups] apply_backup (restore) id={id} — server will restart");
+    let token = auth::load_token()?
+        .ok_or_else(|| "Not authenticated".to_string())?;
+    let result = AbsClient::new(server_url).with_token(token).apply_backup(&id).await;
+    match &result {
+        Ok(_) => println!("[Backups] apply_backup accepted — ABS restarting"),
+        Err(e) => println!("[Backups] apply_backup FAILED: {e}"),
+    }
+    result
 }
 
 #[tauri::command]

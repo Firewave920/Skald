@@ -1013,6 +1013,10 @@ export interface ServerSettings {
   logLevel?: number | null;
   loggerDailyLogsToKeep?: number | null;
   loggerScannerLogsToKeep?: number | null;
+  // Backups — backupSchedule is a cron string when enabled, or `false` when off.
+  backupSchedule?: string | boolean | null;
+  backupsToKeep?: number | null;
+  maxBackupSize?: number | null;
 }
 
 // Valid cover providers for the scanner cover-finder feature.
@@ -1145,5 +1149,53 @@ export function testNotification(serverUrl: string, id: string): Promise<void> {
 /** GET /api/notifications/test — fire a synthetic onTest event end-to-end. Admin only. */
 export function fireTestNotificationEvent(serverUrl: string): Promise<void> {
   return invoke('fire_test_notification_event', { serverUrl });
+}
+
+// ── Backups ─────────────────────────────────────────────────────────────────────
+// Mirrors the backup models in src-tauri/src/models.rs. All endpoints are
+// admin-only. ABS backs up its database + metadata (not the audio files).
+
+/** One backup archive on the server. */
+export interface Backup {
+  id: string;
+  key?: string | null;
+  datePretty: string;
+  backupDirPath: string;
+  filename: string;
+  path: string;
+  fullPath: string;
+  /** Archive size in bytes. */
+  fileSize: number;
+  /** Creation time, ms since epoch. */
+  createdAt: number;
+  serverVersion?: string | null;
+}
+
+/** Response of GET /api/backups. */
+export interface BackupsResponse {
+  backups: Backup[];
+  backupLocation: string;
+  backupPathEnvSet: boolean;
+}
+
+/** GET /api/backups — list backups + location. Admin only. */
+export function getBackups(serverUrl: string): Promise<BackupsResponse> {
+  return invoke('get_backups', { serverUrl });
+}
+
+/** POST /api/backups — create a backup now; returns the updated list. Admin only. */
+export function createBackup(serverUrl: string): Promise<BackupsResponse> {
+  return invoke('create_backup', { serverUrl });
+}
+
+/** DELETE /api/backups/:id — delete a backup; returns the updated list. Admin only. */
+export function deleteBackup(serverUrl: string, id: string): Promise<BackupsResponse> {
+  return invoke('delete_backup', { serverUrl, id });
+}
+
+/** GET /api/backups/:id/apply — restore from a backup. DESTRUCTIVE: overwrites the
+ *  server database and restarts ABS, so the connection will drop. Admin only. */
+export function applyBackup(serverUrl: string, id: string): Promise<void> {
+  return invoke('apply_backup', { serverUrl, id });
 }
 

@@ -632,6 +632,16 @@ pub struct ServerSettings {
     pub logger_daily_logs_to_keep: Option<i32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub logger_scanner_logs_to_keep: Option<i32>,
+    // ── Backups ──────────────────────────────────────────────────────────────
+    // backupSchedule is a cron string when enabled, or boolean `false` when
+    // disabled — hence Value rather than String. backupsToKeep is a count;
+    // maxBackupSize is in GB (may be fractional, so f64).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backup_schedule: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backups_to_keep: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_backup_size: Option<f64>,
 }
 
 /// Minimal item reference used in create/update/batch playlist request bodies.
@@ -799,4 +809,52 @@ pub struct NotificationsResponse {
 pub struct NotificationData {
     #[serde(default)]
     pub events: Vec<NotificationEventData>,
+}
+
+// ── Backups ──────────────────────────────────────────────────────────────────
+// ABS snapshots its database + metadata (NOT the audio files) into
+// `.audiobookshelf` archives. Shapes verified against server/objects/Backup.js
+// and BackupController.getAll. All backup endpoints are admin-only.
+
+/// One backup archive on the server.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Backup {
+    pub id: String,
+    /// "sqlite" for current backups, null for legacy ones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
+    #[serde(default)]
+    pub date_pretty: String,
+    #[serde(default)]
+    pub backup_dir_path: String,
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub path: String,
+    #[serde(default)]
+    pub full_path: String,
+    /// Archive size in bytes.
+    #[serde(default)]
+    pub file_size: i64,
+    /// Creation time, ms since epoch.
+    #[serde(default)]
+    pub created_at: i64,
+    /// ABS version that wrote the backup.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server_version: Option<String>,
+}
+
+/// Response shape of GET /api/backups.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupsResponse {
+    #[serde(default)]
+    pub backups: Vec<Backup>,
+    /// Directory on the server where backups are written.
+    #[serde(default)]
+    pub backup_location: String,
+    /// True when the backup path is fixed by an env var (not editable in-app).
+    #[serde(default)]
+    pub backup_path_env_set: bool,
 }
