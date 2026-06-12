@@ -543,6 +543,7 @@ export function searchProviders(serverUrl: string): Promise<unknown> {
 export interface ApiKeyLoginResult {
   user: User;
   token: string;
+  serverSettings: ServerSettings | null;
 }
 
 /** Validates an API key via GET /api/me and returns the user profile + session JWT.

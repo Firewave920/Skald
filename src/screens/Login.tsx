@@ -69,6 +69,7 @@ export default function Login({ st }: LoginProps) {
         st.setUserId(result.user.id);
         st.setUsername(result.user.username);
         st.setUser(result.user);
+        if (result.serverSettings) st.setServerSettings(result.serverSettings);
         st.setScreen('library');
       } catch (err) {
         setError(
