@@ -57,21 +57,7 @@ impl AbsClient {
             return Err(format!("login failed: HTTP {}", resp.status()));
         }
 
-        let raw: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
-
-        // Diagnostic: log the top-level keys from the /login response so we can
-        // see whether serverSettings appears here or only in /api/authorize.
-        if let Some(obj) = raw.as_object() {
-            let keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
-            println!("[login] /login top-level keys: {keys:?}");
-            if let Some(ss) = obj.get("serverSettings") {
-                println!("[login] /login serverSettings found: {ss}");
-            } else {
-                println!("[login] /login serverSettings NOT present");
-            }
-        }
-
-        let body: LoginResponse = serde_json::from_value(raw).map_err(|e| e.to_string())?;
+        let body: LoginResponse = resp.json().await.map_err(|e| e.to_string())?;
         Ok((body.user, body.server_settings))
     }
 

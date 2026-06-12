@@ -56,18 +56,6 @@ pub async fn login(
         .await
         .unwrap_or(serde_json::Value::Null);
 
-    // Diagnostic: log the top-level keys of the authorize response so we can
-    // see whether serverSettings is present and under what key name.
-    if let Some(obj) = auth_json.as_object() {
-        let keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
-        println!("[Login] /api/authorize top-level keys: {keys:?}");
-        if let Some(ss) = obj.get("serverSettings") {
-            println!("[Login] /api/authorize serverSettings found: {ss}");
-        } else {
-            println!("[Login] /api/authorize serverSettings NOT present in authorize response");
-        }
-    }
-
     // Prefer the top-level accessToken (JWT with exp). Fall back to
     // user.token inside the authorize response, then the legacy token.
     let token = auth_json["accessToken"]
@@ -81,13 +69,8 @@ pub async fn login(
     // authorize response (ABS may return it there instead).
     let resolved_settings = server_settings.or_else(|| {
         let raw = auth_json.get("serverSettings")?;
-        match serde_json::from_value::<ServerSettings>(raw.clone()) {
-            Ok(s) => { println!("[Login] serverSettings extracted from authorize response"); Some(s) }
-            Err(e) => { println!("[Login] serverSettings parse error from authorize: {e}"); None }
-        }
+        serde_json::from_value::<ServerSettings>(raw.clone()).ok()
     });
-
-    println!("[Login] final serverSettings captured: {}", resolved_settings.is_some());
 
     auth::save_token(&token)?;
     user.token = token;
@@ -106,30 +89,9 @@ pub async fn update_server_settings(
     server_url: String,
     payload: serde_json::Value,
 ) -> Result<ServerSettings, String> {
-    println!("[ServerSettings] update_server_settings called with payload: {payload}");
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated".to_string())?;
-    // Snapshot the requested fields so we can verify each one round-trips.
-    let requested = payload.as_object().cloned().unwrap_or_default();
-    let result = AbsClient::new(server_url).with_token(token).update_server_settings(payload).await;
-    match &result {
-        Ok(s) => {
-            // Re-serialize the server's response and compare field-by-field
-            // against what we asked for. Each changed field gets a ✓ or ✗.
-            let returned = serde_json::to_value(s).unwrap_or(serde_json::Value::Null);
-            for (key, want) in &requested {
-                let got = returned.get(key).cloned().unwrap_or(serde_json::Value::Null);
-                let ok = &got == want;
-                println!(
-                    "[ServerSettings]   {} {} = {} (server now reports {})",
-                    if ok { "OK " } else { "MISMATCH" }, key, want, got,
-                );
-            }
-            println!("[ServerSettings] update_server_settings done ({} field(s) verified)", requested.len());
-        }
-        Err(e) => println!("[ServerSettings] update_server_settings FAILED: {e}"),
-    }
-    result
+    AbsClient::new(server_url).with_token(token).update_server_settings(payload).await
 }
 
 /// PATCH /api/sorting-prefixes — replace the server's sorting prefix list. Admin only.
@@ -139,15 +101,9 @@ pub async fn update_sorting_prefixes(
     server_url: String,
     prefixes: Vec<String>,
 ) -> Result<ServerSettings, String> {
-    println!("[ServerSettings] update_sorting_prefixes called with prefixes: {prefixes:?}");
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated".to_string())?;
-    let result = AbsClient::new(server_url).with_token(token).update_sorting_prefixes(prefixes).await;
-    match &result {
-        Ok(s) => println!("[ServerSettings] update_sorting_prefixes OK — sortingPrefixes={:?}", s.sorting_prefixes),
-        Err(e) => println!("[ServerSettings] update_sorting_prefixes FAILED: {e}"),
-    }
-    result
+    AbsClient::new(server_url).with_token(token).update_sorting_prefixes(prefixes).await
 }
 
 #[tauri::command]
@@ -886,7 +842,7 @@ pub async fn login_with_api_key(
     let user: models::User = serde_json::from_value(body_json)
         .map_err(|e| format!("Failed to parse user: {e}"))?;
 
-    // /api/me does not include serverSettings. Call /api/authorize with the
+    // /api/me does not include serverSettings. Call POST /api/authorize with the
     // resolved token to retrieve them (same endpoint used by the password login path).
     let server_settings: Option<ServerSettings> = {
         let auth_resp = reqwest::Client::new()
@@ -897,22 +853,13 @@ pub async fn login_with_api_key(
         match auth_resp {
             Ok(r) if r.status().is_success() => {
                 let auth_json: serde_json::Value = r.json().await.unwrap_or(serde_json::Value::Null);
-                println!("[login_with_api_key] /api/authorize keys: {:?}",
-                    auth_json.as_object().map(|o| o.keys().map(|k| k.as_str()).collect::<Vec<_>>()));
                 auth_json.get("serverSettings")
-                    .and_then(|ss| {
-                        match serde_json::from_value::<ServerSettings>(ss.clone()) {
-                            Ok(s) => { println!("[login_with_api_key] serverSettings captured"); Some(s) }
-                            Err(e) => { println!("[login_with_api_key] serverSettings parse error: {e}"); None }
-                        }
-                    })
+                    .and_then(|ss| serde_json::from_value::<ServerSettings>(ss.clone()).ok())
             }
-            Ok(r) => { println!("[login_with_api_key] /api/authorize returned {}", r.status()); None }
-            Err(e) => { println!("[login_with_api_key] /api/authorize request failed: {e}"); None }
+            _ => None,
         }
     };
 
-    println!("[login_with_api_key] serverSettings captured: {}", server_settings.is_some());
     Ok(ApiKeyLoginResult { user, token, server_settings })
 }
 
