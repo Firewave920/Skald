@@ -31,3 +31,9 @@ Vault/
 
 # Memory profiling artifacts
 Mrmory/
+
+# Raw upstream font distributions (unused — only the subsetted -latin builds
+# in src/assets/fonts/ are referenced by index.css). Leading slash anchors this
+# to the repo root so it does NOT match src/assets/fonts/ (Git is case-
+# insensitive on Windows, so an unanchored "Fonts/" would catch "fonts/" too).
+/Fonts/
