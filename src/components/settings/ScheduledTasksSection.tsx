@@ -59,7 +59,8 @@ function taskStatus(t: Task): { color: string; label: string } {
 // ── Main section ────────────────────────────────────────────────────────────────
 
 export default function ScheduledTasksSection({ st }: ScheduledTasksSectionProps) {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  // The task list lives in onyx state (st.tasks), kept current by socket events
+  // even while this pane is closed. This panel only seeds it and renders it.
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,28 +72,35 @@ export default function ScheduledTasksSection({ st }: ScheduledTasksSectionProps
   // Admin guard — non-admins should never reach this section.
   if (!st.isAdmin) return null;
 
-  // refresh(silent): silent skips the loading spinner so polling doesn't flicker.
-  const refresh = useCallback(async (silent: boolean) => {
+  // Live sync drives the socket task events that keep st.tasks current. When it's
+  // off there are no task events, so this panel polls as a fallback instead.
+  const liveSyncOn = localStorage.getItem('onyx.sync.live') === 'true';
+
+  // seed(silent): refresh st.tasks from GET /api/tasks. silent skips the spinner.
+  const seed = useCallback(async (silent: boolean) => {
     if (!silent) setLoading(true);
     try {
       const resp = await getTasks(st.serverUrl);
-      setTasks(resp.tasks);
+      st.setTasks(resp.tasks);
       setError(null);
     } catch (e) {
-      console.error('[Tasks] load failed:', e);
+      console.error('[Tasks] seed failed:', e);
       setError(String(e));
     } finally {
       if (!silent) setLoading(false);
     }
+  // st.setTasks is a stable state setter; depend only on the server URL.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [st.serverUrl]);
 
-  // Initial load + poll while the panel is mounted; stop on unmount.
+  // Seed on mount; poll as a fallback only when live sync (socket) is off.
   useEffect(() => {
-    console.log('[Tasks] mounting activity monitor');
-    void refresh(false);
-    const iv = setInterval(() => void refresh(true), POLL_MS);
-    return () => { console.log('[Tasks] stopping activity monitor'); clearInterval(iv); };
-  }, [refresh]);
+    console.log('[Tasks] panel mounted — seeding task list (liveSync:', liveSyncOn, ')');
+    void seed(false);
+    if (liveSyncOn) return;
+    const iv = setInterval(() => void seed(true), POLL_MS);
+    return () => clearInterval(iv);
+  }, [seed, liveSyncOn]);
 
   async function checkCron() {
     const expr = cronInput.trim();
@@ -112,7 +120,7 @@ export default function ScheduledTasksSection({ st }: ScheduledTasksSectionProps
 
   // Running tasks first, then most-recently-active. Sort key: running before
   // finished, then by the relevant timestamp descending.
-  const sorted = [...tasks].sort((a, b) => {
+  const sorted = [...st.tasks].sort((a, b) => {
     if (a.isFinished !== b.isFinished) return a.isFinished ? 1 : -1;
     const ta = a.finishedAt ?? a.startedAt ?? 0;
     const tb = b.finishedAt ?? b.startedAt ?? 0;
@@ -133,6 +141,13 @@ export default function ScheduledTasksSection({ st }: ScheduledTasksSectionProps
 
       {/* ── Activity monitor ─────────────────────────────────────────────── */}
       <GroupHead label="Activity" />
+
+      {!liveSyncOn && (
+        <div style={{ fontSize: 11.5, color: 'var(--onyx-text-mute)', padding: '10px 0 2px', lineHeight: 1.5 }}>
+          Live sync is off — tasks refresh every {POLL_MS / 1000}s while this panel is open.
+          Enable live sync (Settings → Server) for real-time updates that persist across panels.
+        </div>
+      )}
 
       {loading && (
         <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', padding: '14px 0' }}>
