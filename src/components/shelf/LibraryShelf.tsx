@@ -13,6 +13,7 @@ import SortIndicator from './SortIndicator';
 import ContextMenu from '../ContextMenu';
 import { buildItemContextMenu } from './buildItemContextMenu';
 import MatchModal from '../MatchModal';
+import MetadataEditor from '../MetadataEditor';
 import CollectionPicker from '../CollectionPicker';
 import PlaylistPicker from '../PlaylistPicker';
 import FilesModal from './FilesModal';
@@ -371,6 +372,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   const [collectionItem, setCollectionItem] = useState<LibraryItem | null>(null);
   const [filesItem, setFilesItem] = useState<LibraryItem | null>(null);
   const [playlistItem, setPlaylistItem] = useState<LibraryItem | null>(null);
+  const [editItem, setEditItem] = useState<LibraryItem | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Ref to the inner scroll container — required by the virtualizer, which must
@@ -511,7 +513,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem)}
+          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem, setEditItem)}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -523,6 +525,18 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
           onComplete={updated => {
             st.updateLibraryItem(updated);
             setMatchItem(null);
+          }}
+          onRefresh={() => { st.refreshLibrary().catch(console.error); }}
+        />
+      )}
+      {editItem && (
+        <MetadataEditor
+          item={editItem}
+          serverUrl={st.serverUrl}
+          onClose={() => setEditItem(null)}
+          onComplete={updated => {
+            st.updateLibraryItem(updated);
+            setEditItem(null);
           }}
           onRefresh={() => { st.refreshLibrary().catch(console.error); }}
         />

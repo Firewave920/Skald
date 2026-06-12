@@ -14,6 +14,7 @@ export function buildItemContextMenu(
   setCollectionItem?: (item: LibraryItem) => void,
   setFilesItem?: (item: LibraryItem) => void,
   setPlaylistItem?: (item: LibraryItem) => void,
+  setEditItem?: (item: LibraryItem) => void,
 ): ContextMenuItem[] {
   const isAdmin = st.user?.type === 'root' || st.user?.type === 'admin';
   // Used to toggle the first menu item between Download and Delete Download.
@@ -156,6 +157,7 @@ export function buildItemContextMenu(
             .catch(e => st.setToast({ message: `Rescan failed: ${String(e)}`, type: 'error' }));
         },
       },
+      { label: 'Edit Metadata', onClick: () => setEditItem?.(item), disabled: !setEditItem },
       { label: 'Match', onClick: () => setMatchItem?.(item), disabled: !setMatchItem },
       {
         label: 'Delete',
