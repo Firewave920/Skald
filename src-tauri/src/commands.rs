@@ -255,12 +255,7 @@ pub async fn validate_cron(server_url: String, expression: String) -> Result<boo
 pub async fn get_logger_data(server_url: String) -> Result<LoggerData, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated".to_string())?;
-    let result = AbsClient::new(server_url).with_token(token).get_logger_data().await;
-    match &result {
-        Ok(d) => println!("[Logs] get_logger_data OK — {} entries", d.current_daily_logs.len()),
-        Err(e) => println!("[Logs] get_logger_data FAILED: {e}"),
-    }
-    result
+    AbsClient::new(server_url).with_token(token).get_logger_data().await
 }
 
 /// Register the live-sync socket as a log listener at `level` (TRACE=0…FATAL=5).
@@ -269,10 +264,7 @@ pub async fn start_log_stream(
     level: i32,
     socket: tauri::State<'_, socket::SocketState>,
 ) -> Result<(), String> {
-    println!("[Logs] start_log_stream level={level}");
-    let result = socket::set_log_listener(socket.inner().clone(), level).await;
-    if let Err(e) = &result { println!("[Logs] start_log_stream FAILED: {e}"); }
-    result
+    socket::set_log_listener(socket.inner().clone(), level).await
 }
 
 /// Stop the live log stream.
@@ -280,7 +272,6 @@ pub async fn start_log_stream(
 pub async fn stop_log_stream(
     socket: tauri::State<'_, socket::SocketState>,
 ) -> Result<(), String> {
-    println!("[Logs] stop_log_stream");
     socket::remove_log_listener(socket.inner().clone()).await
 }
 
