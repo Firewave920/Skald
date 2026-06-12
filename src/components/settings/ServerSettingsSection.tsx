@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { OnyxState, ServerSettings } from '../../state/onyx';
 import { SectionHead, Row, Toggle, MONO } from './shared';
 import {
-  getServerSettings,
   updateServerSettings,
   updateSortingPrefixes,
   COVER_PROVIDERS,
@@ -205,31 +204,19 @@ function PrefixEditor({
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function ServerSettingsSection({ st }: ServerSettingsSectionProps) {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Local copy of settings — mutated optimistically on each toggle/change
+  // Local copy of settings — mutated optimistically on each toggle/change.
+  // Seeded from st.serverSettings which is captured during login (ABS returns
+  // serverSettings in the login payload; there is no standalone GET endpoint).
   const [settings, setSettings] = useState<ServerSettings | null>(st.serverSettings);
 
   // Admin guard — non-admin users should never reach this section
   if (!st.isAdmin) return null;
 
-  // Refresh settings from server on mount (in case another admin changed something)
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const s = await getServerSettings(st.serverUrl);
-      console.log('[ServerSettings] fetched:', s);
-      setSettings(s);
-      st.setServerSettings(s);
-    } catch (e) {
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [st.serverUrl]);
-
-  useEffect(() => { refresh(); }, [refresh]);
+  // Keep local state in sync if the parent state is updated externally
+  // (e.g. a successful PATCH updates st.serverSettings via setServerSettings).
+  useEffect(() => {
+    if (st.serverSettings) setSettings(st.serverSettings);
+  }, [st.serverSettings]);
 
   // ── Per-field update helpers ──────────────────────────────────────────────
 
@@ -261,31 +248,22 @@ export default function ServerSettingsSection({ st }: ServerSettingsSectionProps
     }
   }
 
-  if (loading && !settings) {
-    return (
-      <div>
-        <SectionHead title="Server Settings" subtitle="Global Audiobookshelf server configuration." />
-        <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 24 }}>
-          Loading…
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !settings) {
+  // Settings come from the login payload — if null here it means the user
+  // logged in before this feature was added. A fresh sign-in will populate them.
+  if (!settings) {
     return (
       <div>
         <SectionHead title="Server Settings" subtitle="Global Audiobookshelf server configuration." />
         <div style={{
           fontFamily: MONO, fontSize: 11,
-          color: 'var(--onyx-red, #c96442)',
+          color: 'var(--onyx-text-mute)',
           marginTop: 24,
           padding: '12px 16px',
-          background: 'color-mix(in srgb, var(--onyx-red, #c96442) 10%, transparent)',
+          background: 'var(--onyx-glass)',
           borderRadius: 8,
-          border: '1px solid color-mix(in srgb, var(--onyx-red, #c96442) 30%, transparent)',
+          border: '1px solid var(--onyx-glass-edge)',
         }}>
-          Failed to load server settings: {error}
+          Server settings were not captured at login. Sign out and back in to load them.
         </div>
       </div>
     );

@@ -1025,11 +1025,6 @@ export const LOG_LEVELS = [
   { value: 2, label: 'Warn' },
 ] as const;
 
-/** GET /api/settings — fetches the current server settings. Admin only. */
-export function getServerSettings(serverUrl: string): Promise<ServerSettings> {
-  return invoke('get_server_settings', { serverUrl });
-}
-
 /** PATCH /api/settings — updates one or more server settings fields. Admin only.
  *  `payload` is a sparse object; ABS merges it with the current values server-side. */
 export function updateServerSettings(serverUrl: string, payload: Partial<ServerSettings>): Promise<ServerSettings> {

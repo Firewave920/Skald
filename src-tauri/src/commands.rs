@@ -74,14 +74,6 @@ pub fn logout() -> Result<(), String> {
     auth::clear_token()
 }
 
-/// GET /api/settings — fetch current server settings. Admin only.
-#[tauri::command]
-pub async fn get_server_settings(server_url: String) -> Result<ServerSettings, String> {
-    let token = auth::load_token()?
-        .ok_or_else(|| "Not authenticated".to_string())?;
-    AbsClient::new(server_url).with_token(token).get_server_settings().await
-}
-
 /// PATCH /api/settings — update one or more server settings fields. Admin only.
 /// `payload` is a sparse JSON object; ABS merges it with existing values.
 #[tauri::command]
