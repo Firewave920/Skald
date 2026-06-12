@@ -174,6 +174,40 @@ pub async fn connect(
                 .boxed()
             }
         })
+        // "task_started" fires when ABS adds a background task (library scan,
+        // metadata embed, m4b encode, …). Payload is the full task.toJSON().
+        // Forwarded so the Scheduled Tasks monitor updates live regardless of
+        // which settings pane is open. (Backups are NOT tasks — they report via
+        // a separate backup_applied event — so they never appear here.)
+        .on("task_started", {
+            let app = app.clone();
+            move |payload: Payload, _: Client| {
+                let app = app.clone();
+                async move {
+                    if let Payload::Text(values) = payload {
+                        if let Some(first) = values.first() {
+                            let _ = app.emit("task-started", first.to_string());
+                        }
+                    }
+                }
+                .boxed()
+            }
+        })
+        // "task_finished" fires when a task completes or fails; same payload shape.
+        .on("task_finished", {
+            let app = app.clone();
+            move |payload: Payload, _: Client| {
+                let app = app.clone();
+                async move {
+                    if let Payload::Text(values) = payload {
+                        if let Some(first) = values.first() {
+                            let _ = app.emit("task-finished", first.to_string());
+                        }
+                    }
+                }
+                .boxed()
+            }
+        })
         // "reconnect" fires when the socket library re-establishes the transport
         // after a drop (network loss, sleep/wake, server restart). The server
         // assigns a new socket ID on each reconnect, so the auth event must be

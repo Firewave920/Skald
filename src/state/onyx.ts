@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings } from '../api/abs';
+import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task } from '../api/abs';
 import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings } from '../api/abs';
 
 export type { ServerSettings };
@@ -313,6 +313,11 @@ export interface OnyxState {
   // via Settings → Server Settings. Null until the first successful login.
   serverSettings: ServerSettings | null;
   setServerSettings: (s: ServerSettings) => void;
+  // Background-task list, fed live by ABS task_started/task_finished socket
+  // events so the Scheduled Tasks monitor stays current regardless of which pane
+  // is open. Seeded from GET /api/tasks when the monitor mounts.
+  tasks: Task[];
+  setTasks: (t: Task[]) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -470,6 +475,7 @@ export function useOnyxState(): OnyxState {
   // revert to session-aware behaviour automatically.
   const [isLocalPlayback, setIsLocalPlayback] = useState<boolean>(false);
   const [serverSettings, setServerSettings] = useState<ServerSettings | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
 
   useEffect(() => {
     // Initial load — reads the registry from disk; works before any server connection.
@@ -1013,6 +1019,44 @@ export function useOnyxState(): OnyxState {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverUrl, authToken]);
 
+  // ── Background-task stream ──────────────────────────────────────────────────
+  // Maintain the task list from ABS task_started / task_finished socket events.
+  // Lives here (always mounted) rather than in the Scheduled Tasks panel so the
+  // list stays current even when that pane is closed. Requires live sync to be
+  // connected; the panel still seeds via GET /api/tasks on mount as a fallback.
+  useEffect(() => {
+    if (!serverUrl || !authToken) return;
+    let unStart: (() => void) | undefined;
+    let unFinish: (() => void) | undefined;
+
+    // Upsert a task by id and cap growth: keep all running tasks plus the 25
+    // most-recently-finished so the list cannot grow without bound.
+    const upsert = (t: Task) => setTasks(prev => {
+      const others = prev.filter(x => x.id !== t.id);
+      const merged = [t, ...others];
+      const running = merged.filter(x => !x.isFinished);
+      const finished = merged
+        .filter(x => x.isFinished)
+        .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
+        .slice(0, 25);
+      return [...running, ...finished];
+    });
+
+    const handle = (raw: string) => {
+      try {
+        const t = JSON.parse(raw) as Task;
+        console.log('[tasks] socket event →', t.action, t.isFinished ? '(finished)' : '(started)');
+        upsert(t);
+      } catch (e) { console.error('[tasks] parse failed:', e); }
+    };
+
+    listen<string>('task-started',  e => handle(e.payload)).then(fn => { unStart = fn; });
+    listen<string>('task-finished', e => handle(e.payload)).then(fn => { unFinish = fn; });
+
+    return () => { unStart?.(); unFinish?.(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverUrl, authToken]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
@@ -1048,6 +1092,7 @@ export function useOnyxState(): OnyxState {
     downloads, setDownloads,
     isLocalPlayback, setIsLocalPlayback,
     serverSettings, setServerSettings,
+    tasks, setTasks,
     screen, setScreen,
     currentBook, currentBookId, setCurrentBookId, currentBookChapters,
     focusedBook, focusedBookId, setFocusedBookId,
