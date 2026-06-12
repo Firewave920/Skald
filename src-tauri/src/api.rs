@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, FsDirectory, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, NotificationSettings, NotificationsResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, ServerSettings, UpdateLibraryPayload, User, UserStats};
+use crate::models::{AdminUser, BackupsResponse, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, FsDirectory, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, NotificationSettings, NotificationsResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, ServerSettings, UpdateLibraryPayload, User, UserStats};
 
 #[derive(Clone)]
 pub struct AbsClient {
@@ -278,6 +278,84 @@ impl AbsClient {
             return Err(format!("fire_test_event failed: HTTP {}", resp.status()));
         }
         Ok(())
+    }
+
+    // ── Backups — all admin-only (ABS returns 403 otherwise) ─────────────────
+
+    /// GET /api/backups — list backups plus the backup directory location.
+    pub async fn get_backups(&self) -> Result<BackupsResponse, String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/backups", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_backups failed: HTTP {}", resp.status()));
+        }
+
+        resp.json::<BackupsResponse>().await.map_err(|e| e.to_string())
+    }
+
+    /// POST /api/backups — create a backup now. ABS writes the archive before
+    /// responding, so we re-fetch the list to return the updated state including
+    /// the new backup.
+    pub async fn create_backup(&self) -> Result<BackupsResponse, String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/backups", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("create_backup failed: HTTP {}", resp.status()));
+        }
+
+        self.get_backups().await
+    }
+
+    /// DELETE /api/backups/:id — delete a backup. Re-fetch to return the updated list.
+    pub async fn delete_backup(&self, id: &str) -> Result<BackupsResponse, String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/backups/{}", self.root(), id))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_backup failed: HTTP {}", resp.status()));
+        }
+
+        self.get_backups().await
+    }
+
+    /// GET /api/backups/:id/apply — restore from a backup. DESTRUCTIVE: ABS
+    /// overwrites its database with the backup's contents and restarts, so the
+    /// HTTP connection may drop before/without a clean response. Treat any
+    /// transport error after a sent request as "restore started" — the caller
+    /// warns the user the server is restarting.
+    pub async fn apply_backup(&self, id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/backups/{}/apply", self.root(), id))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await;
+
+        match resp {
+            // A normal success response.
+            Ok(r) if r.status().is_success() => Ok(()),
+            Ok(r) => Err(format!("apply_backup failed: HTTP {}", r.status())),
+            // The server commonly restarts mid-request; a dropped connection here
+            // means the restore was accepted and ABS is restarting, not a failure.
+            Err(_) => Ok(()),
+        }
     }
 
     /// GET /api/me

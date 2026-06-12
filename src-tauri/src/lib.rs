@@ -221,6 +221,11 @@ pub fn run() {
             commands::delete_notification,
             commands::test_notification,
             commands::fire_test_notification_event,
+            // Backups (admin/root only)
+            commands::get_backups,
+            commands::create_backup,
+            commands::delete_backup,
+            commands::apply_backup,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

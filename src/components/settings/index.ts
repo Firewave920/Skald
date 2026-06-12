@@ -23,3 +23,5 @@ export { default as ServerSettingsSection } from './ServerSettingsSection';
 export type { ServerSettingsSectionProps } from './ServerSettingsSection';
 export { default as NotificationsSection } from './NotificationsSection';
 export type { NotificationsSectionProps } from './NotificationsSection';
+export { default as BackupSection } from './BackupSection';
+export type { BackupSectionProps } from './BackupSection';
