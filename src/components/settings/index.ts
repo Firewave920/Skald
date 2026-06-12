@@ -21,3 +21,5 @@ export { default as LibrariesSection } from './LibrariesSection';
 export type { LibrariesSectionProps } from './LibrariesSection';
 export { default as ServerSettingsSection } from './ServerSettingsSection';
 export type { ServerSettingsSectionProps } from './ServerSettingsSection';
+export { default as NotificationsSection } from './NotificationsSection';
+export type { NotificationsSectionProps } from './NotificationsSection';

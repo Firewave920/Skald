@@ -213,6 +213,14 @@ pub fn run() {
             commands::fetch_server_settings,
             commands::update_server_settings,
             commands::update_sorting_prefixes,
+            // Notification settings (Apprise — admin/root only)
+            commands::get_notifications,
+            commands::update_notification_settings,
+            commands::create_notification,
+            commands::update_notification,
+            commands::delete_notification,
+            commands::test_notification,
+            commands::fire_test_notification_event,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

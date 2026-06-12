@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, FsDirectory, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, ServerSettings, UpdateLibraryPayload, User, UserStats};
+use crate::models::{AdminUser, Bookmark, Collection, CollectionsResponse, CreateLibraryPayload, FsDirectory, Library, LibraryItem, LibrarySeries, LibraryStats, ListeningSession, ListeningSessionsResponse, ListeningStats, MeResponse, NotificationSettings, NotificationsResponse, PlaySession, Playlist, PlaylistItemInput, PlaylistsResponse, ServerSettings, UpdateLibraryPayload, User, UserStats};
 
 #[derive(Clone)]
 pub struct AbsClient {
@@ -136,6 +136,148 @@ impl AbsClient {
 
         let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
         Ok(body.server_settings)
+    }
+
+    // ── Notifications (Apprise) — all admin-only (ABS returns 403 otherwise) ──
+
+    /// GET /api/notifications — returns both the current settings and the
+    /// read-only event catalog (`{ settings, data: { events } }`). Unlike server
+    /// settings, notifications have a real GET endpoint, so we fetch on demand.
+    pub async fn get_notifications(&self) -> Result<NotificationsResponse, String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/notifications", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("get_notifications failed: HTTP {}", resp.status()));
+        }
+
+        resp.json::<NotificationsResponse>().await.map_err(|e| e.to_string())
+    }
+
+    /// PATCH /api/notifications — update the global notification settings
+    /// (appriseApiUrl, queue limits, …). Accepts a sparse JSON object. ABS
+    /// returns 200 with no useful body, so we re-fetch to get the merged state.
+    pub async fn update_notification_settings(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<NotificationSettings, String> {
+        let resp = self
+            .http
+            .patch(format!("{}/api/notifications", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("update_notification_settings failed: HTTP {}", resp.status()));
+        }
+
+        // The PATCH response body is just a 200; re-read the settings so the
+        // caller gets the authoritative merged result.
+        Ok(self.get_notifications().await?.settings)
+    }
+
+    /// POST /api/notifications — create a notification rule. Returns the updated
+    /// NotificationSettings (with the new rule, including its server-assigned id).
+    pub async fn create_notification(
+        &self,
+        payload: serde_json::Value,
+    ) -> Result<NotificationSettings, String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/notifications", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("create_notification failed: HTTP {}", resp.status()));
+        }
+
+        resp.json::<NotificationSettings>().await.map_err(|e| e.to_string())
+    }
+
+    /// PATCH /api/notifications/:id — update one rule. Returns updated settings.
+    pub async fn update_notification(
+        &self,
+        id: &str,
+        payload: serde_json::Value,
+    ) -> Result<NotificationSettings, String> {
+        let resp = self
+            .http
+            .patch(format!("{}/api/notifications/{}", self.root(), id))
+            .header("Authorization", self.auth_header()?)
+            .json(&payload)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("update_notification failed: HTTP {}", resp.status()));
+        }
+
+        resp.json::<NotificationSettings>().await.map_err(|e| e.to_string())
+    }
+
+    /// DELETE /api/notifications/:id — remove one rule. Returns updated settings.
+    pub async fn delete_notification(&self, id: &str) -> Result<NotificationSettings, String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/notifications/{}", self.root(), id))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("delete_notification failed: HTTP {}", resp.status()));
+        }
+
+        resp.json::<NotificationSettings>().await.map_err(|e| e.to_string())
+    }
+
+    /// GET /api/notifications/:id/test — send a real test notification to one
+    /// rule's Apprise URLs. ABS returns 400 if Apprise is unconfigured, 500 on
+    /// send failure. We surface the status to the caller.
+    pub async fn test_notification(&self, id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/notifications/{}/test", self.root(), id))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("test_notification failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    /// GET /api/notifications/test — fire a synthetic `onTest` event through the
+    /// whole pipeline, verifying the Apprise connection end-to-end.
+    pub async fn fire_test_event(&self) -> Result<(), String> {
+        let resp = self
+            .http
+            .get(format!("{}/api/notifications/test", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("fire_test_event failed: HTTP {}", resp.status()));
+        }
+        Ok(())
     }
 
     /// GET /api/me
