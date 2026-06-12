@@ -1044,3 +1044,106 @@ export function updateSortingPrefixes(serverUrl: string, prefixes: string[]): Pr
   return invoke('update_sorting_prefixes', { serverUrl, prefixes });
 }
 
+// ── Notification settings (Apprise) ─────────────────────────────────────────────
+// Mirrors the notification models in src-tauri/src/models.rs. All endpoints are
+// admin-only. ABS fires notifications through an EXTERNAL Apprise API server
+// (see appriseApiUrl) — without one configured, nothing is delivered.
+
+/** One configured notification rule. Read-only status fields are populated by ABS. */
+export interface Notification {
+  id?: string | null;
+  /** Required when the event's requiresLibrary is true. */
+  libraryId?: string | null;
+  eventName: string;
+  /** Apprise target URLs (e.g. "discord://…"). */
+  urls: string[];
+  titleTemplate: string;
+  bodyTemplate: string;
+  enabled: boolean;
+  /** Apprise message type: "info" | "warning" | "success" (serialized as `type`). */
+  type: string;
+  // Read-only status
+  lastFiredAt?: number | null;
+  lastAttemptFailed?: boolean | null;
+  numConsecutiveFailedAttempts?: number | null;
+  numTimesFired?: number | null;
+  createdAt?: number | null;
+}
+
+/** Global notification configuration. */
+export interface NotificationSettings {
+  id?: string;
+  appriseType?: string;
+  appriseApiUrl?: string | null;
+  notifications: Notification[];
+  maxFailedAttempts?: number;
+  maxNotificationQueue?: number;
+  notificationDelay?: number;
+}
+
+/** Read-only catalog entry describing an available event (drives the editor). */
+export interface NotificationEventData {
+  name: string;
+  requiresLibrary: boolean;
+  description: string;
+  variables: string[];
+  defaults?: { title: string; body: string } | null;
+}
+
+/** Response of GET /api/notifications: live settings + the event catalog. */
+export interface NotificationsResponse {
+  settings: NotificationSettings;
+  data: { events: NotificationEventData[] };
+}
+
+/** Apprise message types, used by the rule editor's type selector. */
+export const NOTIFICATION_TYPES = ['info', 'success', 'warning'] as const;
+export type NotificationType = typeof NOTIFICATION_TYPES[number];
+
+/** Static fallback labels for the six ABS notification events. Used only if the
+ *  server's live event catalog (data.events) comes back empty — normally the UI
+ *  drives off the live catalog, which also carries the template variables. */
+export const NOTIFICATION_EVENTS: { name: string; label: string; requiresLibrary: boolean }[] = [
+  { name: 'onPodcastEpisodeDownloaded', label: 'Podcast episode downloaded', requiresLibrary: true },
+  { name: 'onBackupCompleted', label: 'Backup completed', requiresLibrary: false },
+  { name: 'onBackupFailed', label: 'Backup failed', requiresLibrary: false },
+  { name: 'onRSSFeedFailed', label: 'RSS feed request failed', requiresLibrary: true },
+  { name: 'onRSSFeedDisabled', label: 'RSS feed auto-download disabled', requiresLibrary: true },
+  { name: 'onTest', label: 'Test event', requiresLibrary: false },
+];
+
+/** GET /api/notifications — current settings + event catalog. Admin only. */
+export function getNotifications(serverUrl: string): Promise<NotificationsResponse> {
+  return invoke('get_notifications', { serverUrl });
+}
+
+/** PATCH /api/notifications — update global settings (appriseApiUrl, limits). Admin only. */
+export function updateNotificationSettings(serverUrl: string, payload: Partial<NotificationSettings>): Promise<NotificationSettings> {
+  return invoke('update_notification_settings', { serverUrl, payload });
+}
+
+/** POST /api/notifications — create a rule. Returns updated settings. Admin only. */
+export function createNotification(serverUrl: string, payload: Partial<Notification>): Promise<NotificationSettings> {
+  return invoke('create_notification', { serverUrl, payload });
+}
+
+/** PATCH /api/notifications/:id — update a rule. Returns updated settings. Admin only. */
+export function updateNotification(serverUrl: string, id: string, payload: Partial<Notification>): Promise<NotificationSettings> {
+  return invoke('update_notification', { serverUrl, id, payload });
+}
+
+/** DELETE /api/notifications/:id — delete a rule. Returns updated settings. Admin only. */
+export function deleteNotification(serverUrl: string, id: string): Promise<NotificationSettings> {
+  return invoke('delete_notification', { serverUrl, id });
+}
+
+/** GET /api/notifications/:id/test — send a real test to one rule's URLs. Admin only. */
+export function testNotification(serverUrl: string, id: string): Promise<void> {
+  return invoke('test_notification', { serverUrl, id });
+}
+
+/** GET /api/notifications/test — fire a synthetic onTest event end-to-end. Admin only. */
+export function fireTestNotificationEvent(serverUrl: string): Promise<void> {
+  return invoke('fire_test_notification_event', { serverUrl });
+}
+

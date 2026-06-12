@@ -679,3 +679,124 @@ pub struct PlaylistsResponse {
     #[serde(default)]
     pub total: u32,
 }
+
+// ── Notification settings (Apprise) ──────────────────────────────────────────
+// ABS fires event-driven notifications (podcast downloaded, backup completed,
+// RSS feed failed, …) through an EXTERNAL Apprise API server — it does not embed
+// Apprise. `appriseApiUrl` must point at a reachable apprise-api `/notify`
+// endpoint or nothing fires. Shapes verified against the ABS GitHub source:
+//   server/objects/settings/NotificationSettings.js
+//   server/objects/Notification.js
+//   server/utils/notifications.js   (the event catalog)
+// All endpoints are admin-only (403 otherwise).
+
+/// Global notification configuration (GET /api/notifications → `settings`).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationSettings {
+    #[serde(default)]
+    pub id: String,
+    /// Transport type — currently always "api" (the Apprise API server mode).
+    #[serde(default)]
+    pub apprise_type: String,
+    /// URL of the external Apprise API server's notify endpoint. None until set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub apprise_api_url: Option<String>,
+    /// Configured notification rules.
+    #[serde(default)]
+    pub notifications: Vec<Notification>,
+    /// How many consecutive failures before a notification is auto-disabled.
+    #[serde(default)]
+    pub max_failed_attempts: i32,
+    /// Max queued notifications before new ones are dropped.
+    #[serde(default)]
+    pub max_notification_queue: i32,
+    /// Minimum delay between dispatched notifications, in milliseconds.
+    #[serde(default)]
+    pub notification_delay: i32,
+}
+
+/// A single configured notification rule.
+/// Read-only status fields (last_fired_at, …) use `skip_serializing_if` so the
+/// create/update payloads we send back to ABS stay minimal.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Notification {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Required when the event's `requiresLibrary` is true; otherwise null.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library_id: Option<String>,
+    /// One of the event names from the catalog (e.g. "onBackupCompleted").
+    #[serde(default)]
+    pub event_name: String,
+    /// Apprise target URLs (e.g. "discord://…", "tgram://…").
+    #[serde(default)]
+    pub urls: Vec<String>,
+    #[serde(default)]
+    pub title_template: String,
+    #[serde(default)]
+    pub body_template: String,
+    #[serde(default)]
+    pub enabled: bool,
+    /// Apprise message type: "info" | "warning" | "success". `type` is a Rust
+    /// keyword, so the field is `kind` with a serde rename.
+    #[serde(rename = "type", default)]
+    pub kind: String,
+    // ── Read-only status (returned by ABS, never sent in create/update) ──────
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_fired_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_attempt_failed: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_consecutive_failed_attempts: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub num_times_fired: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<i64>,
+}
+
+/// Read-only catalog entry describing an available notification event
+/// (GET /api/notifications → `data.events`). Drives the event dropdown and the
+/// template-variable hints in the UI.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct NotificationEventData {
+    pub name: String,
+    #[serde(default)]
+    pub requires_library: bool,
+    #[serde(default)]
+    pub description: String,
+    /// Template variables available for this event (e.g. "podcastTitle").
+    #[serde(default)]
+    pub variables: Vec<String>,
+    /// ABS nests the default templates under a `defaults` object.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub defaults: Option<NotificationEventDefaults>,
+}
+
+/// Default title/body templates suggested for an event.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NotificationEventDefaults {
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub body: String,
+}
+
+/// Response shape of GET /api/notifications: the live settings plus the
+/// read-only event catalog used to populate the editor.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct NotificationsResponse {
+    pub settings: NotificationSettings,
+    /// ABS returns the catalog under `data` (with an `events` array inside).
+    #[serde(default)]
+    pub data: NotificationData,
+}
+
+/// The `data` portion of GET /api/notifications — the event catalog.
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct NotificationData {
+    #[serde(default)]
+    pub events: Vec<NotificationEventData>,
+}
