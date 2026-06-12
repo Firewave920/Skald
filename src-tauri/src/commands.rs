@@ -35,14 +35,15 @@ pub async fn login(
     let (mut user, server_settings) = abs_client.login(&username, &password).await?;
     let legacy_token = user.token.clone();
 
-    // After /login, call GET /api/authorize with the legacy token to obtain a
+    // After /login, call POST /api/authorize with the legacy token to obtain a
     // proper JWT access token (with exp field) that the socket validator accepts.
     // The legacy token from /login works for HTTP Bearer auth but is rejected by
     // the ABS socket middleware which expects a signed JWT.
+    // Note: /api/authorize is a POST route in ABS — a GET request returns 404.
     let http = reqwest::Client::new();
     let server_root = server_url.trim_end_matches('/');
     let auth_resp = http
-        .get(format!("{server_root}/api/authorize"))
+        .post(format!("{server_root}/api/authorize"))
         .header("Authorization", format!("Bearer {legacy_token}"))
         .send()
         .await
@@ -55,6 +56,18 @@ pub async fn login(
         .await
         .unwrap_or(serde_json::Value::Null);
 
+    // Diagnostic: log the top-level keys of the authorize response so we can
+    // see whether serverSettings is present and under what key name.
+    if let Some(obj) = auth_json.as_object() {
+        let keys: Vec<&str> = obj.keys().map(|k| k.as_str()).collect();
+        println!("[Login] /api/authorize top-level keys: {keys:?}");
+        if let Some(ss) = obj.get("serverSettings") {
+            println!("[Login] /api/authorize serverSettings found: {ss}");
+        } else {
+            println!("[Login] /api/authorize serverSettings NOT present in authorize response");
+        }
+    }
+
     // Prefer the top-level accessToken (JWT with exp). Fall back to
     // user.token inside the authorize response, then the legacy token.
     let token = auth_json["accessToken"]
@@ -64,9 +77,21 @@ pub async fn login(
         .unwrap_or(&legacy_token)
         .to_string();
 
+    // If /login didn't include serverSettings, try extracting it from the
+    // authorize response (ABS may return it there instead).
+    let resolved_settings = server_settings.or_else(|| {
+        let raw = auth_json.get("serverSettings")?;
+        match serde_json::from_value::<ServerSettings>(raw.clone()) {
+            Ok(s) => { println!("[Login] serverSettings extracted from authorize response"); Some(s) }
+            Err(e) => { println!("[Login] serverSettings parse error from authorize: {e}"); None }
+        }
+    });
+
+    println!("[Login] final serverSettings captured: {}", resolved_settings.is_some());
+
     auth::save_token(&token)?;
     user.token = token;
-    Ok(LoginResult { user, server_settings })
+    Ok(LoginResult { user, server_settings: resolved_settings })
 }
 
 #[tauri::command]
@@ -84,9 +109,24 @@ pub async fn update_server_settings(
     println!("[ServerSettings] update_server_settings called with payload: {payload}");
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated".to_string())?;
+    // Snapshot the requested fields so we can verify each one round-trips.
+    let requested = payload.as_object().cloned().unwrap_or_default();
     let result = AbsClient::new(server_url).with_token(token).update_server_settings(payload).await;
     match &result {
-        Ok(s) => println!("[ServerSettings] update_server_settings OK — scannerFindCovers={:?} chromecastEnabled={:?}", s.scanner_find_covers, s.chromecast_enabled),
+        Ok(s) => {
+            // Re-serialize the server's response and compare field-by-field
+            // against what we asked for. Each changed field gets a ✓ or ✗.
+            let returned = serde_json::to_value(s).unwrap_or(serde_json::Value::Null);
+            for (key, want) in &requested {
+                let got = returned.get(key).cloned().unwrap_or(serde_json::Value::Null);
+                let ok = &got == want;
+                println!(
+                    "[ServerSettings]   {} {} = {} (server now reports {})",
+                    if ok { "OK " } else { "MISMATCH" }, key, want, got,
+                );
+            }
+            println!("[ServerSettings] update_server_settings done ({} field(s) verified)", requested.len());
+        }
         Err(e) => println!("[ServerSettings] update_server_settings FAILED: {e}"),
     }
     result
@@ -799,11 +839,9 @@ pub async fn connect_socket(
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiKeyLoginResult {
-    /// User profile fields (id, username, type, etc.)
     pub user: models::User,
-    /// User session JWT from the token field of the /api/me response.
-    /// This is the credential used for socket auth, not the API key itself.
     pub token: String,
+    pub server_settings: Option<ServerSettings>,
 }
 
 /// Validates an API key by calling GET /api/me with the key as Bearer token.
@@ -848,7 +886,34 @@ pub async fn login_with_api_key(
     let user: models::User = serde_json::from_value(body_json)
         .map_err(|e| format!("Failed to parse user: {e}"))?;
 
-    Ok(ApiKeyLoginResult { user, token })
+    // /api/me does not include serverSettings. Call /api/authorize with the
+    // resolved token to retrieve them (same endpoint used by the password login path).
+    let server_settings: Option<ServerSettings> = {
+        let auth_resp = reqwest::Client::new()
+            .post(format!("{}/api/authorize", server_url.trim_end_matches('/')))
+            .header("Authorization", format!("Bearer {token}"))
+            .send()
+            .await;
+        match auth_resp {
+            Ok(r) if r.status().is_success() => {
+                let auth_json: serde_json::Value = r.json().await.unwrap_or(serde_json::Value::Null);
+                println!("[login_with_api_key] /api/authorize keys: {:?}",
+                    auth_json.as_object().map(|o| o.keys().map(|k| k.as_str()).collect::<Vec<_>>()));
+                auth_json.get("serverSettings")
+                    .and_then(|ss| {
+                        match serde_json::from_value::<ServerSettings>(ss.clone()) {
+                            Ok(s) => { println!("[login_with_api_key] serverSettings captured"); Some(s) }
+                            Err(e) => { println!("[login_with_api_key] serverSettings parse error: {e}"); None }
+                        }
+                    })
+            }
+            Ok(r) => { println!("[login_with_api_key] /api/authorize returned {}", r.status()); None }
+            Err(e) => { println!("[login_with_api_key] /api/authorize request failed: {e}"); None }
+        }
+    };
+
+    println!("[login_with_api_key] serverSettings captured: {}", server_settings.is_some());
+    Ok(ApiKeyLoginResult { user, token, server_settings })
 }
 
 /// Clears the stored keyring token so the next launch forces a fresh login.
