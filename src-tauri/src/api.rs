@@ -817,8 +817,9 @@ impl AbsClient {
         resp.json().await.map_err(|e| e.to_string())
     }
 
-    /// PATCH /api/items/{item_id}/chapters — replace the chapter markers.
+    /// POST /api/items/{item_id}/chapters — replace the chapter markers.
     /// `chapters` is a JSON array of { start, end, title }. Requires canUpdate.
+    /// Note: this route is POST in ABS (the media route is PATCH) — a PATCH 404s.
     pub async fn update_chapters(
         &self,
         item_id: &str,
@@ -826,7 +827,7 @@ impl AbsClient {
     ) -> Result<serde_json::Value, String> {
         let resp = self
             .http
-            .patch(format!("{}/api/items/{item_id}/chapters", self.root()))
+            .post(format!("{}/api/items/{item_id}/chapters", self.root()))
             .header("Authorization", self.auth_header()?)
             .json(&serde_json::json!({ "chapters": chapters }))
             .send()

@@ -2,11 +2,53 @@ import { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import type { LibraryItem } from '../state/onyx';
-import { bookAuthor } from '../state/onyx';
 import { updateMedia, updateChapters, fetchItem } from '../api/abs';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO  = "'JetBrains Mono', ui-monospace, monospace";
+
+// Defined at module scope (not inside the component) so the inputs are not
+// remounted on every keystroke — that remount drops focus after one character.
+const labelStyle: CSSProperties = {
+  fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em',
+  textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginBottom: 5,
+};
+const inputStyle: CSSProperties = {
+  width: '100%', boxSizing: 'border-box', padding: '8px 11px',
+  background: 'var(--onyx-panel2)', borderRadius: 7, color: 'var(--onyx-text)',
+  border: '1px solid var(--onyx-glass-edge)', outline: 'none', fontSize: 13, fontFamily: 'inherit',
+};
+
+function Field({ label, value, onChange, mono, full }: {
+  label: string; value: string; onChange: (v: string) => void; mono?: boolean; full?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gridColumn: full ? '1 / -1' : undefined }}>
+      <div style={labelStyle}>{label}</div>
+      <input value={value} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, fontFamily: mono ? MONO : 'inherit' }} />
+    </div>
+  );
+}
+
+// Chapter start-time input. Holds the raw text while editing and commits the
+// parsed seconds on blur, so the H:MM:SS reformat doesn't fight the cursor.
+function TimeInput({ value, onCommit }: { value: number; onCommit: (secs: number) => void }) {
+  const [local, setLocal] = useState(fmtHMS(value));
+  useEffect(() => setLocal(fmtHMS(value)), [value]);
+  return (
+    <input
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => {
+        const s = parseHMS(local);
+        const next = isNaN(s) ? value : s;
+        onCommit(next);
+        setLocal(fmtHMS(next));
+      }}
+      style={{ ...inputStyle, fontFamily: MONO, width: 90, flexShrink: 0, textAlign: 'right' }}
+    />
+  );
+}
 
 export interface MetadataEditorProps {
   item: LibraryItem;
@@ -87,8 +129,13 @@ export default function MetadataEditor({ item, serverUrl, onClose, onComplete, o
         const m = full.media.metadata as unknown as Record<string, unknown>;
         setTitle((m.title as string) ?? '');
         setSubtitle((m.subtitle as string) ?? '');
-        setAuthors(bookAuthor(full) ?? '');
-        setNarrators((m.narratorName as string) ?? '');
+        // The single-item fetch returns authors/narrators as object arrays with
+        // authorName/narratorName often null — read the arrays first, and never
+        // use the "Unknown Author" display sentinel as an editable value.
+        const authorArr = Array.isArray(m.authors) ? (m.authors as { name: string }[]).map(a => a.name) : null;
+        setAuthors(authorArr ? authorArr.join(', ') : ((m.authorName as string) ?? ''));
+        const narratorArr = Array.isArray(m.narrators) ? (m.narrators as string[]) : null;
+        setNarrators(narratorArr ? narratorArr.join(', ') : ((m.narratorName as string) ?? ''));
         setSeries(seriesDisplay(full));
         setPublisher((m.publisher as string) ?? '');
         setYear((m.publishedYear as string) ?? '');
@@ -170,28 +217,6 @@ export default function MetadataEditor({ item, serverUrl, onClose, onComplete, o
     }
   }
 
-  // ── Styles ────────────────────────────────────────────────────────────────
-  const labelStyle: CSSProperties = {
-    fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginBottom: 5,
-  };
-  const inputStyle: CSSProperties = {
-    width: '100%', boxSizing: 'border-box', padding: '8px 11px',
-    background: 'var(--onyx-panel2)', borderRadius: 7, color: 'var(--onyx-text)',
-    border: '1px solid var(--onyx-glass-edge)', outline: 'none', fontSize: 13, fontFamily: 'inherit',
-  };
-
-  function Field({ label, value, onChange, mono, full }: {
-    label: string; value: string; onChange: (v: string) => void; mono?: boolean; full?: boolean;
-  }) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gridColumn: full ? '1 / -1' : undefined }}>
-        <div style={labelStyle}>{label}</div>
-        <input value={value} onChange={e => onChange(e.target.value)} style={{ ...inputStyle, fontFamily: mono ? MONO : 'inherit' }} />
-      </div>
-    );
-  }
-
   const modal = (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
@@ -269,13 +294,9 @@ export default function MetadataEditor({ item, serverUrl, onClose, onComplete, o
               {chapters.map((c, i) => (
                 <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', width: 24, textAlign: 'right' }}>{i + 1}</span>
-                  <input
-                    value={fmtHMS(c.start)}
-                    onChange={e => {
-                      const secs = parseHMS(e.target.value);
-                      setChapters(prev => prev.map((x, j) => j === i ? { ...x, start: isNaN(secs) ? x.start : secs } : x));
-                    }}
-                    style={{ ...inputStyle, fontFamily: MONO, width: 90, flexShrink: 0, textAlign: 'right' }}
+                  <TimeInput
+                    value={c.start}
+                    onCommit={secs => setChapters(prev => prev.map((x, j) => j === i ? { ...x, start: secs } : x))}
                   />
                   <input
                     value={c.title}
