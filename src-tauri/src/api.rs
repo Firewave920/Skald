@@ -61,30 +61,6 @@ impl AbsClient {
         Ok((body.user, body.server_settings))
     }
 
-    /// GET /api/settings — fetch current server settings (admin only).
-    pub async fn get_server_settings(&self) -> Result<ServerSettings, String> {
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Wrapper {
-            server_settings: ServerSettings,
-        }
-
-        let resp = self
-            .http
-            .get(format!("{}/api/settings", self.root()))
-            .header("Authorization", self.auth_header()?)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?;
-
-        if !resp.status().is_success() {
-            return Err(format!("get_server_settings failed: HTTP {}", resp.status()));
-        }
-
-        let body: Wrapper = resp.json().await.map_err(|e| e.to_string())?;
-        Ok(body.server_settings)
-    }
-
     /// PATCH /api/settings — update one or more server settings fields (admin only).
     /// Accepts a partial JSON object; ABS merges with current values server-side.
     pub async fn update_server_settings(&self, payload: serde_json::Value) -> Result<ServerSettings, String> {

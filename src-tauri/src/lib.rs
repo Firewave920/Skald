@@ -210,7 +210,6 @@ pub fn run() {
             commands::delete_library,
             commands::scan_library,
             // Server settings (admin/root only — ABS enforces this server-side)
-            commands::get_server_settings,
             commands::update_server_settings,
             commands::update_sorting_prefixes,
         ])
