@@ -1,5 +1,6 @@
 import { SectionHead, Row, SERIF, MONO } from './shared';
 import type { OnyxState } from '../../state/onyx';
+import ServerSettingsSection from './ServerSettingsSection';
 
 export interface ServerSectionProps { st: OnyxState; }
 
@@ -45,6 +46,11 @@ export default function ServerSection({ st }: ServerSectionProps) {
           }}
         />
       </Row>
+
+      {/* Global server administration settings — admin only. Embedded here so
+          there is a single "Server" panel rather than a confusing split between
+          "Server" (connection) and "Server Settings" (admin config). */}
+      {st.isAdmin && <ServerSettingsSection st={st} embedded />}
     </div>
   );
 }
