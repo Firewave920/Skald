@@ -792,6 +792,104 @@ impl AbsClient {
             .map_err(|e| e.to_string())
     }
 
+    // ── Cover management ─────────────────────────────────────────────────────
+
+    /// GET /api/search/covers?title=&author=&provider= — find cover candidates.
+    /// For books ABS returns `{ results: [<url>, …] }` (an array of image URLs).
+    pub async fn find_covers(
+        &self,
+        title: &str,
+        author: &str,
+        provider: &str,
+    ) -> Result<Vec<String>, String> {
+        #[derive(Deserialize)]
+        struct Wrapper { #[serde(default)] results: Vec<String> }
+
+        let resp = self
+            .http
+            .get(format!("{}/api/search/covers", self.root()))
+            .query(&[("title", title), ("author", author), ("provider", provider)])
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("find_covers failed: HTTP {}", resp.status()));
+        }
+
+        Ok(resp.json::<Wrapper>().await.map_err(|e| e.to_string())?.results)
+    }
+
+    /// POST /api/items/{id}/cover with `{ url }` — ABS downloads the remote cover
+    /// and sets it on the item (uploadCover's URL mode). Requires canUpload.
+    pub async fn set_cover_url(&self, item_id: &str, url: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .post(format!("{}/api/items/{item_id}/cover", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .json(&serde_json::json!({ "url": url }))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("set_cover_url failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    /// POST /api/items/{id}/cover (multipart, field "cover") — upload a local
+    /// image as the item's cover. Requires canUpload.
+    pub async fn upload_cover(&self, item_id: &str, file_path: &str) -> Result<(), String> {
+        let bytes = std::fs::read(file_path).map_err(|e| format!("read file failed: {e}"))?;
+        let name = std::path::Path::new(file_path)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "cover.jpg".to_string());
+        let mime = match name.rsplit('.').next().map(|e| e.to_ascii_lowercase()).as_deref() {
+            Some("png") => "image/png",
+            Some("webp") => "image/webp",
+            Some("gif") => "image/gif",
+            _ => "image/jpeg",
+        };
+        let part = reqwest::multipart::Part::bytes(bytes)
+            .file_name(name)
+            .mime_str(mime)
+            .map_err(|e| e.to_string())?;
+        let form = reqwest::multipart::Form::new().part("cover", part);
+
+        let resp = self
+            .http
+            .post(format!("{}/api/items/{item_id}/cover", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("upload_cover failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
+    /// DELETE /api/items/{id}/cover — remove the item's cover.
+    pub async fn remove_cover(&self, item_id: &str) -> Result<(), String> {
+        let resp = self
+            .http
+            .delete(format!("{}/api/items/{item_id}/cover", self.root()))
+            .header("Authorization", self.auth_header()?)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if !resp.status().is_success() {
+            return Err(format!("remove_cover failed: HTTP {}", resp.status()));
+        }
+        Ok(())
+    }
+
     /// PATCH /api/items/{item_id}/media — writes the full media payload. ABS reads
     /// `metadata` (with object-array authors/narrators/series, not flat strings) and
     /// top-level siblings like `tags`, so callers pass the whole `{ metadata, tags }`

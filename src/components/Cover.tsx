@@ -5,6 +5,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import type { LibraryItem } from '../state/onyx';
 import { bookPalette, bookTpl, bookTitle, bookAuthor, bookSeries } from '../state/onyx';
 import { getCover } from '../api/abs';
+import { subscribeCover } from '../lib/coverBust';
 
 export interface CoverProps {
   item: LibraryItem;
@@ -19,6 +20,11 @@ export interface CoverProps {
 
 export default function Cover({ item, size = 180, scale = 1, fill = false, className, style, onClick, serverUrl }: CoverProps) {
   const [coverSrc, setCoverSrc] = useState<string | null>(null);
+  // Bumped when this item's cover changes (via the coverBust registry) to force
+  // a re-fetch of the cleared cache and a fresh ?v token on the <img> src.
+  const [bust, setBust] = useState(0);
+
+  useEffect(() => subscribeCover(item.id, () => setBust(b => b + 1)), [item.id]);
 
   useEffect(() => {
     if (!serverUrl) return;
@@ -35,7 +41,7 @@ export default function Cover({ item, size = 180, scale = 1, fill = false, class
       })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [serverUrl, item.id]);
+  }, [serverUrl, item.id, bust]);
 
   const [bg, mid, accent] = bookPalette(item);
   const tpl = bookTpl(item);
@@ -64,7 +70,7 @@ export default function Cover({ item, size = 180, scale = 1, fill = false, class
       <div style={base} className={className} onClick={onClick}>
         {/* convertFileSrc turns the absolute disk path into an asset:// URL WebView2 can load. */}
         {/* loading="lazy" defers offscreen cover fetches until they scroll into view. */}
-        <img src={convertFileSrc(coverSrc)} loading="lazy" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} alt={title} />
+        <img src={`${convertFileSrc(coverSrc)}?v=${bust}`} loading="lazy" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} alt={title} />
       </div>
     );
   }
