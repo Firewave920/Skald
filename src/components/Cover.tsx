@@ -43,6 +43,8 @@ export default function Cover({ item, size = 180, scale = 1, fill = false, class
         if (cancelled) return;
         setCoverSrc(path);
       })
+      // Server cover may be absent (e.g. podcasts without a downloaded cover);
+      // the fallbackImageUrl / generated template handle that case.
       .catch(() => {});
     return () => { cancelled = true; };
   }, [serverUrl, item.id, bust]);

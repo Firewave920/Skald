@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import type { OnyxState, LibraryItem } from '../state/onyx';
 import { fmtRemaining, fmtTime } from '../state/onyx';
 import { asPodcastItem, fetchItem, type PodcastEpisode } from '../api/abs';
+import { resolvePodcastImage, cachedPodcastImage } from '../lib/podcastCover';
 import { playEpisode, togglePlayback } from '../api/playbook';
 import Cover from '../components/Cover';
 import Icon from '../components/Icon';
@@ -42,6 +43,10 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
     : 0;
   const [full, setFull] = useState<LibraryItem | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  // Feed-resolved cover for items whose stored metadata carries no image.
+  const [feedImg, setFeedImg] = useState<string | undefined>(
+    () => (st.podcastDetailId ? cachedPodcastImage(st.podcastDetailId) : undefined),
+  );
 
   useEffect(() => {
     if (!st.podcastDetailId || !st.serverUrl) { setFull(null); return; }
@@ -52,6 +57,19 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
       .catch(e => console.error('[Podcast] fetchItem detail failed:', e));
     return () => { cancelled = true; };
   }, [st.podcastDetailId, st.serverUrl, libEpisodeCount, refreshTick]);
+
+  // Resolve cover art from the feed when neither the stored imageUrl nor the
+  // raw-feed `image` key is present (older subscriptions).
+  useEffect(() => {
+    const id = st.podcastDetailId;
+    if (!id) return;
+    const m = ((full ?? libEntry) as unknown as { media?: { metadata?: Record<string, unknown> } })?.media?.metadata ?? {};
+    if (m.imageUrl || m.image) return;
+    const cached = cachedPodcastImage(id);
+    if (cached) { setFeedImg(cached); return; }
+    if (!m.feedUrl) return;
+    resolvePodcastImage(st.serverUrl, id, m.feedUrl as string).then(u => { if (u) setFeedImg(u); });
+  }, [st.podcastDetailId, st.serverUrl, full, libEntry]);
 
   // Prefer the expanded item (has episodes[]); fall back to the minified entry
   // for the header while the expanded fetch is in flight.
@@ -118,7 +136,7 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
       {/* Header */}
       <div style={{ display: 'flex', gap: 20, flexShrink: 0 }}>
         <div style={{ width: 160, height: 160, flexShrink: 0 }}>
-          <Cover item={item} fill serverUrl={st.serverUrl} fallbackImageUrl={meta?.imageUrl ?? undefined} />
+          <Cover item={item} fill serverUrl={st.serverUrl} fallbackImageUrl={(meta?.imageUrl ?? (meta as unknown as { image?: string })?.image) || feedImg} />
         </div>
         <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--onyx-text)', lineHeight: 1.15 }}>
