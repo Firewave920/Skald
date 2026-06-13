@@ -225,27 +225,21 @@ function CollapseHandle({ collapsed, onToggle }: { collapsed: boolean; onToggle:
       onClick={onToggle}
       title={collapsed ? 'Expand panel' : 'Collapse panel'}
       style={{
-        position: 'absolute', top: 12, bottom: 12, right: -1, width: 18,
+        position: 'absolute', top: 0, bottom: 0, right: -1, width: 22,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', zIndex: 5,
       }}
     >
+      {/* Just a small chevron knob — no full-height accent bar (that read as a
+          stray "glow" along the panel edge). The knob still toggles collapse. */}
       <div style={{
-        width: 4, height: '100%', borderRadius: 2,
-        background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.22) 30%, rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.22) 70%, rgba(255,255,255,0.04))',
-        border: '1px solid var(--onyx-glass-edge)',
-        position: 'relative',
+        width: 22, height: 44, borderRadius: 11,
+        background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-glass-edge)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: 'var(--onyx-text-dim)',
       }}>
-        <div style={{
-          position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)',
-          width: 22, height: 44, borderRadius: 11,
-          background: 'var(--onyx-panel2)', border: '1px solid var(--onyx-glass-edge)',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: 'var(--onyx-accent)',
-        }}>
-          <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={12} />
-        </div>
+        <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={12} />
       </div>
     </button>
   );
