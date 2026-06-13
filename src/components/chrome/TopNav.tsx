@@ -70,7 +70,7 @@ export default function TopNav({ st }: TopNavProps) {
   };
 
   return (
-    <Glass translucent={st.translucent} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 18, overflow: 'visible' }}>
+    <Glass translucent={st.translucent} style={{ padding: '12px 18px', display: 'flex', alignItems: 'center', gap: 18, overflow: 'visible', position: 'relative', zIndex: 40 }}>
       {/* overflow: visible — active tab underline protrudes below via position:absolute, must not be clipped */}
       {items.map(n => {
         const active = st.screen === n.id || (n.id === 'library' && st.screen === 'podcast');
@@ -98,7 +98,7 @@ export default function TopNav({ st }: TopNavProps) {
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
               fontFamily: mono, fontSize: 11, letterSpacing: '0.04em',
-              background: '#000', color: 'var(--onyx-text)',
+              background: 'var(--onyx-bg)', color: 'var(--onyx-text)',
               border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, padding: '5px 10px', cursor: 'pointer',
               maxWidth: 240,
             }}
@@ -113,7 +113,7 @@ export default function TopNav({ st }: TopNavProps) {
           {libMenuOpen && (
             <div style={{
               position: 'absolute', top: '100%', left: 0, marginTop: 4, zIndex: 100, minWidth: 200,
-              background: '#000', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
+              background: 'var(--onyx-bg)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
               boxShadow: '0 12px 32px rgba(0,0,0,0.6)', padding: 4, overflow: 'hidden',
             }}>
               {st.libraries.map(l => {
@@ -175,7 +175,7 @@ export default function TopNav({ st }: TopNavProps) {
               style={{
                 display: 'flex', alignItems: 'center', gap: 6,
                 fontFamily: mono, fontSize: 10, letterSpacing: '0.04em',
-                background: '#000', color: 'var(--onyx-text-dim)',
+                background: 'var(--onyx-bg)', color: 'var(--onyx-text-dim)',
                 border: '1px solid var(--onyx-glass-edge)', borderRadius: 4, padding: '3px 6px', cursor: 'pointer',
               }}
             >
@@ -187,7 +187,7 @@ export default function TopNav({ st }: TopNavProps) {
             {scopeOpen && (
               <div style={{
                 position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100, minWidth: 110,
-                background: '#000', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
+                background: 'var(--onyx-bg)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
                 boxShadow: '0 12px 32px rgba(0,0,0,0.6)', padding: 4,
               }}>
                 {SCOPES.map(s => {
