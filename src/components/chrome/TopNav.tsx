@@ -15,6 +15,9 @@ function libraryLabel(l: { name: string; mediaType: string }): string {
 
 export default function TopNav({ st }: TopNavProps) {
   const mono = "'JetBrains Mono', ui-monospace, monospace";
+  // Podcast search is title-only, so the field-scope selector (Title/Author/
+  // Series) is hidden for podcast libraries.
+  const isPodcast = st.activeLibrary?.mediaType === 'podcast';
   // Custom library dropdown (a native <select> can't be themed to match Onyx).
   const [libMenuOpen, setLibMenuOpen] = useState(false);
   const [hoverLib, setHoverLib] = useState<string | null>(null);
@@ -133,29 +136,32 @@ export default function TopNav({ st }: TopNavProps) {
           onChange={(e) => st.setSearch(e.target.value)}
           style={{
             width: '100%', boxSizing: 'border-box',
-            padding: '8px 92px 8px 34px',
+            padding: isPodcast ? '8px 12px 8px 34px' : '8px 92px 8px 34px',
             background: 'rgba(0,0,0,0.3)', borderRadius: 8,
             fontSize: 12, color: 'var(--onyx-text)',
             border: '1px solid var(--onyx-line)', outline: 'none', fontFamily: 'inherit',
           }}
         />
-        {/* Search scope — narrows the query to a single field (Ctrl+K still focuses). */}
-        <select
-          value={st.searchScope}
-          onChange={(e) => st.setSearchScope(e.target.value as SearchScope)}
-          title="Search field scope"
-          style={{
-            position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-            fontFamily: mono, fontSize: 10, letterSpacing: '0.04em',
-            background: 'rgba(0,0,0,0.3)', color: 'var(--onyx-text-dim)',
-            border: '1px solid var(--onyx-glass-edge)', borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
-          }}
-        >
-          <option value="all">All</option>
-          <option value="title">Title</option>
-          <option value="author">Author</option>
-          <option value="series">Series</option>
-        </select>
+        {/* Search scope — narrows the query to a single field (Ctrl+K still
+            focuses). Hidden for podcasts, which only search by title. */}
+        {!isPodcast && (
+          <select
+            value={st.searchScope}
+            onChange={(e) => st.setSearchScope(e.target.value as SearchScope)}
+            title="Search field scope"
+            style={{
+              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
+              fontFamily: mono, fontSize: 10, letterSpacing: '0.04em',
+              background: 'rgba(0,0,0,0.3)', color: 'var(--onyx-text-dim)',
+              border: '1px solid var(--onyx-glass-edge)', borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
+            }}
+          >
+            <option value="all">All</option>
+            <option value="title">Title</option>
+            <option value="author">Author</option>
+            <option value="series">Series</option>
+          </select>
+        )}
       </div>
       {/* User avatar — initial derived from logged-in username, not hardcoded */}
       <button
