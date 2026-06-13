@@ -13,6 +13,14 @@ function libraryLabel(l: { name: string; mediaType: string }): string {
   return l.mediaType === 'podcast' ? `Podcasts: ${l.name}` : l.name;
 }
 
+// Search field-scope options (book libraries).
+const SCOPES: { value: SearchScope; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'title', label: 'Title' },
+  { value: 'author', label: 'Author' },
+  { value: 'series', label: 'Series' },
+];
+
 export default function TopNav({ st }: TopNavProps) {
   const mono = "'JetBrains Mono', ui-monospace, monospace";
   // Podcast search is title-only, so the field-scope selector (Title/Author/
@@ -22,6 +30,10 @@ export default function TopNav({ st }: TopNavProps) {
   const [libMenuOpen, setLibMenuOpen] = useState(false);
   const [hoverLib, setHoverLib] = useState<string | null>(null);
   const libRef = useRef<HTMLDivElement>(null);
+  // Custom search field-scope dropdown (same Onyx treatment as the switcher).
+  const [scopeOpen, setScopeOpen] = useState(false);
+  const [hoverScope, setHoverScope] = useState<SearchScope | null>(null);
+  const scopeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!libMenuOpen) return;
@@ -31,6 +43,15 @@ export default function TopNav({ st }: TopNavProps) {
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [libMenuOpen]);
+
+  useEffect(() => {
+    if (!scopeOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (scopeRef.current && !scopeRef.current.contains(e.target as Node)) setScopeOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [scopeOpen]);
 
   const items: { id: string; label: string }[] = [
     { id: 'library', label: 'Library' },
@@ -143,24 +164,58 @@ export default function TopNav({ st }: TopNavProps) {
           }}
         />
         {/* Search scope — narrows the query to a single field (Ctrl+K still
-            focuses). Hidden for podcasts, which only search by title. */}
+            focuses). Hidden for podcasts, which only search by title. Custom
+            dropdown (black surface; accent highlight on hover, check on current)
+            to match the library switcher. */}
         {!isPodcast && (
-          <select
-            value={st.searchScope}
-            onChange={(e) => st.setSearchScope(e.target.value as SearchScope)}
-            title="Search field scope"
-            style={{
-              position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)',
-              fontFamily: mono, fontSize: 10, letterSpacing: '0.04em',
-              background: 'rgba(0,0,0,0.3)', color: 'var(--onyx-text-dim)',
-              border: '1px solid var(--onyx-glass-edge)', borderRadius: 4, padding: '2px 4px', cursor: 'pointer',
-            }}
-          >
-            <option value="all">All</option>
-            <option value="title">Title</option>
-            <option value="author">Author</option>
-            <option value="series">Series</option>
-          </select>
+          <div ref={scopeRef} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)' }}>
+            <button
+              onClick={() => setScopeOpen(o => !o)}
+              title="Search field scope"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                fontFamily: mono, fontSize: 10, letterSpacing: '0.04em',
+                background: '#000', color: 'var(--onyx-text-dim)',
+                border: '1px solid var(--onyx-glass-edge)', borderRadius: 4, padding: '3px 6px', cursor: 'pointer',
+              }}
+            >
+              {SCOPES.find(s => s.value === st.searchScope)?.label ?? 'All'}
+              <span style={{ display: 'inline-flex', transform: scopeOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>
+                <Icon name="chevron-down" size={10} />
+              </span>
+            </button>
+            {scopeOpen && (
+              <div style={{
+                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100, minWidth: 110,
+                background: '#000', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
+                boxShadow: '0 12px 32px rgba(0,0,0,0.6)', padding: 4,
+              }}>
+                {SCOPES.map(s => {
+                  const active = s.value === st.searchScope;
+                  const hover = hoverScope === s.value;
+                  return (
+                    <button
+                      key={s.value}
+                      onClick={() => { st.setSearchScope(s.value); setScopeOpen(false); }}
+                      onMouseEnter={() => setHoverScope(s.value)}
+                      onMouseLeave={() => setHoverScope(prev => (prev === s.value ? null : prev))}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
+                        width: '100%', textAlign: 'left', padding: '7px 9px', borderRadius: 6,
+                        background: hover ? 'var(--onyx-accent)' : 'transparent',
+                        color: hover ? 'var(--onyx-bg)' : (active ? 'var(--onyx-accent)' : 'var(--onyx-text)'),
+                        border: 'none', cursor: 'pointer', fontFamily: mono, fontSize: 10.5, letterSpacing: '0.04em',
+                        fontWeight: active ? 600 : 400,
+                      }}
+                    >
+                      {s.label}
+                      {active && <Icon name="check" size={11} />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
       {/* User avatar — initial derived from logged-in username, not hardcoded */}
