@@ -6,12 +6,13 @@
 import { useState, useEffect } from 'react';
 import type { OnyxState, LibraryItem } from '../state/onyx';
 import { fmtRemaining, fmtTime } from '../state/onyx';
-import { asPodcastItem, fetchItem, downloadEpisodes, type PodcastEpisode, type RecentEpisode } from '../api/abs';
+import { asPodcastItem, fetchItem, type PodcastEpisode, type RecentEpisode } from '../api/abs';
 import { resolvePodcastFeed, cachedFeedEpisodes, cachedPodcastImage, episodeKey } from '../lib/podcastCover';
 import { playEpisode, togglePlayback } from '../api/playbook';
 import Cover from '../components/Cover';
 import Icon from '../components/Icon';
 import PodcastSettingsModal from '../components/podcast/PodcastSettingsModal';
+import PodcastDownloadModal from '../components/podcast/PodcastDownloadModal';
 
 export interface PodcastDetailProps {
   st: OnyxState;
@@ -32,6 +33,7 @@ function episodeTime(ep: PodcastEpisode): number {
 export default function PodcastDetail({ st }: PodcastDetailProps) {
   const mono = "'JetBrains Mono', ui-monospace, monospace";
   const [showSettings, setShowSettings] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
 
   // The library list returns MINIFIED podcast items (numEpisodes but no
   // episodes[]). Fetch the expanded item for the downloaded episode list.
@@ -41,6 +43,7 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
     : 0;
   const [full, setFull] = useState<LibraryItem | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const bumpRefresh = () => { setRefreshTick(t => t + 1); st.refreshLibrary().catch(e => console.error('[Podcast] refresh failed:', e)); };
   const [feedImg, setFeedImg] = useState<string | undefined>(
     () => (st.podcastDetailId ? cachedPodcastImage(st.podcastDetailId) : undefined),
   );
@@ -49,7 +52,6 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
   const [feedEps, setFeedEps] = useState<RecentEpisode[]>(
     () => (st.podcastDetailId ? cachedFeedEpisodes(st.podcastDetailId) ?? [] : []),
   );
-  const [downloadingAll, setDownloadingAll] = useState(false);
 
   useEffect(() => {
     if (!st.podcastDetailId || !st.serverUrl) { setFull(null); return; }
@@ -135,24 +137,8 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
     play(ep);
   };
 
-  // Queue every not-yet-downloaded episode.
-  const downloadAll = async () => {
-    const targets = episodes.filter(e => !e.downloaded).map(e => e.ep);
-    if (targets.length === 0) return;
-    setDownloadingAll(true);
-    console.log('[Podcast] download all', targets.length);
-    try {
-      await downloadEpisodes(st.serverUrl, item.id, targets);
-      st.setToast({ message: `Queued ${targets.length} episode${targets.length === 1 ? '' : 's'} for download`, type: 'success' });
-      setRefreshTick(t => t + 1);
-      st.refreshLibrary().catch(e => console.error('[Podcast] refresh after download-all failed:', e));
-    } catch (e) {
-      console.error('[Podcast] download all failed:', e);
-      st.setToast({ message: 'Download failed', type: 'error' });
-    } finally {
-      setDownloadingAll(false);
-    }
-  };
+  // The undownloaded episodes offered in the download picker.
+  const undownloaded = episodes.filter(e => !e.downloaded).map(e => e.ep);
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 18, padding: '8px 24px 24px', minHeight: 0, width: '100%', overflow: 'hidden' }}>
@@ -198,17 +184,17 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
           {/* Actions */}
           <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
             <button
-              onClick={downloadAll}
-              disabled={downloadingAll || pendingCount === 0}
-              title={pendingCount === 0 ? 'All episodes downloaded' : `Download ${pendingCount} episode${pendingCount === 1 ? '' : 's'}`}
+              onClick={() => setShowDownload(true)}
+              disabled={pendingCount === 0}
+              title={pendingCount === 0 ? 'All episodes downloaded' : `Choose from ${pendingCount} episode${pendingCount === 1 ? '' : 's'} to download`}
               style={{
                 padding: '7px 14px', borderRadius: 8, border: 'none',
-                cursor: (downloadingAll || pendingCount === 0) ? 'default' : 'pointer',
-                background: (downloadingAll || pendingCount === 0) ? 'var(--onyx-line)' : 'var(--onyx-accent)',
-                color: (downloadingAll || pendingCount === 0) ? 'var(--onyx-text-mute)' : 'var(--onyx-bg)',
+                cursor: pendingCount === 0 ? 'default' : 'pointer',
+                background: pendingCount === 0 ? 'var(--onyx-line)' : 'var(--onyx-accent)',
+                color: pendingCount === 0 ? 'var(--onyx-text-mute)' : 'var(--onyx-bg)',
                 fontFamily: mono, fontSize: 11, letterSpacing: '0.06em', fontWeight: 600,
               }}
-            >{downloadingAll ? 'Queueing…' : pendingCount === 0 ? 'All downloaded' : `Download all (${pendingCount})`}</button>
+            >{pendingCount === 0 ? 'All downloaded' : `Download… (${pendingCount})`}</button>
             <button
               onClick={() => setShowSettings(true)}
               style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--onyx-glass-edge)', cursor: 'pointer', background: 'transparent', color: 'var(--onyx-text-dim)', fontFamily: mono, fontSize: 11, letterSpacing: '0.06em' }}
@@ -278,12 +264,21 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
         })}
       </div>
 
+      {showDownload && (
+        <PodcastDownloadModal
+          st={st}
+          itemId={item.id}
+          episodes={undownloaded}
+          onClose={() => setShowDownload(false)}
+          onQueued={bumpRefresh}
+        />
+      )}
       {showSettings && (
         <PodcastSettingsModal
           st={st}
           item={item}
           onClose={() => setShowSettings(false)}
-          onSaved={() => { setRefreshTick(t => t + 1); st.refreshLibrary().catch(e => console.error('[Podcast] refresh after settings save failed:', e)); }}
+          onSaved={bumpRefresh}
         />
       )}
     </div>
