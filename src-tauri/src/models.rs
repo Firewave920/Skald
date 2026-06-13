@@ -2,15 +2,6 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-/// Treat a JSON `null` the same as a missing key: use T::default().
-fn null_as_default<'de, D, T>(d: D) -> Result<T, D::Error>
-where
-    D: serde::Deserializer<'de>,
-    T: Default + Deserialize<'de>,
-{
-    Ok(Option::<T>::deserialize(d)?.unwrap_or_default())
-}
-
 /// An audio output device returned by LibVLC.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AudioDevice {
@@ -264,95 +255,35 @@ pub struct LibraryFile {
     pub file_type: String,
 }
 
-/// Top-level library item (book file entry).
+/// Default media type for a library item when the server omits the field
+/// (older/minified payloads). Book is the historical default.
+fn default_book_media_type() -> String {
+    "book".to_string()
+}
+
+/// Top-level library item, covering both book and podcast media.
+///
+/// `media` is intentionally kept as raw JSON rather than a typed struct: the
+/// Rust backend treats library items as pass-through and never destructures
+/// `media`, while the frontend narrows it to a discriminated union on
+/// `mediaType`. A typed `BookMedia` here would silently drop podcast-only
+/// fields (notably `episodes[]`), and an `#[serde(untagged)]` enum can't
+/// discriminate because every podcast payload also structurally matches the
+/// all-optional book shape — the only reliable tag (`mediaType`) lives on the
+/// item, not inside `media`. So we forward `media` verbatim and let TypeScript
+/// own the shape. (Podcast cluster E — see the Podcasts roadmap.)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct LibraryItem {
     pub id: String,
     pub ino: String,
     pub library_id: String,
-    pub media: BookMedia,
+    /// "book" | "podcast". Defaulted to "book" for payloads that omit it.
+    #[serde(default = "default_book_media_type")]
+    pub media_type: String,
+    pub media: Value,
     #[serde(default)]
     pub library_files: Option<Vec<LibraryFile>>,
-}
-
-/// Book media payload — metadata + playback data.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BookMedia {
-    pub metadata: BookMetadata,
-    #[serde(default, deserialize_with = "null_as_default")]
-    pub chapters: Vec<Chapter>,
-    #[serde(default, deserialize_with = "null_as_default")]
-    pub audio_files: Vec<Value>,
-    #[serde(default)]
-    pub tags: Vec<String>,
-    #[serde(default)]
-    pub ebook_file: Option<Value>,
-    #[serde(default)]
-    pub duration: f64,
-}
-
-/// The `author` field varies across endpoints: plain string in minified
-/// responses, a single object or array of objects in expanded responses.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(untagged)]
-pub enum AuthorField {
-    Name(String),
-    Object(AuthorObject),
-    Array(Vec<AuthorObject>),
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct AuthorObject {
-    pub id: String,
-    pub name: String,
-}
-
-/// Book-level metadata. `author_name` uses AuthorField to handle the
-/// string/object/array variance documented in CLAUDE.md critical lesson 5.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct BookMetadata {
-    pub title: Option<String>,
-    pub subtitle: Option<String>,
-    pub author_name: Option<AuthorField>,
-    pub narrator_name: Option<String>,
-    // The expanded single-item response (GET /api/items/:id) carries authors and
-    // narrators as arrays with authorName/narratorName often null. Pass them
-    // through as raw JSON so the metadata editor can seed from them. (Without
-    // these fields, serde drops them and the editor's author field comes up blank.)
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub authors: Option<Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub narrators: Option<Value>,
-    pub series_name: Option<String>,
-    #[serde(default)]
-    pub genres: Vec<String>,
-    #[serde(default)]
-    pub description: Option<String>,
-    #[serde(default)]
-    pub publisher: Option<String>,
-    #[serde(default)]
-    pub published_year: Option<String>,
-    #[serde(default)]
-    pub language: Option<String>,
-    #[serde(default)]
-    pub isbn: Option<String>,
-    #[serde(default)]
-    pub isbn10: Option<String>,
-    #[serde(default)]
-    pub isbn13: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct Chapter {
-    pub id: i64,
-    pub start: f64,
-    pub end: f64,
-    pub title: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
