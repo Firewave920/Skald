@@ -1,9 +1,10 @@
 // Podcast library browse grid. Rendered by Library.tsx when the active library
 // is a podcast library. Each tile is a square cover with the podcast title and
 // an episode-count badge; clicking opens the podcast detail screen.
-import { useState } from 'react';
-import type { OnyxState } from '../../state/onyx';
+import { useState, useEffect } from 'react';
+import type { OnyxState, LibraryItem } from '../../state/onyx';
 import { asPodcastItem } from '../../api/abs';
+import { resolvePodcastImage, cachedPodcastImage } from '../../lib/podcastCover';
 import Cover from '../Cover';
 import PodcastSubscribeModal from './PodcastSubscribeModal';
 
@@ -11,9 +12,36 @@ export interface PodcastBrowseProps {
   st: OnyxState;
 }
 
+// Read the cover art URL a podcast item already carries (stored imageUrl, or the
+// raw-feed `image` key on older items), if any.
+function directImage(it: LibraryItem): string | undefined {
+  const m = (it.media?.metadata ?? {}) as unknown as Record<string, unknown>;
+  return (m.imageUrl as string) || (m.image as string) || undefined;
+}
+
 export default function PodcastBrowse({ st }: PodcastBrowseProps) {
   const mono = "'JetBrains Mono', ui-monospace, monospace";
   const [showSubscribe, setShowSubscribe] = useState(false);
+  // Feed-resolved cover URLs for items whose stored metadata has no image.
+  const [feedImages, setFeedImages] = useState<Record<string, string>>({});
+
+  // Backfill cover art from the live feed for any podcast lacking a stored image.
+  useEffect(() => {
+    st.library.forEach(it => {
+      if (directImage(it) || cachedPodcastImage(it.id) || feedImages[it.id]) return;
+      const meta = (it.media?.metadata ?? {}) as unknown as Record<string, unknown>;
+      const feedUrl = meta.feedUrl as string | undefined;
+      if (!feedUrl) return;
+      resolvePodcastImage(st.serverUrl, it.id, feedUrl).then(url => {
+        if (url) setFeedImages(prev => (prev[it.id] ? prev : { ...prev, [it.id]: url }));
+      });
+    });
+  }, [st.library, st.serverUrl]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Resolve the best cover URL for a browse item: stored image first, else the
+  // feed-resolved one.
+  const coverFor = (it: LibraryItem): string | undefined =>
+    directImage(it) ?? cachedPodcastImage(it.id) ?? feedImages[it.id];
 
   // Apply the shelf search box to podcast titles (TopNav writes st.search).
   const q = st.search.trim().toLowerCase();
@@ -99,7 +127,7 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
               }}
             >
               <div style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1' }}>
-                <Cover item={it} fill serverUrl={st.serverUrl} fallbackImageUrl={p.media?.metadata?.imageUrl ?? undefined} />
+                <Cover item={it} fill serverUrl={st.serverUrl} fallbackImageUrl={coverFor(it)} />
                 {/* Episode-count badge */}
                 <div style={{
                   position: 'absolute', right: 6, bottom: 6,

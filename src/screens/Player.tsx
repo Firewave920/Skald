@@ -21,6 +21,7 @@ import Waveform from '../components/Waveform';
 import VolumeControl from '../components/chrome/VolumeControl';
 import DeviceSelector from '../components/chrome/DeviceSelector';
 import { getCachedReview, setCachedReview } from '../api/reviewCache';
+import { resolvePodcastImage, cachedPodcastImage } from '../lib/podcastCover';
 import type { OLRatings, OLShelves } from '../api/reviewCache';
 import MiniPlayer from '../components/player/MiniPlayer';
 // Canonical play function — all "start this book" paths route through here
@@ -74,7 +75,12 @@ export default function Player({ st }: PlayerProps) {
   const isPodcast = b.mediaType === 'podcast';
   const ep = isPodcast ? st.currentEpisode : null;
   // Feed artwork fallback for the cover when the ABS server cover is missing.
-  const podcastImageUrl = isPodcast ? (asPodcastItem(b).media.metadata?.imageUrl ?? undefined) : undefined;
+  // Stored items may carry imageUrl or the raw-feed `image` key; older ones have
+  // neither, so podcastFeedImg (resolved below) backfills from the live feed.
+  const podcastMeta = isPodcast ? (asPodcastItem(b).media.metadata as unknown as Record<string, unknown>) : undefined;
+  const podcastImageUrl = isPodcast
+    ? ((podcastMeta?.imageUrl as string) || (podcastMeta?.image as string) || undefined)
+    : undefined;
   const detailLabel = isPodcast ? 'Description' : 'Synopsis';
   const descriptionHtml = isPodcast
     ? (ep?.description || b.media?.metadata?.description || '')
@@ -206,6 +212,19 @@ export default function Player({ st }: PlayerProps) {
   const [olWorkKey, setOlWorkKey] = useState<string | null | undefined>(undefined);
   const [olRatings, setOlRatings] = useState<OLRatings | null>(null);
   const [olShelves, setOlShelves] = useState<OLShelves | null>(null);
+
+  // Backfill the podcast cover from the live feed when the item carries no image.
+  const [podcastFeedImg, setPodcastFeedImg] = useState<string | undefined>(
+    () => (isPodcast ? cachedPodcastImage(b.id) : undefined),
+  );
+  useEffect(() => {
+    if (!isPodcast || podcastImageUrl) return;
+    const cached = cachedPodcastImage(b.id);
+    if (cached) { setPodcastFeedImg(cached); return; }
+    const feedUrl = podcastMeta?.feedUrl as string | undefined;
+    if (!feedUrl) return;
+    resolvePodcastImage(st.serverUrl, b.id, feedUrl).then(u => { if (u) setPodcastFeedImg(u); });
+  }, [isPodcast, b.id, podcastImageUrl, podcastMeta, st.serverUrl]);
 
   useEffect(() => {
     setOlWorkKey(undefined);
@@ -561,7 +580,7 @@ export default function Player({ st }: PlayerProps) {
         <div ref={leftColRef} style={{ minWidth: 0, maxWidth: 360, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', minHeight: 0, paddingBottom: isFocusedDifferent ? 72 : 0 }}>
           <div style={{ position: 'absolute', inset: '5% 5% 0 5%', borderRadius: 24, background: 'radial-gradient(50% 50% at 50% 50%, rgba(212,166,74,0.28), transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
           <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: coverSize, aspectRatio: '1 / 1', overflow: 'hidden' }}>
-            <Cover item={b} size={coverSize} fill serverUrl={st.serverUrl} fallbackImageUrl={podcastImageUrl} style={{ transition: 'width 0.3s ease, height 0.3s ease' }} />
+            <Cover item={b} size={coverSize} fill serverUrl={st.serverUrl} fallbackImageUrl={podcastImageUrl ?? podcastFeedImg} style={{ transition: 'width 0.3s ease, height 0.3s ease' }} />
           </div>
           <div style={{ marginTop: 32, textAlign: 'center', position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%' }}>
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 8 }}>{isPodcast ? 'Podcast' : bSeries}</div>
