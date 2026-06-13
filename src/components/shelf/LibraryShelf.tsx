@@ -14,6 +14,7 @@ import ContextMenu from '../ContextMenu';
 import { buildItemContextMenu } from './buildItemContextMenu';
 import MatchModal from '../MatchModal';
 import MetadataEditor from '../MetadataEditor';
+import CoverPicker from '../CoverPicker';
 import CollectionPicker from '../CollectionPicker';
 import PlaylistPicker from '../PlaylistPicker';
 import FilesModal from './FilesModal';
@@ -373,6 +374,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
   const [filesItem, setFilesItem] = useState<LibraryItem | null>(null);
   const [playlistItem, setPlaylistItem] = useState<LibraryItem | null>(null);
   const [editItem, setEditItem] = useState<LibraryItem | null>(null);
+  const [coverItem, setCoverItem] = useState<LibraryItem | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Ref to the inner scroll container — required by the virtualizer, which must
@@ -513,7 +515,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem, setEditItem)}
+          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem, setEditItem, setCoverItem)}
           onClose={() => setContextMenu(null)}
         />
       )}
@@ -539,6 +541,13 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
             setEditItem(null);
           }}
           onRefresh={() => { st.refreshLibrary().catch(console.error); }}
+        />
+      )}
+      {coverItem && (
+        <CoverPicker
+          item={coverItem}
+          st={st}
+          onClose={() => setCoverItem(null)}
         />
       )}
       {collectionItem && (

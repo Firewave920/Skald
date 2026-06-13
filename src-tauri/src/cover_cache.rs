@@ -39,3 +39,18 @@ pub fn load_cover(item_id: &str, width: Option<u32>) -> Result<Vec<u8>, String> 
     let path = cache_path(item_id, width);
     std::fs::read(&path).map_err(|e| format!("cover not cached for {item_id}: {e}"))
 }
+
+/// Delete every cached cover variant for `item_id` (`{id}.jpg` and `{id}_w*.jpg`).
+/// Called after a cover changes so the next fetch re-downloads the new art.
+pub fn clear(item_id: &str) {
+    let Some(dir) = cache_dir() else { return };
+    let Ok(entries) = std::fs::read_dir(&dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        // Matches "{id}.jpg" and "{id}_w{width}.jpg".
+        if name == format!("{item_id}.jpg") || name.starts_with(&format!("{item_id}_w")) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}

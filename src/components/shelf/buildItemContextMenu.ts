@@ -15,6 +15,7 @@ export function buildItemContextMenu(
   setFilesItem?: (item: LibraryItem) => void,
   setPlaylistItem?: (item: LibraryItem) => void,
   setEditItem?: (item: LibraryItem) => void,
+  setCoverItem?: (item: LibraryItem) => void,
 ): ContextMenuItem[] {
   const isAdmin = st.user?.type === 'root' || st.user?.type === 'admin';
   // Used to toggle the first menu item between Download and Delete Download.
@@ -158,6 +159,7 @@ export function buildItemContextMenu(
         },
       },
       { label: 'Edit Metadata', onClick: () => setEditItem?.(item), disabled: !setEditItem },
+      { label: 'Change Cover', onClick: () => setCoverItem?.(item), disabled: !setCoverItem },
       { label: 'Match', onClick: () => setMatchItem?.(item), disabled: !setMatchItem },
       {
         label: 'Delete',

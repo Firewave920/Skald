@@ -410,6 +410,28 @@ export function updateChapters(
   return invoke('update_chapters', { serverUrl, itemId, chapters });
 }
 
+// ── Cover management (admin / canUpload) ────────────────────────────────────────
+
+/** GET /api/search/covers — find candidate cover image URLs for a book. */
+export function findCovers(serverUrl: string, title: string, author: string, provider: string): Promise<string[]> {
+  return invoke('find_covers', { serverUrl, title, author, provider });
+}
+
+/** POST /api/items/:id/cover { url } — set the cover from a remote URL. */
+export function setCoverUrl(serverUrl: string, itemId: string, url: string): Promise<void> {
+  return invoke('set_cover_url', { serverUrl, itemId, url });
+}
+
+/** POST /api/items/:id/cover (multipart) — upload a local image file as the cover. */
+export function uploadCover(serverUrl: string, itemId: string, filePath: string): Promise<void> {
+  return invoke('upload_cover', { serverUrl, itemId, filePath });
+}
+
+/** DELETE /api/items/:id/cover — remove the item's cover. */
+export function removeCover(serverUrl: string, itemId: string): Promise<void> {
+  return invoke('remove_cover', { serverUrl, itemId });
+}
+
 export interface ShortcutBinding {
   action: string;
   shortcut: string;
