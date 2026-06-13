@@ -290,6 +290,10 @@ export interface OnyxState {
   setShowFinished: (show: boolean) => void;
   showProgressOverlay: boolean;
   setShowProgressOverlay: (show: boolean) => void;
+  // Visibility of the optional shelf tabs (narrators/genres/publishers/playlists).
+  // Core tabs (Home/Series/Authors/Collections) are always shown.
+  optionalTabs: Record<string, boolean>;
+  setOptionalTab: (id: string, on: boolean) => void;
   libraryView: string;
   setLibraryView: (view: string) => void;
   shelfTab: string;
@@ -713,6 +717,16 @@ export function useOnyxState(): OnyxState {
     const v = localStorage.getItem('onyx.lib.progressOverlay');
     return v === null ? true : v === 'true';
   });
+  const [optionalTabs, setOptionalTabsRaw] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem('onyx.lib.optionalTabs') || '{}'); } catch { return {}; }
+  });
+  const setOptionalTab = useCallback((id: string, on: boolean) => {
+    setOptionalTabsRaw(prev => {
+      const next = { ...prev, [id]: on };
+      localStorage.setItem('onyx.lib.optionalTabs', JSON.stringify(next));
+      return next;
+    });
+  }, []);
 
   const setLibrarySort = useCallback((v: string) => {
     localStorage.setItem('onyx.lib.sort', v); setLibrarySortRaw(v);
@@ -1117,6 +1131,7 @@ export function useOnyxState(): OnyxState {
     groupBySeries, setGroupBySeries,
     showFinished, setShowFinished,
     showProgressOverlay, setShowProgressOverlay,
+    optionalTabs, setOptionalTab,
     libraryView, setLibraryView,
     shelfTab, setShelfTab,
     pickItUpCollapsed, setPickItUpCollapsed,

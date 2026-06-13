@@ -98,6 +98,20 @@ export default function LibrarySection({ st }: LibrarySectionProps) {
         <Row label="Show progress overlay" hint="The thin gold bar at the bottom of cover thumbnails.">
           <Toggle on={st.showProgressOverlay} onChange={st.setShowProgressOverlay} />
         </Row>
+
+        {/* Optional shelf tabs — Home/Series/Authors/Collections are always shown. */}
+        <Row label="Narrators tab" hint="Show the Narrators tab on the library shelf.">
+          <Toggle on={!!st.optionalTabs.narrators} onChange={v => st.setOptionalTab('narrators', v)} />
+        </Row>
+        <Row label="Genres tab" hint="Show the Genres tab on the library shelf.">
+          <Toggle on={!!st.optionalTabs.genres} onChange={v => st.setOptionalTab('genres', v)} />
+        </Row>
+        <Row label="Publishers tab" hint="Show the Publishers tab on the library shelf.">
+          <Toggle on={!!st.optionalTabs.publishers} onChange={v => st.setOptionalTab('publishers', v)} />
+        </Row>
+        <Row label="Playlists tab" hint="Show the Playlists tab on the library shelf.">
+          <Toggle on={!!st.optionalTabs.playlists} onChange={v => st.setOptionalTab('playlists', v)} />
+        </Row>
       </>)}
     </div>
   );
