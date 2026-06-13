@@ -44,9 +44,14 @@ impl SessionManager {
     /// Open a playback session for `item_id`, spawn the 1-second tick loop
     /// (position updates + `playback-tick` events) and the 10-second sync loop.
     /// Returns the server's `currentTime` so the caller can seek after play starts.
+    ///
+    /// `episode_id` selects an individual podcast episode (cluster E); for a book
+    /// it is `None`. It only affects which `/play` route is opened — the session
+    /// id drives all subsequent sync, so episode progress persists like a book's.
     pub async fn start_session<R: tauri::Runtime>(
         &mut self,
         item_id: &str,
+        episode_id: Option<&str>,
         app: tauri::AppHandle<R>,
         start_time: Option<f64>,
     ) -> Result<f64, String> {
@@ -77,7 +82,7 @@ impl SessionManager {
             }
         }
 
-        let session = self.client.open_session(item_id, start_time).await?;
+        let session = self.client.open_session(item_id, episode_id, start_time).await?;
         self.session_id = Some(session.id.clone());
         // Prefer the caller-supplied start_time so LibVLC loads at the exact
         // chapter position even if the server's currentTime differs slightly.

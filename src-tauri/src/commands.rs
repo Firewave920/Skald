@@ -296,18 +296,24 @@ pub struct OpenSessionResult {
 pub async fn open_playback_session(
     server_url: String,
     item_id: String,
+    episode_id: Option<String>,
     start_time: Option<f64>,
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<OpenSessionResult, String> {
     let token = auth::load_token()?
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
+    // [Podcast] diagnostic — distinguishes episode sessions from book sessions
+    // while validating cluster E playback.
+    if episode_id.is_some() {
+        println!("[Podcast] open_playback_session item={item_id} episode={episode_id:?} start={start_time:?}");
+    }
     // Scope the SessionManager lock so it is released before this command
     // returns — play_audio acquires the same lock and must not see it held.
     let result = {
         let mut mgr = state.lock().await;
         mgr.client = AbsClient::new(server_url).with_token(token);
-        let current_time = mgr.start_session(&item_id, app, start_time).await?;
+        let current_time = mgr.start_session(&item_id, episode_id.as_deref(), app, start_time).await?;
         let session_id = mgr.session_id.clone()
             .ok_or_else(|| "Session ID not set after start".to_string())?;
         OpenSessionResult { session_id, current_time }
@@ -526,6 +532,7 @@ pub async fn delete_progress(
 pub async fn update_progress(
     server_url: String,
     item_id: String,
+    episode_id: Option<String>,
     current_time: f64,
     duration: f64,
     is_finished: bool,
@@ -534,7 +541,7 @@ pub async fn update_progress(
         .ok_or_else(|| "Not authenticated: no token stored".to_string())?;
     AbsClient::new(server_url)
         .with_token(token)
-        .update_progress(&item_id, current_time, duration, is_finished)
+        .update_progress(&item_id, episode_id.as_deref(), current_time, duration, is_finished)
         .await
 }
 
@@ -914,7 +921,9 @@ pub async fn flush_offline_progress(server_url: String) -> Result<u32, String> {
     if queue.is_empty() { return Ok(0); }
     let mut flushed: u32 = 0;
     for entry in &queue {
-        match client.update_progress(&entry.item_id, entry.current_time, entry.duration, entry.is_finished).await {
+        // Offline downloads are book-only (the queue carries no episode id), so
+        // episode_id is None here — see OfflineProgressEntry in downloads.rs.
+        match client.update_progress(&entry.item_id, None, entry.current_time, entry.duration, entry.is_finished).await {
             Ok(()) => {
                 // Remove only after a confirmed server write — ensures the entry
                 // survives for a retry if the app closes between syncs.
