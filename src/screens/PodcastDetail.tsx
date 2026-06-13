@@ -1,10 +1,10 @@
 // Podcast detail screen (cluster E). Shows a podcast's header (cover, title,
 // author, feed URL) and its downloaded episodes with per-episode progress and
 // a play action. Reached from PodcastBrowse via st.setScreen('podcast').
-import { useState } from 'react';
-import type { OnyxState } from '../state/onyx';
+import { useState, useEffect } from 'react';
+import type { OnyxState, LibraryItem } from '../state/onyx';
 import { fmtRemaining, fmtTime } from '../state/onyx';
-import { asPodcastItem, type PodcastEpisode } from '../api/abs';
+import { asPodcastItem, fetchItem, type PodcastEpisode } from '../api/abs';
 import { playEpisode } from '../api/playbook';
 import Cover from '../components/Cover';
 import Icon from '../components/Icon';
@@ -31,7 +31,31 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
   const mono = "'JetBrains Mono', ui-monospace, monospace";
   const [showFind, setShowFind] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const item = st.library.find(i => i.id === st.podcastDetailId);
+
+  // The library list returns MINIFIED podcast items — they carry numEpisodes but
+  // not the episodes[] array. Fetch the expanded item (GET /api/items/:id) so the
+  // episode list is populated. Re-fetch when the episode count changes (e.g. a
+  // download lands via the live-sync item-updated event) or after Find Episodes.
+  const libEntry = st.library.find(i => i.id === st.podcastDetailId);
+  const libEpisodeCount = libEntry
+    ? (asPodcastItem(libEntry).media.numEpisodes ?? asPodcastItem(libEntry).media.episodes?.length ?? 0)
+    : 0;
+  const [full, setFull] = useState<LibraryItem | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    if (!st.podcastDetailId || !st.serverUrl) { setFull(null); return; }
+    let cancelled = false;
+    console.log('[Podcast] fetch expanded item', st.podcastDetailId);
+    fetchItem(st.serverUrl, st.podcastDetailId)
+      .then(it => { if (!cancelled) setFull(it); })
+      .catch(e => console.error('[Podcast] fetchItem detail failed:', e));
+    return () => { cancelled = true; };
+  }, [st.podcastDetailId, st.serverUrl, libEpisodeCount, refreshTick]);
+
+  // Prefer the expanded item (has episodes[]); fall back to the minified entry
+  // for the header while the expanded fetch is in flight.
+  const item = full ?? libEntry;
 
   if (!item) {
     return (
@@ -179,7 +203,7 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
           st={st}
           item={item}
           onClose={() => setShowFind(false)}
-          onQueued={() => { st.refreshLibrary().catch(e => console.error('[Podcast] refresh after queue failed:', e)); }}
+          onQueued={() => { setRefreshTick(t => t + 1); st.refreshLibrary().catch(e => console.error('[Podcast] refresh after queue failed:', e)); }}
         />
       )}
       {showSettings && (
@@ -187,7 +211,7 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
           st={st}
           item={item}
           onClose={() => setShowSettings(false)}
-          onSaved={() => { st.refreshLibrary().catch(e => console.error('[Podcast] refresh after settings save failed:', e)); }}
+          onSaved={() => { setRefreshTick(t => t + 1); st.refreshLibrary().catch(e => console.error('[Podcast] refresh after settings save failed:', e)); }}
         />
       )}
     </div>
