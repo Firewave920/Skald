@@ -91,6 +91,7 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
 
   const p = asPodcastItem(item);
   const meta = p.media.metadata;
+  const autoOn = p.media.autoDownloadEpisodes ?? false;
 
   // Merge downloaded episodes (playable, with progress) with the published feed.
   const downloadedEps = p.media.episodes ?? [];
@@ -197,8 +198,15 @@ export default function PodcastDetail({ st }: PodcastDetailProps) {
             >{pendingCount === 0 ? 'All downloaded' : `Download… (${pendingCount})`}</button>
             <button
               onClick={() => setShowSettings(true)}
-              style={{ padding: '7px 14px', borderRadius: 8, border: '1px solid var(--onyx-glass-edge)', cursor: 'pointer', background: 'transparent', color: 'var(--onyx-text-dim)', fontFamily: mono, fontSize: 11, letterSpacing: '0.06em' }}
-            >Auto-download</button>
+              title={autoOn ? 'Auto-download is on — click to configure' : 'Configure auto-download'}
+              style={{
+                padding: '7px 14px', borderRadius: 8, cursor: 'pointer',
+                background: autoOn ? 'var(--onyx-accent)' : 'transparent',
+                color: autoOn ? 'var(--onyx-bg)' : 'var(--onyx-text-dim)',
+                border: autoOn ? 'none' : '1px solid var(--onyx-glass-edge)',
+                fontFamily: mono, fontSize: 11, letterSpacing: '0.06em', fontWeight: autoOn ? 600 : 400,
+              }}
+            >{autoOn ? 'Auto-download · enabled' : 'Auto-download'}</button>
           </div>
         </div>
       </div>
