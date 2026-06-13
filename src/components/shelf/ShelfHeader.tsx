@@ -10,16 +10,21 @@ import ViewModeToggle from './ViewModeToggle';
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-const TABS = [
+// Core tabs are always shown; optional ones are toggled in Settings → Library →
+// Display (st.optionalTabs), defaulting off to keep the bar short.
+const TABS: { id: string; label: string; optional?: boolean }[] = [
   { id: 'library',     label: 'Home'        },
   { id: 'series',      label: 'Series'      },
   { id: 'authors',     label: 'Authors'     },
-  { id: 'narrators',   label: 'Narrators'   },
-  { id: 'genres',      label: 'Genres'      },
-  { id: 'publishers',  label: 'Publishers'  },
+  { id: 'narrators',   label: 'Narrators',   optional: true },
+  { id: 'genres',      label: 'Genres',      optional: true },
+  { id: 'publishers',  label: 'Publishers',  optional: true },
   { id: 'collections', label: 'Collections' },
-  { id: 'playlists',   label: 'Playlists'   },
+  { id: 'playlists',   label: 'Playlists',   optional: true },
 ];
+
+// The optional tab ids — shared with the settings toggles and the fallback guard.
+export const OPTIONAL_TAB_IDS = ['narrators', 'genres', 'publishers', 'playlists'] as const;
 
 const FILTER_PILLS = [
   { id: 'all',      l: 'All'      },
@@ -63,6 +68,14 @@ export interface ShelfHeaderProps {
 export default function ShelfHeader({ st }: ShelfHeaderProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(9999);
+
+  // If the active tab is an optional one that's been hidden, fall back to Home so
+  // the user isn't stranded on a view with no corresponding (highlighted) tab.
+  useEffect(() => {
+    if (OPTIONAL_TAB_IDS.includes(st.shelfTab as typeof OPTIONAL_TAB_IDS[number]) && !st.optionalTabs[st.shelfTab]) {
+      st.setShelfTab('library');
+    }
+  }, [st.shelfTab, st.optionalTabs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Canonical series count from GET /api/libraries/{id}/series — the same
   // authoritative source SeriesView uses. Deriving the count from a Set of
@@ -230,6 +243,8 @@ export default function ShelfHeader({ st }: ShelfHeaderProps) {
           }}>
             {TABS
               .filter(t => {
+                // Optional tabs are shown only when enabled in Settings → Library → Display.
+                if (t.optional && !st.optionalTabs[t.id]) return false;
                 // Hide Collections and Playlists tabs when horizontal space is insufficient.
                 // containerWidth measures the full ShelfHeader; 400px leaves enough room
                 // for all other tabs. Adjust threshold after testing if needed.
