@@ -245,6 +245,22 @@ pub fn run() {
             commands::get_logger_data,
             commands::start_log_stream,
             commands::stop_log_stream,
+            // Podcasts (cluster E)
+            commands::get_podcast_feed,
+            commands::create_podcast,
+            commands::parse_opml,
+            commands::create_podcasts_from_opml,
+            commands::check_new_episodes,
+            commands::get_episode_downloads,
+            commands::clear_episode_download_queue,
+            commands::download_episodes,
+            commands::find_episode,
+            commands::match_episodes,
+            commands::get_episode,
+            commands::update_episode,
+            commands::delete_episode,
+            commands::get_recent_episodes,
+            commands::export_opml,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
