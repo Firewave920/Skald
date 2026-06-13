@@ -183,14 +183,12 @@ export default function MetadataEditor({ item, serverUrl, onClose, onComplete, o
       const ser = series.trim();
       metadata.series = ser ? [splitSeries(ser)] : [];
       const tagList = tags.split(',').map(t => t.trim()).filter(Boolean);
-      console.log('[Metadata] saving details for', item.id);
       await updateMedia(serverUrl, item.id, { metadata, tags: tagList });
       const updated = await fetchItem(serverUrl, item.id);
       onComplete(updated);
       onRefresh();
       onClose();
     } catch (e) {
-      console.error('[Metadata] save details failed:', e);
       setError(String(e));
     } finally {
       setSaving(false);
@@ -209,14 +207,12 @@ export default function MetadataEditor({ item, serverUrl, onClose, onComplete, o
         end: i + 1 < sorted.length ? sorted[i + 1].start : duration,
         title: c.title.trim(),
       }));
-      console.log('[Metadata] saving', payload.length, 'chapters for', item.id);
       await updateChapters(serverUrl, item.id, payload);
       const updated = await fetchItem(serverUrl, item.id);
       onComplete(updated);
       onRefresh();
       onClose();
     } catch (e) {
-      console.error('[Metadata] save chapters failed:', e);
       setError(String(e));
     } finally {
       setSaving(false);
