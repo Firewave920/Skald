@@ -1,11 +1,10 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
 import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookNarrator, bookGenre, bookDurSecs } from '../../../state/onyx';
-import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
+import BrowseView, { seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
-import CoverMosaic from '../CoverMosaic';
+import BrowseTile from '../BrowseTile';
 import Initial from '../Initial';
-import Icon from '../../Icon';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -58,21 +57,17 @@ export default function NarratorsView({ st, inline = false }: NarratorsViewProps
           {list.map(a => {
             const genres = [...new Set(a.books.map(b => bookGenre(b)).filter(Boolean))];
             return (
-              <button key={a.name} onClick={() => open(a.name)} className="onyx-poster" style={posterTile()}>
-                <CoverMosaic books={a.books} serverUrl={st.serverUrl} />
-                <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    <Icon name="headphones" size={13} color="var(--onyx-text-mute)" />
-                    <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-0.01em' }}>{a.name}</div>
-                  </div>
-                  <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{genres.join(' · ') || '—'}</div>
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
-                    {a.books.length} TITLE{a.books.length === 1 ? '' : 'S'}{' '}
-                    <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
-                    {seriesTotalDur(a.books)}
-                  </div>
-                </div>
-              </button>
+              <BrowseTile
+                key={a.name}
+                mode={st.browseTileStyle}
+                tag="Narrator"
+                title={a.name}
+                subtitle={genres.join(' · ') || '—'}
+                stat={`${a.books.length} TITLE${a.books.length === 1 ? '' : 'S'} · ${seriesTotalDur(a.books)}`}
+                books={a.books}
+                serverUrl={st.serverUrl}
+                onClick={() => open(a.name)}
+              />
             );
           })}
         </div>

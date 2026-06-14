@@ -4,9 +4,9 @@ import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookAuthor, bookDurSecs } from '../../../state/onyx';
 import type { SeriesObject, Series } from '../../../api/abs';
 import { getLibrarySeries } from '../../../api/abs';
-import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
+import BrowseView, { seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
-import CoverFan from '../CoverFan';
+import BrowseTile from '../BrowseTile';
 import Cover from '../../Cover';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
@@ -75,18 +75,17 @@ export default function SeriesView({ st, inline = false }: SeriesViewProps) {
       {st.libraryView === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 22 }}>
           {seriesList.map(s => (
-            <button key={s.name} onClick={() => openSeries(s.name, s.id)} className="onyx-poster" style={posterTile()}>
-              <CoverFan books={s.books.slice(0, 5)} serverUrl={st.serverUrl} />
-              <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
-                <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, color: 'var(--onyx-text)', letterSpacing: '-0.01em' }}>{s.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{bookAuthor(s.books[0])}</div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
-                  {s.books.length} {s.books.length === 1 ? 'VOLUME' : 'VOLUMES'}{' '}
-                  <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
-                  {seriesTotalDur(s.books)}
-                </div>
-              </div>
-            </button>
+            <BrowseTile
+              key={s.name}
+              mode={st.browseTileStyle}
+              tag="Series"
+              title={s.name}
+              subtitle={bookAuthor(s.books[0])}
+              stat={`${s.books.length} ${s.books.length === 1 ? 'VOLUME' : 'VOLUMES'} · ${seriesTotalDur(s.books)}`}
+              books={s.books}
+              serverUrl={st.serverUrl}
+              onClick={() => openSeries(s.name, s.id)}
+            />
           ))}
         </div>
       ) : (

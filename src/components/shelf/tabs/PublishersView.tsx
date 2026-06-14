@@ -1,9 +1,9 @@
 import type { OnyxState, LibraryItem } from '../../../state/onyx';
 import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookPublisher, bookDurSecs } from '../../../state/onyx';
-import BrowseView, { posterTile, seriesTotalDur } from '../BrowseView';
+import BrowseView, { seriesTotalDur } from '../BrowseView';
 import BrowseList from '../BrowseList';
-import CoverMosaic from '../CoverMosaic';
+import BrowseTile from '../BrowseTile';
 import Initial from '../Initial';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
@@ -52,17 +52,16 @@ export default function PublishersView({ st, inline = false }: PublishersViewPro
       {st.libraryView === 'grid' ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 22 }}>
           {list.map(p => (
-            <button key={p.name} onClick={() => open(p.name)} className="onyx-poster" style={posterTile()}>
-              <CoverMosaic books={p.books} serverUrl={st.serverUrl} />
-              <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
-                <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-0.01em' }}>{p.name}</div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
-                  {p.books.length} TITLE{p.books.length === 1 ? '' : 'S'}{' '}
-                  <span style={{ opacity: 0.5, margin: '0 6px' }}>·</span>
-                  {seriesTotalDur(p.books)}
-                </div>
-              </div>
-            </button>
+            <BrowseTile
+              key={p.name}
+              mode={st.browseTileStyle}
+              tag="Publisher"
+              title={p.name}
+              stat={`${p.books.length} TITLE${p.books.length === 1 ? '' : 'S'} · ${seriesTotalDur(p.books)}`}
+              books={p.books}
+              serverUrl={st.serverUrl}
+              onClick={() => open(p.name)}
+            />
           ))}
         </div>
       ) : (

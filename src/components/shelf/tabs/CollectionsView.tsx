@@ -4,9 +4,9 @@ import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { bookTitle, bookAuthor } from '../../../state/onyx';
 import { getCollections } from '../../../api/abs';
 import type { Collection } from '../../../api/abs';
-import BrowseView, { posterTile } from '../BrowseView';
+import BrowseView from '../BrowseView';
 import BrowseList from '../BrowseList';
-import CoverMosaic from '../CoverMosaic';
+import BrowseTile from '../BrowseTile';
 import Cover from '../../Cover';
 import CollectionDetail from '../CollectionDetail';
 
@@ -102,32 +102,28 @@ export default function CollectionsView({ st, inline = false }: CollectionsViewP
           {filtered.map(c => {
             const books = booksFor(c);
             return (
-              <button key={c.id} onClick={() => openCollection(c)} className="onyx-poster" style={{ ...posterTile(), position: 'relative' }}>
-                {/* Manage — opens the reorder/edit detail (stopPropagation so the card doesn't open the shelf). */}
-                <div
-                  onClick={e => { e.stopPropagation(); setDetail(c); }}
-                  title="Manage collection"
-                  style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, padding: '3px 9px', borderRadius: 5, cursor: 'pointer', background: 'rgba(8,8,11,0.7)', border: '1px solid var(--onyx-accent-edge)', color: 'var(--onyx-accent)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}
-                >
-                  Manage
-                </div>
-                {books.length > 0 ? (
-                  <CoverMosaic books={books} serverUrl={st.serverUrl} />
-                ) : (
-                  <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--onyx-text-mute)', fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, background: 'linear-gradient(180deg, rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.06), rgba(0,0,0,0.12))', borderBottom: '1px solid var(--onyx-line)' }}>
-                    Empty collection
+              <BrowseTile
+                key={c.id}
+                mode={st.browseTileStyle}
+                tag="Collection"
+                title={c.name}
+                subtitle={c.description || undefined}
+                stat={`${books.length} TITLE${books.length === 1 ? '' : 'S'}`}
+                books={books}
+                serverUrl={st.serverUrl}
+                onClick={() => openCollection(c)}
+                emptyLabel="Empty collection"
+                corner={
+                  // div (not button) + stopPropagation — valid inside BrowseTile's button.
+                  <div
+                    onClick={e => { e.stopPropagation(); setDetail(c); }}
+                    title="Manage collection"
+                    style={{ padding: '3px 9px', borderRadius: 5, cursor: 'pointer', background: 'rgba(8,8,11,0.7)', border: '1px solid var(--onyx-accent-edge)', color: 'var(--onyx-accent)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+                  >
+                    Manage
                   </div>
-                )}
-                <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
-                  <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, color: 'var(--onyx-text)', letterSpacing: '-0.01em' }}>{c.name}</div>
-                  {c.description && (
-                    <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{c.description}</div>
-                  )}
-                  <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
-                    {books.length} TITLE{books.length === 1 ? '' : 'S'}
-                  </div>
-                </div>
-              </button>
+                }
+              />
             );
           })}
         </div>

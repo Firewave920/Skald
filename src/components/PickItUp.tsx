@@ -189,7 +189,7 @@ export default function PickItUp({ st }: PickItUpProps) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildItemContextMenu(contextMenu.item, st)}
+          sections={buildItemContextMenu(contextMenu.item, st, { fromPickItUp: true })}
           onClose={() => setContextMenu(null)}
         />
       )}

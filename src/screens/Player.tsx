@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import ReactDOM from 'react-dom';
 import {
   playAudio, pauseAudio,
   seekAudio, setSpeed as setAudioSpeed, setVolume as setAudioVolume,
@@ -361,6 +360,11 @@ export default function Player({ st }: PlayerProps) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerHeight, setContainerHeight] = useState(900);
+  // Width actually available to the right-hand panes (measured on the bottom row),
+  // which is the correct signal for the 3-columns-vs-1-tabbed-pane decision —
+  // independent of the left column width and the interface-scale transform.
+  const bottomRowRef = useRef<HTMLDivElement>(null);
+  const [paneAreaWidth, setPaneAreaWidth] = useState(900);
 
   const leftColRef = useRef<HTMLDivElement>(null);
   const [leftColumnWidth, setLeftColumnWidth] = useState(480);
@@ -375,23 +379,17 @@ export default function Player({ st }: PlayerProps) {
   // the full layout. At 600px the waveform, buttons, and spacing are halved.
   const isCompact = containerHeight < 600;
 
-  // Collapse the synopsis to a hover popover when the window is too short to
-  // show it inline alongside the cover. 500px matches the point where the cover
-  // has already been shrunk to its minimum (120px) and no vertical space remains.
-  // Collapse synopsis to a popover when the container is too short to show it inline.
-  const synopsisCollapsed = containerHeight < 620;
-  // Controls visibility of the hover popover when synopsisCollapsed is true.
-  const [synopsisOpen, setSynopsisOpen] = useState(false);
-  // Ref on the SYNOPSIS label wrapper — measured on hover for portal positioning.
-  const synopsisTriggerRef = useRef<HTMLDivElement>(null);
-  // Viewport-relative position for the fixed portal popover.
-  const [synopsisPos, setSynopsisPos] = useState({ bottom: 0, left: 0 });
-  // Timer ref used to delay close so the mouse can travel from the label to the popover.
-  const synopsisCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Pane layout: three side-by-side panes need horizontal room, so the collapse
+  // to a single tabbed pane is driven by the pane-area WIDTH (not height). Below
+  // ~780px (≈ three readable ~250px panes + gaps) the bottom row becomes one
+  // tabbed pane and the synopsis moves to a tab; above it, three columns show and
+  // the synopsis renders inline in the left column.
+  const panesStacked = paneAreaWidth < 780;
 
   // Active pane in the compact single-column carousel — only used when isCompact.
-  // Defaults to chapters as that is the most-used panel during playback.
-  const [activePane, setActivePane] = useState<'details' | 'chapters' | 'bookmarks'>('chapters');
+  // Defaults to chapters as that is the most-used panel during playback. The
+  // Synopsis lives here as its own pane (rather than a left-column flyout).
+  const [activePane, setActivePane] = useState<'details' | 'chapters' | 'bookmarks' | 'synopsis'>('chapters');
 
   const waveformRef = useRef<HTMLDivElement>(null);
   const [waveWidth, setWaveWidth] = useState(600);
@@ -405,6 +403,16 @@ export default function Player({ st }: PlayerProps) {
       setContainerHeight(entries[0].contentRect.height);
     });
     ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  // Measure the pane area (the right-hand bottom row) to drive panesStacked.
+  useEffect(() => {
+    if (!bottomRowRef.current) return;
+    const ro = new ResizeObserver(entries => {
+      setPaneAreaWidth(entries[0].contentRect.width);
+    });
+    ro.observe(bottomRowRef.current);
     return () => ro.disconnect();
   }, []);
 
@@ -594,6 +602,14 @@ export default function Player({ st }: PlayerProps) {
     setTimeout(() => setBtnMounted(false), 300);
   };
 
+  // Responsive title size — shrink longer titles (and in short windows) so the
+  // heading fits the left column instead of clipping.
+  const displayTitle = isPodcast ? (ep?.title || bookTitle(b)) : bookTitle(b);
+  let titleFontSize = isPodcast ? 30 : 48;
+  if (displayTitle.length > 42) titleFontSize = isPodcast ? 22 : 30;
+  else if (displayTitle.length > 28) titleFontSize = isPodcast ? 26 : 38;
+  if (containerHeight < 620) titleFontSize = Math.min(titleFontSize, isPodcast ? 24 : 34);
+
   return (
     <div ref={containerRef} style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 32px 24px', minHeight: 0, width: '100%', maxWidth: '100%', overflow: 'hidden', position: 'relative' }}>
 
@@ -614,14 +630,14 @@ export default function Player({ st }: PlayerProps) {
 
       <div style={{ flex: 1, display: 'flex', gap: 32, alignItems: 'stretch', minHeight: 0, overflow: 'hidden' }}>
 
-        <div ref={leftColRef} style={{ minWidth: 0, maxWidth: 360, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', minHeight: 0, paddingBottom: isFocusedDifferent ? 72 : 0 }}>
+        <div ref={leftColRef} style={{ minWidth: 0, maxWidth: 360, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', minHeight: 0 }}>
           <div style={{ position: 'absolute', inset: '5% 5% 0 5%', borderRadius: 24, background: 'radial-gradient(50% 50% at 50% 50%, rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.28), transparent 70%)', filter: 'blur(60px)', zIndex: 0 }} />
           <div style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: coverSize, aspectRatio: '1 / 1', overflow: 'hidden' }}>
             <Cover item={b} size={coverSize} fill serverUrl={st.serverUrl} fallbackImageUrl={podcastImageUrl ?? podcastFeedImg} style={{ transition: 'width 0.3s ease, height 0.3s ease' }} />
           </div>
           <div style={{ marginTop: 32, textAlign: 'center', position: 'relative', zIndex: 1, flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, width: '100%' }}>
             <div style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.2em', textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 8 }}>{isPodcast ? 'Podcast' : bSeries}</div>
-            <div style={{ fontFamily: SERIF, fontSize: isPodcast ? 30 : 48, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.02em' }}>{isPodcast ? (ep?.title || bookTitle(b)) : bookTitle(b)}</div>
+            <div style={{ fontFamily: SERIF, fontSize: titleFontSize, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.02em', transition: 'font-size 0.2s ease' }}>{displayTitle}</div>
             {isPodcast ? (
               // For an episode, the "show" is the podcast title; author filtering
               // is book-only so this line is plain text.
@@ -651,84 +667,10 @@ export default function Player({ st }: PlayerProps) {
               </>
             )}
 
-            {/* Synopsis — inline when space allows, collapsed to hover popover when cramped */}
-            {synopsisCollapsed ? (
-              // Window too short to show synopsis inline: render a dotted SYNOPSIS label
-              // that reveals the full text in a floating popover on hover.
-              <div style={{ marginTop: 16, width: '100%', textAlign: 'left' }}>
-                <div
-                  ref={synopsisTriggerRef}
-                  style={{ display: 'inline-block' }}
-                  onMouseEnter={() => {
-                    // Cancel any pending close so re-entering the label keeps the popover open.
-                    if (synopsisCloseTimer.current) clearTimeout(synopsisCloseTimer.current);
-                    if (synopsisTriggerRef.current) {
-                      // Measure trigger in viewport coordinates for fixed portal positioning.
-                      const r = synopsisTriggerRef.current.getBoundingClientRect();
-                      setSynopsisPos({ bottom: window.innerHeight - r.top + 6, left: r.left });
-                    }
-                    setSynopsisOpen(true);
-                  }}
-                  onMouseLeave={() => {
-                    // Delay close so mouse can travel to the popover without it dismissing.
-                    synopsisCloseTimer.current = setTimeout(() => setSynopsisOpen(false), 120);
-                  }}
-                >
-                  {/* Dotted underline signals that hovering reveals more content */}
-                  <span style={{
-                    fontSize: 10,
-                    fontFamily: MONO,
-                    letterSpacing: '0.14em',
-                    textTransform: 'uppercase' as const,
-                    color: 'var(--onyx-text-mute)',
-                    cursor: 'default',
-                    borderBottom: '1px dotted var(--onyx-text-mute)',
-                    paddingBottom: 1,
-                  }}>
-                    {detailLabel}
-                  </span>
-
-                  {/* Popover via portal — fixed positioning on document.body escapes
-                      overflow clipping and the transform:scale() on #root. */}
-                  {synopsisOpen && ReactDOM.createPortal(
-                    <div
-                      onMouseEnter={() => {
-                        // Cancel the pending close when mouse enters the popover.
-                        if (synopsisCloseTimer.current) clearTimeout(synopsisCloseTimer.current);
-                      }}
-                      onMouseLeave={() => {
-                        // Close when mouse leaves the popover itself.
-                        setSynopsisOpen(false);
-                      }}
-                      style={{
-                        position: 'fixed',
-                        bottom: synopsisPos.bottom,
-                        left: synopsisPos.left,
-                        zIndex: 9999,
-                        width: 340, /* Wider and taller to show more synopsis text without scrolling */
-                        maxHeight: 420,
-                        overflowY: 'auto',
-                        background: 'var(--onyx-panel)',
-                        border: '1px solid var(--onyx-glass-edge)',
-                        borderRadius: 8,
-                        padding: '12px 14px',
-                        fontSize: 13,
-                        color: 'var(--onyx-text)',
-                        lineHeight: 1.6,
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                      }}>
-                      {descriptionHtml ? (
-                        <div className="onyx-selectable" dangerouslySetInnerHTML={{ __html: descriptionHtml }} />
-                      ) : (
-                        <span style={{ fontStyle: 'italic', color: 'var(--onyx-text-mute)' }}>{noDescText}</span>
-                      )}
-                    </div>,
-                    document.body,
-                  )}
-                </div>
-              </div>
-            ) : (
-              // Normal inline synopsis — full scrollable block when there is enough room.
+            {/* Synopsis — inline in the left column on large windows. On small
+                (compact) windows it moves to its own right-hand pane instead (see
+                the bottom-row tabs), so it never competes with the MiniPlayer. */}
+            {!panesStacked && (
               <div style={{ marginTop: 24, width: '100%', textAlign: 'left', flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <div style={{ fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginBottom: 8 }}>
                   {detailLabel}
@@ -749,6 +691,8 @@ export default function Player({ st }: PlayerProps) {
               </div>
             )}
           </div>
+          {/* In-flow at the column bottom — full width, never overlaps the title/synopsis. */}
+          <MiniPlayer st={st} />
         </div>
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 18, minWidth: 0 }}>
@@ -955,13 +899,13 @@ export default function Player({ st }: PlayerProps) {
             )}
           </Glass>
 
-          {/* Bottom row — three columns at full size, single tabbed pane in compact mode */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: isCompact ? 'column' : 'row', gap: isCompact ? 0 : 18, minHeight: 0, overflow: 'hidden' }}>
+          {/* Bottom row — three columns when wide enough, single tabbed pane when narrow */}
+          <div ref={bottomRowRef} style={{ flex: 1, display: 'flex', flexDirection: panesStacked ? 'column' : 'row', gap: panesStacked ? 0 : 18, minHeight: 0, overflow: 'hidden' }}>
 
-            {/* Compact-only pill tab strip — switches the single visible pane */}
-            {isCompact && (
+            {/* Stacked-only pill tab strip — switches the single visible pane */}
+            {panesStacked && (
               <div style={{ display: 'flex', gap: 4, marginBottom: 6, flexShrink: 0 }}>
-                {(['details', 'chapters', 'bookmarks'] as const).map(pane => (
+                {(['details', 'chapters', 'bookmarks', 'synopsis'] as const).map(pane => (
                   <button
                     key={pane}
                     onClick={() => setActivePane(pane)}
@@ -979,14 +923,14 @@ export default function Player({ st }: PlayerProps) {
                       cursor: 'pointer',
                     }}
                   >
-                    {pane[0].toUpperCase() + pane.slice(1)}
+                    {pane === 'synopsis' ? detailLabel : pane[0].toUpperCase() + pane.slice(1)}
                   </button>
                 ))}
               </div>
             )}
 
             {/* ── Details panel — hidden in compact mode unless selected ── */}
-            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !isCompact || activePane === 'details' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !panesStacked || activePane === 'details' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
               <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500, marginBottom: 14 }}>Details</div>
               <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, marginRight: -8, paddingRight: 8 }}>
                 {(() => {
@@ -1128,7 +1072,7 @@ export default function Player({ st }: PlayerProps) {
             </Glass>
 
             {/* ── Chapters panel — hidden in compact mode unless selected ── */}
-            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !isCompact || activePane === 'chapters' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !panesStacked || activePane === 'chapters' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
                 <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500 }}>Chapters</div>
                 {/* Use bookSecs (not bookDur(b)) so chapterless podcast episodes
@@ -1205,7 +1149,7 @@ export default function Player({ st }: PlayerProps) {
             </Glass>
 
             {/* ── Bookmarks panel — hidden in compact mode unless selected ── */}
-            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !isCompact || activePane === 'bookmarks' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: !panesStacked || activePane === 'bookmarks' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
 
               {/* ── Panel header: title + tab switcher + add button ── */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -1298,10 +1242,26 @@ export default function Player({ st }: PlayerProps) {
               </div>
             </Glass>
 
+            {/* ── Synopsis panel — compact-only tab; on large windows the synopsis
+                renders inline in the left column instead, so this stays hidden. ── */}
+            <Glass translucent={st.translucent} style={{ flex: 1, minWidth: 0, padding: 20, display: panesStacked && activePane === 'synopsis' ? 'flex' : 'none', flexDirection: 'column', minHeight: 0, overflow: 'hidden' }}>
+              <div style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 500, marginBottom: 12 }}>{detailLabel}</div>
+              <div style={{ flex: 1, overflowY: 'auto', marginRight: -8, paddingRight: 8 }}>
+                {descriptionHtml ? (
+                  <div
+                    className="onyx-selectable"
+                    style={{ fontSize: 13, lineHeight: 1.65, color: 'var(--onyx-text-dim)' }}
+                    dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                  />
+                ) : (
+                  <div style={{ fontSize: 13, color: 'var(--onyx-text-mute)', fontStyle: 'italic' }}>{noDescText}</div>
+                )}
+              </div>
+            </Glass>
+
           </div>
         </div>
       </div>
-      <MiniPlayer st={st} />
     </div>
   );
 }

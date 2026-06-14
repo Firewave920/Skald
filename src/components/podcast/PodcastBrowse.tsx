@@ -12,8 +12,14 @@ import { resolvePodcastFeed, cachedPodcastImage, episodeKey } from '../../lib/po
 import { playEpisode, togglePlayback } from '../../api/playbook';
 import Cover from '../Cover';
 import Icon from '../Icon';
+import ContextMenu from '../ContextMenu';
+import CoverPicker from '../CoverPicker';
+import FilesModal from '../shelf/FilesModal';
 import { COVER_SIZES } from '../shelf/LibraryShelf';
 import PodcastSubscribeModal from './PodcastSubscribeModal';
+import PodcastSettingsModal from './PodcastSettingsModal';
+import PodcastDownloadModal from './PodcastDownloadModal';
+import { buildPodcastContextMenu } from './buildPodcastContextMenu';
 
 export interface PodcastBrowseProps {
   st: OnyxState;
@@ -55,6 +61,12 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [genre, setGenre] = useState<string | null>(null);
   const [genreOpen, setGenreOpen] = useState(false);
+  // Right-click context menu + the modals its actions open.
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: LibraryItem } | null>(null);
+  const [settingsItem, setSettingsItem] = useState<LibraryItem | null>(null);
+  const [downloadItem, setDownloadItem] = useState<LibraryItem | null>(null);
+  const [coverItem, setCoverItem] = useState<LibraryItem | null>(null);
+  const [filesItem, setFilesItem] = useState<LibraryItem | null>(null);
   // Carousel cover size follows the global cover-size preference (Settings → Library).
   const coverPx = COVER_SIZES[st.coverSize] ?? COVER_SIZES.L;
 
@@ -125,6 +137,20 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
     return () => { cancelled = true; };
   }, [st.currentLibraryId, st.serverUrl, st.library]);
 
+  // Drop cached feed episodes/images for podcasts that have left the library
+  // (e.g. after unsubscribe) so the caches don't grow stale. Returns the previous
+  // object unchanged when nothing was pruned, avoiding needless re-renders.
+  useEffect(() => {
+    const libIds = new Set(st.library.map(i => i.id));
+    const prune = <T,>(prev: Record<string, T>): Record<string, T> => {
+      const kept = Object.keys(prev).filter(id => libIds.has(id));
+      if (kept.length === Object.keys(prev).length) return prev;
+      return Object.fromEntries(kept.map(id => [id, prev[id]]));
+    };
+    setFeedEpisodes(prune);
+    setFeedImages(prune);
+  }, [st.library]);
+
   const coverForId = (id?: string): string | undefined => {
     if (!id) return undefined;
     const it = st.library.find(i => i.id === id);
@@ -143,6 +169,10 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
   // counterpart when present) plus any downloaded episode no longer in the feed.
   // Filtered by the selected podcast / genre, newest first.
   const mergedEpisodes = (() => {
+    // Only episodes whose podcast is still in the library — the feed/cover caches
+    // (feedEpisodes/downloadedMap) can retain entries for a podcast after it's
+    // unsubscribed, so guard against showing its episodes.
+    const libIds = new Set(st.library.map(i => i.id));
     const byKey = new Map<string, { ep: RecentEpisode; downloaded: boolean }>();
     for (const list of Object.values(feedEpisodes)) {
       for (const ep of list) {
@@ -155,6 +185,7 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
     downloadedMap.forEach((ep, k) => { if (!byKey.has(k)) byKey.set(k, { ep, downloaded: true }); });
     return [...byKey.values()]
       .filter(({ ep }) => {
+        if (!ep.libraryItemId || !libIds.has(ep.libraryItemId)) return false;
         if (selectedId) return ep.libraryItemId === selectedId;
         if (!genre) return true;
         const it = st.library.find(i => i.id === ep.libraryItemId);
@@ -165,6 +196,12 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
   })();
 
   const selectedPodcast = selectedId ? st.library.find(i => i.id === selectedId) : undefined;
+
+  // Undownloaded episodes for the podcast whose download picker is open (newest
+  // first, drawn from the resolved feed minus what's already downloaded).
+  const downloadEpisodes = downloadItem
+    ? (feedEpisodes[downloadItem.id] ?? []).filter(ep => !downloadedMap.has(episodeKey(ep)))
+    : [];
 
   const openDetail = (id: string) => { st.setPodcastDetailId(id); st.setScreen('podcast'); };
 
@@ -293,7 +330,8 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
               key={it.id}
               onClick={() => setSelectedId(prev => prev === it.id ? null : it.id)}
               onDoubleClick={() => openDetail(it.id)}
-              title={`${asPodcastItem(it).media?.metadata?.title ?? ''} — click to filter, double-click to open`}
+              onContextMenu={(e) => { e.preventDefault(); setContextMenu({ x: e.pageX, y: e.pageY, item: it }); }}
+              title={`${asPodcastItem(it).media?.metadata?.title ?? ''} — click to filter, double-click to open, right-click for options`}
               className="onyx-poster"
               style={{
                 flexShrink: 0, width: coverPx, height: coverPx, borderRadius: 8, cursor: 'pointer', padding: 0, overflow: 'hidden',
@@ -386,6 +424,42 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
       </div>
 
       {modal}
+
+      {/* Right-click context menu + the modals its actions open */}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          sections={buildPodcastContextMenu(contextMenu.item, st, {
+            openDetail,
+            setDownloadItem,
+            setSettingsItem,
+            setCoverItem,
+            setFilesItem,
+            onUnsubscribed: (id) => { if (selectedId === id) setSelectedId(null); },
+          })}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+      {settingsItem && (
+        <PodcastSettingsModal
+          st={st}
+          item={settingsItem}
+          onClose={() => setSettingsItem(null)}
+          onSaved={() => { st.refreshLibrary().catch(e => console.error('[Podcast] refresh after settings failed:', e)); setSettingsItem(null); }}
+        />
+      )}
+      {downloadItem && (
+        <PodcastDownloadModal
+          st={st}
+          itemId={downloadItem.id}
+          episodes={downloadEpisodes}
+          onClose={() => setDownloadItem(null)}
+          onQueued={() => setDownloadItem(null)}
+        />
+      )}
+      {coverItem && <CoverPicker item={coverItem} st={st} onClose={() => setCoverItem(null)} />}
+      {filesItem && <FilesModal bookId={filesItem.id} serverUrl={st.serverUrl} onClose={() => setFilesItem(null)} />}
     </div>
   );
 }
