@@ -4,9 +4,9 @@ import { bookTitle, bookAuthor } from '../../../state/onyx';
 import { groupMatchesFilter } from '../../../lib/shelfFilters';
 import { getPlaylists, createPlaylist } from '../../../api/abs';
 import type { Playlist } from '../../../api/abs';
-import BrowseView, { posterTile } from '../BrowseView';
+import BrowseView from '../BrowseView';
 import BrowseList from '../BrowseList';
-import CoverMosaic from '../CoverMosaic';
+import BrowseTile from '../BrowseTile';
 import Cover from '../../Cover';
 import PlaylistDetail from '../PlaylistDetail';
 
@@ -162,43 +162,28 @@ export default function PlaylistsView({ st, inline = false }: PlaylistsViewProps
             {filtered.map(p => {
               const books = booksFor(p);
               return (
-                // div instead of button so the nested "Manage" button is valid HTML
-                <div
+                <BrowseTile
                   key={p.id}
+                  mode={st.browseTileStyle}
+                  tag="Playlist"
+                  title={p.name}
+                  subtitle={p.description || undefined}
+                  stat={`${p.items.length} TITLE${p.items.length === 1 ? '' : 'S'}`}
+                  books={books}
+                  serverUrl={st.serverUrl}
                   onClick={() => openPlaylist(p)}
-                  className="onyx-poster"
-                  style={{ ...posterTile(), cursor: 'pointer', position: 'relative' }}
-                >
-                  {books.length > 0 ? (
-                    <CoverMosaic books={books} serverUrl={st.serverUrl} />
-                  ) : (
-                    <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--onyx-text-mute)', fontFamily: SERIF, fontStyle: 'italic', fontSize: 14, background: 'linear-gradient(180deg, rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.06), rgba(0,0,0,0.12))', borderBottom: '1px solid var(--onyx-line)' }}>
-                      Empty playlist
+                  emptyLabel="Empty playlist"
+                  corner={
+                    // div (not button) + stopPropagation — valid inside BrowseTile's button.
+                    <div
+                      onClick={e => { e.stopPropagation(); setDetailPlaylistId(p.id); }}
+                      title="Manage playlist"
+                      style={{ padding: '3px 9px', borderRadius: 5, cursor: 'pointer', background: 'rgba(8,8,11,0.7)', border: '1px solid var(--onyx-accent-edge)', color: 'var(--onyx-accent)', fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+                    >
+                      Manage
                     </div>
-                  )}
-                  <div style={{ padding: '18px 16px 16px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 500, lineHeight: 1.1, color: 'var(--onyx-text)', letterSpacing: '-0.01em' }}>{p.name}</div>
-                    {p.description && (
-                      <div style={{ fontSize: 13, color: 'var(--onyx-text-dim)', marginTop: 6, fontStyle: 'italic' }}>{p.description}</div>
-                    )}
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--onyx-line)' }}>
-                      <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-                        {p.items.length} TITLE{p.items.length === 1 ? '' : 'S'}
-                      </div>
-                      <button
-                        onClick={e => { e.stopPropagation(); setDetailPlaylistId(p.id); }}
-                        style={{
-                          padding: '4px 10px', borderRadius: 5, cursor: 'pointer',
-                          background: 'transparent', border: '1px solid var(--onyx-accent-edge)',
-                          color: 'var(--onyx-accent)', fontFamily: MONO, fontSize: 9,
-                          letterSpacing: '0.08em', textTransform: 'uppercase',
-                        }}
-                      >
-                        Manage
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                  }
+                />
               );
             })}
           </div>

@@ -1,27 +1,57 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
+import Icon, { type IconName } from './Icon';
+
+const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
 export interface ContextMenuItem {
   label: string;
-  onClick: () => void;
+  /** Optional when the item only opens a submenu. */
+  onClick?: () => void;
   danger?: boolean;
   disabled?: boolean;
+  icon?: IconName;
+  /** Accent-highlighted row (e.g. the primary "Play Book" action). */
+  primary?: boolean;
+  /** Nested actions shown in a flyout; the row gets a › affordance. */
+  submenu?: ContextMenuItem[];
+}
+
+/** A labelled group of items. `label` omitted renders the group with just a
+ *  divider above it (no mono header). */
+export interface ContextMenuSection {
+  label?: string;
+  items: ContextMenuItem[];
 }
 
 export interface ContextMenuProps {
   x: number;
   y: number;
-  items: ContextMenuItem[];
+  sections: ContextMenuSection[];
   onClose: () => void;
 }
 
-const MONO = "'JetBrains Mono', ui-monospace, monospace";
-const MENU_W = 200;
-const MENU_H = 120;
+const MENU_W = 248;
+const SUB_W = 210;
 
-export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
+const PANEL: React.CSSProperties = {
+  background: 'var(--onyx-panel2)',
+  border: '1px solid var(--onyx-line)',
+  borderRadius: 12,
+  boxShadow: '0 16px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.05)',
+  padding: 6,
+  fontFamily: 'inherit',
+};
+
+const HEADER: React.CSSProperties = {
+  fontFamily: MONO, fontSize: 9, letterSpacing: '0.14em', textTransform: 'uppercase',
+  color: 'var(--onyx-text-mute)', padding: '8px 10px 5px',
+};
+
+export default function ContextMenu({ x, y, sections, onClose }: ContextMenuProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [openSub, setOpenSub] = useState<string | null>(null);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -31,10 +61,12 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
 
-  // Flip toward the left if the menu would overflow the right edge.
+  // Estimate height for the upward-flip check from the visible row/header count.
+  const rowCount = sections.reduce((n, s) => n + s.items.length + (s.label ? 1 : 0), 0);
+  const estH = rowCount * 34 + sections.length * 8 + 12;
+
   const flipX = x + MENU_W > window.innerWidth;
-  // Flip upward if the menu would overflow the bottom edge.
-  const flipY = y + MENU_H > window.innerHeight;
+  const flipY = y + estH > window.innerHeight;
 
   const posStyle: React.CSSProperties = {
     position: 'fixed',
@@ -44,58 +76,89 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
     ...(flipY ? { bottom: window.innerHeight - y } : { top: y }),
   };
 
+  // Row renderer shared by the main menu and submenu panels.
+  const renderRow = (item: ContextMenuItem, key: string, inSub: boolean) => {
+    const hasSub = !!item.submenu?.length;
+    // A submenu parent is enabled if any child is enabled.
+    const subEnabled = hasSub && item.submenu!.some(s => !s.disabled);
+    const disabled = item.disabled || (hasSub && !subEnabled);
+    const isHover = hovered === key && !disabled;
+    const subOpen = openSub === key;
+
+    const color = disabled
+      ? 'var(--onyx-text-mute)'
+      : item.danger
+        ? (isHover ? '#f47c7c' : '#d87a72')
+        : item.primary
+          ? 'var(--onyx-accent)'
+          : (isHover ? 'var(--onyx-accent)' : 'var(--onyx-text)');
+
+    const bg = item.primary
+      ? 'var(--onyx-accent-dim)'
+      : (isHover || subOpen) && !disabled
+        ? (item.danger ? 'rgba(220,80,80,0.12)' : 'var(--onyx-accent-dim)')
+        : 'transparent';
+
+    return (
+      <div
+        key={key}
+        style={{ position: 'relative' }}
+        onMouseEnter={() => { setHovered(key); if (hasSub) setOpenSub(key); else if (!inSub) setOpenSub(null); }}
+        onMouseLeave={() => { setHovered(h => (h === key ? null : h)); if (hasSub) setOpenSub(s => (s === key ? null : s)); }}
+      >
+        <button
+          disabled={disabled}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (disabled || hasSub) return;
+            item.onClick?.();
+            onClose();
+          }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 11, width: '100%',
+            padding: '8px 10px', borderRadius: 7, border: 'none', background: bg,
+            color, cursor: disabled ? 'default' : 'pointer', textAlign: 'left',
+            fontFamily: 'inherit', fontSize: 13, fontWeight: item.primary ? 600 : 500,
+            transition: 'background 0.1s, color 0.1s',
+          }}
+        >
+          <span style={{ width: 16, display: 'inline-flex', justifyContent: 'center', flexShrink: 0, opacity: disabled ? 0.5 : 0.9 }}>
+            {item.icon && <Icon name={item.icon} size={15} />}
+          </span>
+          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+          {hasSub && <Icon name="chevron-right" size={12} color="var(--onyx-text-mute)" />}
+        </button>
+
+        {/* Submenu flyout */}
+        {hasSub && subOpen && (
+          <div style={{
+            ...PANEL, position: 'absolute', top: -6, width: SUB_W, zIndex: 1001,
+            ...(flipX ? { right: 'calc(100% + 4px)' } : { left: 'calc(100% + 4px)' }),
+          }}>
+            <div style={HEADER}>{item.label}</div>
+            {item.submenu!.map((sub, i) => renderRow(sub, `${key}.${i}`, true))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const menu = (
-    <div
-      ref={ref}
-      style={{
-        ...posStyle,
-        background: 'var(--onyx-panel2)',
-        border: '1px solid var(--onyx-line)',
-        borderRadius: 8,
-        boxShadow: '0 12px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.06)',
-        padding: 4,
-        fontFamily: MONO,
-      }}
-    >
-      {items.map((item, i) => {
-        const hovered = hoveredIdx === i && !item.disabled;
-        return (
-          <button
-            key={i}
-            disabled={item.disabled}
-            onMouseEnter={() => setHoveredIdx(i)}
-            onMouseLeave={() => setHoveredIdx(null)}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!item.disabled) {
-                item.onClick();
-                onClose();
-              }
-            }}
-            style={{
-              display: 'block',
-              width: '100%',
-              padding: '7px 10px',
-              borderRadius: 5,
-              border: 'none',
-              background: hovered ? 'var(--onyx-accent-dim)' : 'transparent',
-              color: item.disabled
-                ? 'var(--onyx-text-mute)'
-                : item.danger
-                  ? (hovered ? '#f47c7c' : '#c96464')
-                  : (hovered ? 'var(--onyx-accent)' : 'var(--onyx-text)'),
-              fontSize: 11.5,
-              textAlign: 'left',
-              cursor: item.disabled ? 'default' : 'pointer',
-              fontFamily: 'inherit',
-              letterSpacing: '0.01em',
-              transition: 'background 0.1s, color 0.1s',
-            }}
-          >
-            {item.label}
-          </button>
-        );
-      })}
+    <div ref={ref} style={{ ...posStyle, ...PANEL }}>
+      {sections.map((section, si) => (
+        <div key={si}>
+          {/* Divider above every group after the first; header replaces it when present. */}
+          {si > 0 && !section.label && (
+            <div style={{ height: 1, background: 'var(--onyx-line)', margin: '6px 8px' }} />
+          )}
+          {section.label && (
+            <div style={{ ...HEADER, ...(si > 0 ? { borderTop: '1px solid var(--onyx-line)', marginTop: 4, paddingTop: 10 } : {}) }}>
+              {section.label}
+            </div>
+          )}
+          {section.items.map((item, ii) => renderRow(item, `${si}.${ii}`, false))}
+        </div>
+      ))}
     </div>
   );
 

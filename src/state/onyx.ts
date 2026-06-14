@@ -310,6 +310,9 @@ export interface OnyxState {
   setLibrarySort: (sort: string) => void;
   coverSize: string;
   setCoverSize: (size: string) => void;
+  // Browse-tab tile design language: 'stack' (fanned covers) or 'mosaic' (2×2 quilt).
+  browseTileStyle: 'stack' | 'mosaic';
+  setBrowseTileStyle: (s: 'stack' | 'mosaic') => void;
   groupBySeries: boolean;
   setGroupBySeries: (group: boolean) => void;
   showFinished: boolean;
@@ -785,6 +788,9 @@ export function useOnyxState(): OnyxState {
   const [coverSize, setCoverSizeRaw] = useState(
     () => localStorage.getItem('onyx.lib.coverSize') ?? 'L',
   );
+  const [browseTileStyle, setBrowseTileStyleRaw] = useState<'stack' | 'mosaic'>(
+    () => (localStorage.getItem('onyx.appearance.browseTileStyle') === 'mosaic' ? 'mosaic' : 'stack'),
+  );
   const [groupBySeries, setGroupBySeriesRaw] = useState(
     () => localStorage.getItem('onyx.lib.groupBySeries') === 'true',
   );
@@ -812,6 +818,9 @@ export function useOnyxState(): OnyxState {
   }, []);
   const setCoverSize = useCallback((v: string) => {
     localStorage.setItem('onyx.lib.coverSize', v); setCoverSizeRaw(v);
+  }, []);
+  const setBrowseTileStyle = useCallback((v: 'stack' | 'mosaic') => {
+    localStorage.setItem('onyx.appearance.browseTileStyle', v); setBrowseTileStyleRaw(v);
   }, []);
   const setGroupBySeries = useCallback((v: boolean) => {
     localStorage.setItem('onyx.lib.groupBySeries', String(v)); setGroupBySeriesRaw(v);
@@ -1223,6 +1232,7 @@ export function useOnyxState(): OnyxState {
     translucent, setTranslucent,
     librarySort, setLibrarySort,
     coverSize, setCoverSize,
+    browseTileStyle, setBrowseTileStyle,
     groupBySeries, setGroupBySeries,
     showFinished, setShowFinished,
     showProgressOverlay, setShowProgressOverlay,

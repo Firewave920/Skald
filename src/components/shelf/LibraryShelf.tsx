@@ -517,7 +517,7 @@ export default function LibraryShelf({ st }: LibraryShelfProps) {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
-          items={buildItemContextMenu(contextMenu.item, st, setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem, setEditItem, setCoverItem, setShareItem)}
+          sections={buildItemContextMenu(contextMenu.item, st, { setMatchItem, setCollectionItem, setFilesItem, setPlaylistItem, setEditItem, setCoverItem, setShareItem })}
           onClose={() => setContextMenu(null)}
         />
       )}

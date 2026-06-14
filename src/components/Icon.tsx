@@ -9,7 +9,10 @@ export type IconName =
   | 'chevron-left' | 'chevron-right' | 'chevron-down'
   | 'check' | 'dot'
   | 'headphones' | 'speaker' | 'airplay' | 'bluetooth' | 'monitor'
-  | 'home' | 'grid' | 'list' | 'kbd' | 'cast' | 'sleep';
+  | 'home' | 'grid' | 'list' | 'kbd' | 'cast' | 'sleep'
+  // Context-menu action icons
+  | 'download' | 'check-circle' | 'clock' | 'playlist' | 'layers' | 'share'
+  | 'sliders' | 'trash' | 'edit' | 'image' | 'target' | 'file' | 'refresh';
 
 export interface IconProps {
   name: IconName;
@@ -95,6 +98,32 @@ export default function Icon({ name, size = 16, color, className }: IconProps) {
       return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M2 6 Q2 3 5 3 L11 3 Q14 3 14 6 L14 11 Q14 13 12 13 L8 13" {...stroke} /><path d="M2 9 Q5 9 7 11 Q7 13 5 13" {...stroke} /><circle cx="2" cy="13" r="0.7" {...fill} /></svg>;
     case 'sleep':
       return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M13 9 A 5 5 0 1 1 7 3 A 4 4 0 0 0 13 9 Z" {...stroke} /></svg>;
+    case 'download':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M8 2 L8 10 M5 7 L8 10 L11 7" {...stroke} /><path d="M3 13 L13 13" {...stroke} /></svg>;
+    case 'check-circle':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" {...stroke} /><path d="M5.3 8 L7.2 10 L10.7 6" {...stroke} strokeWidth="1.5" /></svg>;
+    case 'clock':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" {...stroke} /><path d="M8 4.5 L8 8 L10.5 9.5" {...stroke} /></svg>;
+    case 'playlist':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M2 4 L11 4 M2 8 L11 8 M2 12 L7 12" {...stroke} /><path d="M11.5 10 L11.5 14 M9.5 12 L13.5 12" {...stroke} /></svg>;
+    case 'layers':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M8 2 L14 5.5 L8 9 L2 5.5 Z" {...stroke} /><path d="M2.5 9 L8 12.2 L13.5 9" {...stroke} /></svg>;
+    case 'share':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><circle cx="4" cy="8" r="1.7" {...stroke} /><circle cx="12" cy="4" r="1.7" {...stroke} /><circle cx="12" cy="12" r="1.7" {...stroke} /><path d="M5.5 7.2 L10.5 4.8 M5.5 8.8 L10.5 11.2" {...stroke} /></svg>;
+    case 'sliders':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M2 4.5 L14 4.5 M2 11.5 L14 11.5" {...stroke} /><circle cx="6" cy="4.5" r="1.7" {...fill} /><circle cx="10.5" cy="11.5" r="1.7" {...fill} /></svg>;
+    case 'trash':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M3 4 L13 4" {...stroke} /><path d="M6 4 L6 2.5 Q6 2 6.6 2 L9.4 2 Q10 2 10 2.5 L10 4" {...stroke} /><path d="M4.5 4 L5 13 Q5 14 6 14 L10 14 Q11 14 11 13 L11.5 4" {...stroke} /></svg>;
+    case 'edit':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M10.5 2.5 L13.5 5.5 L5.5 13.5 L2.5 13.5 L2.5 10.5 Z" {...stroke} /><path d="M9 4 L12 7" {...stroke} /></svg>;
+    case 'image':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1" {...stroke} /><circle cx="6" cy="6.5" r="1.1" {...stroke} /><path d="M3 12 L6.5 8.5 L9 11 L11 9 L13 11" {...stroke} /></svg>;
+    case 'target':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" {...stroke} /><circle cx="8" cy="8" r="2.6" {...stroke} /><circle cx="8" cy="8" r="0.6" {...fill} /></svg>;
+    case 'file':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M4 2 L9 2 L12 5 L12 14 L4 14 Z" {...stroke} /><path d="M9 2 L9 5 L12 5" {...stroke} /></svg>;
+    case 'refresh':
+      return <svg style={s} className={className} viewBox="0 0 16 16"><path d="M12.5 6 A 5 5 0 1 0 13 9.5" {...stroke} /><path d="M12.8 2.5 L12.8 6 L9.3 6" {...stroke} /></svg>;
     default:
       return null;
   }

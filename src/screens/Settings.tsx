@@ -9,7 +9,7 @@ import {
   ServerSection,
   PlaybackSection,
   AudioSection,
-  LibrarySection,
+  LibrariesSection,
   DownloadsSection,
   AppearanceSection,
   KeyboardSection,
@@ -44,7 +44,7 @@ const NAV: NavSection[] = [
   { id: 'downloads',       label: 'Downloads',       icon: 'bookmark'   },
   { id: 'integrations',    label: 'Integrations',    icon: 'airplay'    },
   { id: 'keyboard',        label: 'Keyboard',        icon: 'kbd'        },
-  { id: 'library',         label: 'Library',         icon: 'grid'       },
+  { id: 'library',         label: 'Libraries',       icon: 'grid'       },
   { id: 'logs',            label: 'Logs',            icon: 'list'       },
   { id: 'notifications',   label: 'Notifications',   icon: 'airplay'    },
   { id: 'playback',        label: 'Playback',        icon: 'play'       },
@@ -85,7 +85,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
         <Glass translucent={st.translucent} style={{ width: 260, padding: '20px 14px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
           {NAV.map(s => {
             // Hide admin-only sections from non-admin users
-            if ((s.id === 'notifications' || s.id === 'backups' || s.id === 'scheduled-tasks' || s.id === 'logs' || s.id === 'sharing') && !st.isAdmin) return null;
+            if ((s.id === 'notifications' || s.id === 'backups' || s.id === 'scheduled-tasks' || s.id === 'logs' || s.id === 'sharing' || s.id === 'library') && !st.isAdmin) return null;
             // Build the label — append a count badge for Downloads when books are present.
             // This gives the user an at-a-glance view of how many books are stored offline.
             const downloadCount = s.id === 'downloads' ? st.downloads.length : 0;
@@ -126,7 +126,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           {/* st is passed so the Sessions subtab can access serverUrl and user type */}
           {section === 'playback'   && <PlaybackSection st={st} />}
           {section === 'audio'      && <AudioSection />}
-          {section === 'library'    && <LibrarySection st={st} />}
+          {section === 'library'    && <LibrariesSection st={st} />}
           {section === 'downloads'  && <DownloadsSection st={st} />}
           {section === 'appearance' && <AppearanceSection st={st} />}
           {section === 'keyboard'      && <KeyboardSection />}
