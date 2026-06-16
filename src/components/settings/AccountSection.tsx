@@ -1,7 +1,7 @@
 // AccountSection — profile view for all users, plus admin-only user management.
 // Non-admin users see their username, account type, and a WIP change-password stub.
 // Admin and root users additionally see a paginated user list with CRUD controls.
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { SectionHead, Row, Pill, SERIF, MONO } from './shared';
 import type { OnyxState } from '../../state/onyx';
@@ -34,11 +34,33 @@ function relativeTime(ms: number | null): string {
   return `${d}d ago`;
 }
 
-/** Formats a Unix-ms timestamp as MM/DD/YYYY. Returns "—" when null. */
+/** Formats a Unix-ms timestamp as "MMM D, YYYY" (e.g. May 18, 2026). Returns "—" when null. */
 function formatDate(ms: number | null): string {
   if (ms === null) return '—';
-  const d = new Date(ms);
-  return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// ── Per-user avatar colours ──────────────────────────────────────────────────
+// Each user is assigned a colour for their initial-badge. ABS exposes no per-user
+// colour field, so the mapping lives in localStorage (onyx.* prefix per project
+// convention). Colours are picked at random from a curated, on-brand palette the
+// first time a user is seen, then persisted so they stay stable across sessions.
+// The user can override any colour via the picker (palette swatch or custom hex).
+const USER_COLOR_KEY = 'onyx.userColors';
+const USER_PALETTE = [
+  '#d4a64a', '#c96442', '#7aa86a', '#5a8fc4', '#a86a8e', '#52b2cc',
+  '#b8893f', '#6cc0a0', '#9b7fd0', '#d98f6a', '#5fa9b8', '#cf6f8f',
+];
+
+function loadColorMap(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(USER_COLOR_KEY) ?? '{}') as Record<string, string>; }
+  catch { return {}; }
+}
+function saveColorMap(map: Record<string, string>): void {
+  localStorage.setItem(USER_COLOR_KEY, JSON.stringify(map));
+}
+function randomColor(): string {
+  return USER_PALETTE[Math.floor(Math.random() * USER_PALETTE.length)];
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -117,6 +139,88 @@ const TrashIcon = (
     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
   </svg>
 );
+
+/** Square initial-badge avatar. When the user is connected it "lights up" — a
+ *  solid colour fill with a soft glow; offline it shows a dim tinted box with
+ *  the coloured initial. Clicking opens the colour picker. */
+function UserAvatar({ color, initial, online, onClick }: {
+  color: string; initial: string; online: boolean; onClick: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      title="Change colour"
+      style={{
+        width: 34, height: 34, borderRadius: 9, flexShrink: 0, padding: 0, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontFamily: MONO, fontSize: 13, fontWeight: 700,
+        // Lit (online): solid fill + dark glyph + glow. Dim (offline): tinted box + coloured glyph.
+        background: online ? color : `${color}1f`,
+        color: online ? 'var(--onyx-bg)' : color,
+        border: `1px solid ${online ? color : `${color}3a`}`,
+        boxShadow: online ? `0 0 11px ${color}66` : 'none',
+        transition: 'background 0.15s, box-shadow 0.15s, color 0.15s, border-color 0.15s',
+      }}
+    >
+      {initial}
+    </button>
+  );
+}
+
+/** Glass popover anchored under an avatar (fixed-positioned so the row's scroll
+ *  container can't clip it): curated palette swatches + a native full-spectrum
+ *  custom input. Closes on outside click (handled by the caller). */
+function ColorPickerPopover({ value, onPick, popRef, pos }: {
+  value: string; onPick: (hex: string) => void;
+  popRef: React.RefObject<HTMLDivElement | null>; pos: { x: number; y: number };
+}) {
+  const W = 168;
+  const left = Math.min(pos.x, window.innerWidth - W - 12);
+  return (
+    <div
+      ref={popRef}
+      onClick={e => e.stopPropagation()}
+      style={{
+        position: 'fixed', top: pos.y, left, zIndex: 600,
+        background: 'var(--onyx-panel2)', backdropFilter: 'blur(40px) saturate(120%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(120%)',
+        border: '1px solid var(--onyx-glass-edge)', borderRadius: 10,
+        boxShadow: '0 16px 40px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.05)',
+        padding: 12, width: W,
+      }}
+    >
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 7 }}>
+        {USER_PALETTE.map(c => {
+          const active = c.toLowerCase() === value.toLowerCase();
+          return (
+            <button
+              key={c}
+              onClick={() => onPick(c)}
+              title={c}
+              style={{
+                width: 20, height: 20, borderRadius: 6, cursor: 'pointer', padding: 0, background: c,
+                border: active ? '2px solid var(--onyx-text)' : '1px solid rgba(255,255,255,0.18)',
+                boxShadow: active ? `0 0 8px ${c}88` : 'none',
+              }}
+            />
+          );
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 11, paddingTop: 11, borderTop: '1px solid var(--onyx-line)' }}>
+        <label style={{ position: 'relative', width: 22, height: 22, flexShrink: 0, cursor: 'pointer', borderRadius: 6, overflow: 'hidden', border: '1px solid rgba(255,255,255,0.18)', display: 'block' }}>
+          <input
+            type="color"
+            value={value}
+            onChange={e => onPick(e.target.value)}
+            style={{ position: 'absolute', inset: -4, width: 'calc(100% + 8px)', height: 'calc(100% + 8px)', border: 'none', padding: 0, background: 'none', cursor: 'pointer' }}
+          />
+        </label>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>Custom</span>
+        <span style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-dim)', marginLeft: 'auto', textTransform: 'uppercase' }}>{value}</span>
+      </div>
+    </div>
+  );
+}
 
 // ── Shared modal field styles ────────────────────────────────────────────────
 const fieldLabelStyle: React.CSSProperties = {
@@ -558,6 +662,29 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
   const [loading, setLoading] = useState(false);
   const [listError, setListError] = useState('');
 
+  // ── Per-user avatar colours ───────────────────────────────────────────────
+  // Map of userId → hex, persisted in localStorage. Missing users are assigned a
+  // random palette colour (and persisted) by the effect below once the list loads.
+  const [colorMap, setColorMap] = useState<Record<string, string>>(() => loadColorMap());
+  // Which user's colour picker is currently open (null = none) and where to
+  // anchor it (fixed coords from the clicked avatar). Outside click closes it.
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  const [pickerPos, setPickerPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const pickerRef = useRef<HTMLDivElement | null>(null);
+
+  const openPicker = (e: React.MouseEvent, userId: string) => {
+    e.stopPropagation();
+    if (pickerFor === userId) { setPickerFor(null); return; }
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setPickerPos({ x: r.left, y: r.bottom + 6 });
+    setPickerFor(userId);
+  };
+
+  const setUserColor = (userId: string, hex: string) => {
+    console.log('[AccountSection] set user colour', userId, '->', hex);
+    setColorMap(prev => { const next = { ...prev, [userId]: hex }; saveColorMap(next); return next; });
+  };
+
   // Modal visibility. editTarget/deleteTarget hold the user being acted on.
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<AdminUser | null>(null);
@@ -634,6 +761,30 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Assign a random, persisted colour to any user that doesn't have one yet.
+  useEffect(() => {
+    if (users.length === 0) return;
+    setColorMap(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const u of users) {
+        if (!next[u.id]) { next[u.id] = randomColor(); changed = true; }
+      }
+      if (changed) { console.log('[AccountSection] assigned random colours to new users'); saveColorMap(next); }
+      return changed ? next : prev;
+    });
+  }, [users]);
+
+  // Close the colour picker when clicking anywhere outside the open popover.
+  useEffect(() => {
+    if (!pickerFor) return;
+    const onDown = (e: MouseEvent) => {
+      if (!pickerRef.current?.contains(e.target as Node)) setPickerFor(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    return () => document.removeEventListener('mousedown', onDown);
+  }, [pickerFor]);
 
   /** Fetches /api/users and /api/users/online in parallel, then updates state. */
   async function loadUsers() {
@@ -732,26 +883,31 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
     <div>
       <SectionHead title="Account" subtitle="Your profile on this Audiobookshelf server." />
 
-      {/* ── Profile header — shown for all users ── */}
+      {/* ── Profile header card — shown for all users ── */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: 18,
-        padding: '0 0 24px',
-        borderBottom: '1px solid var(--onyx-line)',
+        padding: 18,
+        marginBottom: 28,
+        background: 'rgba(255,255,255,0.025)',
+        border: '1px solid var(--onyx-glass-edge)',
+        borderRadius: 14,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
       }}>
-        {/* Avatar circle containing the user's initial */}
+        {/* Avatar — rounded square containing the user's initial (theme accent) */}
         <div style={{
-          width: 72,
-          height: 72,
-          borderRadius: '50%',
+          width: 64,
+          height: 64,
+          borderRadius: 16,
           background: 'var(--onyx-accent)',
           color: 'var(--onyx-bg)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontWeight: 700,
-          fontSize: 28,
+          fontFamily: SERIF,
+          fontWeight: 600,
+          fontSize: 26,
           flexShrink: 0,
         }}>
           {initial}
@@ -764,9 +920,8 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
             fontFamily: MONO,
             fontSize: 10,
             color: 'var(--onyx-text-mute)',
-            marginTop: 4,
+            marginTop: 6,
             letterSpacing: '0.06em',
-            textTransform: 'uppercase',
           }}>
             {st.serverUrl || 'Not connected'}
           </div>
@@ -785,7 +940,8 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
             </button>
           </Row>
           <Row label="Single sign-on (SSO)" hint="OpenID Connect is enabled in this server's Audiobookshelf auth settings. SSO login from Skald is not yet available.">
-            <span style={{ fontFamily: MONO, fontSize: 11, color: oidcEnabled ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontFamily: MONO, fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: oidcEnabled ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)' }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: oidcEnabled ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)', flexShrink: 0 }} />
               {oidcEnabled ? 'Enabled · OpenID' : 'Not configured'}
             </span>
           </Row>
@@ -856,41 +1012,29 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
       {/* ── Admin view: full user-management section ── */}
       {isAdmin && (
         <div style={{ marginTop: 28 }}>
-          {/* Sub-section header: "Users" heading + count badge + Add User button */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-            <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500, flex: 1 }}>
-              Users
+          {/* Sub-section header: "Users" heading + member count + Add User button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500 }}>
+                Users
+              </div>
+              {/* Member count — plain mono text, shown once the list has loaded */}
+              {!loading && !listError && (
+                <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>
+                  {users.length} {users.length === 1 ? 'member' : 'members'}
+                </span>
+              )}
             </div>
 
-            {/* Count badge — only visible once the list has loaded successfully */}
-            {!loading && !listError && (
-              <span style={{
-                fontFamily: MONO,
-                fontSize: 9,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                color: 'var(--onyx-text-mute)',
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 4,
-                padding: '2px 8px',
-                whiteSpace: 'nowrap',
-              }}>
-                {users.length} {users.length === 1 ? 'user' : 'users'}
-              </span>
-            )}
-
-            {/* Brass "Add User" button */}
+            {/* Outlined "Add User" button */}
             <button
               onClick={() => setShowAdd(true)}
               style={{
                 padding: '7px 14px',
-                // Subtle brass fill matches the Onyx accent without being as prominent
-                // as the primary CTA; still clearly interactive against the dark panel.
-                background: 'linear-gradient(180deg, rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.18), rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.10))',
-                border: '1px solid rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.3)',
+                background: 'transparent',
+                border: '1px solid var(--onyx-glass-edge)',
                 borderRadius: 7,
-                color: 'var(--onyx-accent)',
+                color: 'var(--onyx-text-dim)',
                 fontFamily: MONO,
                 fontSize: 10.5,
                 letterSpacing: '0.07em',
@@ -923,151 +1067,82 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
             </div>
           )}
 
-          {/* User rows — scrollable container capped at ~420px tall */}
-          {!loading && !listError && (
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              maxHeight: 420,
-              overflowY: 'auto',
-            }}>
-              {users.map(u => {
-                // Flag whether this row is the currently logged-in user.
-                const isSelf = u.id === st.userId;
-                return (
-                  <div
-                    key={u.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: '10px 12px',
-                      borderRadius: 8,
-                      // Own row gets a subtle brass tint to make it identifiable at a glance.
-                      background: isSelf
-                        ? 'rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.06)'
-                        : 'rgba(255,255,255,0.03)',
-                      border: isSelf
-                        ? '1px solid rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.15)'
-                        : '1px solid rgba(255,255,255,0.05)',
-                    }}
-                  >
-                    {/* ── Presence dot ──────────────────────────────────────────
-                        Colour is determined by the current sync mode, read from
-                        localStorage so it reacts to the Sync → Live sync toggle
-                        without requiring a component re-mount.
+          {/* User table — column headers + scrollable body inside one rounded pane */}
+          {!loading && !listError && (() => {
+            const GRID = 'minmax(0,1fr) 80px 96px 124px 60px';
+            // Sync mode drives presence: live mode uses the server's online set;
+            // local mode treats only the logged-in user as connected.
+            const syncLive = localStorage.getItem('onyx.sync.live') === 'true';
+            const headCell: React.CSSProperties = {
+              fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em', textTransform: 'uppercase',
+              color: 'rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.6)',
+            };
+            const metaCell: React.CSSProperties = {
+              fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            };
+            return (
+              <div style={{ border: '1px solid var(--onyx-line)', borderRadius: 12, overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', gap: 14, padding: '9px 18px', borderBottom: '1px solid var(--onyx-line)', background: 'rgba(255,255,255,0.02)' }}>
+                  <span style={headCell}>Name</span>
+                  <span style={headCell}>Role</span>
+                  <span style={headCell}>Last seen</span>
+                  <span style={headCell}>Joined</span>
+                  <span style={{ ...headCell, textAlign: 'right' }}>Actions</span>
+                </div>
 
-                        'true'  → live mode  (Phase C will wire real WebSocket events)
-                        anything else → local mode (Phase A behaviour, default)    */}
-                    <div style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: '50%',
-                      flexShrink: 0,
-                      background: (() => {
-                        // Read sync mode from localStorage each render so toggling
-                        // in Settings → Sync is reflected immediately on return.
-                        const syncLive = localStorage.getItem('onyx.sync.live') === 'true';
+                {/* Rows */}
+                <div style={{ maxHeight: 440, overflowY: 'auto' }}>
+                  {users.map((u, i) => {
+                    const isSelf = u.id === st.userId;
+                    const isOnline = syncLive ? onlineUserIds.includes(u.id) : isSelf;
+                    const color = colorMap[u.id] ?? '#888888';
+                    const initialCh = u.username.charAt(0).toUpperCase() || '?';
+                    return (
+                      <div
+                        key={u.id}
+                        style={{
+                          display: 'grid', gridTemplateColumns: GRID, alignItems: 'center', gap: 14,
+                          padding: '11px 18px',
+                          borderBottom: i < users.length - 1 ? '1px solid var(--onyx-line)' : 'none',
+                          background: isSelf ? 'rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.04)' : 'transparent',
+                        }}
+                      >
+                        {/* Name: colour avatar (click to recolour) + username */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                          <UserAvatar color={color} initial={initialCh} online={isOnline} onClick={e => openPicker(e, u.id)} />
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13.5, fontWeight: isSelf ? 600 : 400, color: 'var(--onyx-text)' }}>
+                            {u.username}
+                            {isSelf && <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', color: 'var(--onyx-text-mute)', marginLeft: 8 }}>you</span>}
+                          </span>
+                        </div>
 
-                        // Determine whether this user's dot should be green.
-                        const isOnline = syncLive
-                          // Live path — onlineUserIds populated from /api/users/online.
-                          // Will be replaced by WebSocket events in Phase C.
-                          ? onlineUserIds.includes(u.id)
-                          // Local path — only the logged-in user is ever "present".
-                          // All other rows are grey; no server round-trip required.
-                          : u.id === st.userId;
+                        {/* Role */}
+                        <div style={{ minWidth: 0 }}><TypeBadge type={u.type} /></div>
 
-                        return isOnline ? '#52c97a' : 'var(--onyx-text-mute)';
-                      })(),
-                    }} />
+                        {/* Last seen */}
+                        <span style={metaCell}>{relativeTime(u.lastSeen)}</span>
 
-                    {/* Username — bold for own row; "you" label appended */}
-                    <div style={{
-                      flex: 1,
-                      fontSize: 13.5,
-                      fontWeight: isSelf ? 600 : 400,
-                      color: 'var(--onyx-text)',
-                      minWidth: 0,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {u.username}
-                      {isSelf && (
-                        <span style={{
-                          fontFamily: MONO,
-                          fontSize: 9,
-                          letterSpacing: '0.08em',
-                          color: 'var(--onyx-text-mute)',
-                          marginLeft: 8,
-                        }}>
-                          you
-                        </span>
-                      )}
-                    </div>
+                        {/* Joined */}
+                        <span style={metaCell}>{formatDate(u.createdAt)}</span>
 
-                    {/* Account type pill */}
-                    <TypeBadge type={u.type} />
-
-                    {/* Last seen — mono relative time */}
-                    <div style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: 'var(--onyx-text-mute)',
-                      minWidth: 90,
-                      textAlign: 'right',
-                      flexShrink: 0,
-                    }}>
-                      {relativeTime(u.lastSeen)}
-                    </div>
-
-                    {/* Created at — mono absolute date */}
-                    <div style={{
-                      fontFamily: MONO,
-                      fontSize: 10,
-                      color: 'var(--onyx-text-mute)',
-                      minWidth: 80,
-                      textAlign: 'right',
-                      flexShrink: 0,
-                    }}>
-                      {formatDate(u.createdAt)}
-                    </div>
-
-                    {/* Edit + Delete buttons — hidden on the logged-in user's own row.
-                        The server also blocks self-deletion, but hiding the controls is cleaner UX. */}
-                    <div style={{
-                      display: 'flex',
-                      gap: 2,
-                      flexShrink: 0,
-                      // Fixed width keeps all rows aligned even when buttons are hidden.
-                      width: 60,
-                      justifyContent: 'flex-end',
-                    }}>
-                      {!isSelf && (
-                        <>
-                          <RowButton
-                            onClick={() => openEdit(u)}
-                            title={`Edit ${u.username}`}
-                          >
-                            {PencilIcon}
-                          </RowButton>
-                          <RowButton
-                            onClick={() => setDeleteTarget(u)}
-                            danger
-                            title={`Delete ${u.username}`}
-                          >
-                            {TrashIcon}
-                          </RowButton>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                        {/* Actions — hidden on the logged-in user's own row. */}
+                        <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                          {!isSelf && (
+                            <>
+                              <RowButton onClick={() => openEdit(u)} title={`Edit ${u.username}`}>{PencilIcon}</RowButton>
+                              <RowButton onClick={() => setDeleteTarget(u)} danger title={`Delete ${u.username}`}>{TrashIcon}</RowButton>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -1097,6 +1172,16 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
           Sign out
         </button>
       </div>
+
+      {/* ── User colour picker popover ── */}
+      {pickerFor && (
+        <ColorPickerPopover
+          value={colorMap[pickerFor] ?? '#888888'}
+          onPick={hex => setUserColor(pickerFor, hex)}
+          popRef={pickerRef}
+          pos={pickerPos}
+        />
+      )}
 
       {/* ── Modals ── */}
 

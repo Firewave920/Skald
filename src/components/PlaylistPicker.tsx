@@ -1,11 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
+import type { CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import type { LibraryItem } from '../state/onyx';
 import { getPlaylists, createPlaylist, batchAddToPlaylist } from '../api/abs';
 import type { Playlist } from '../api/abs';
+import Icon from './Icon';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
+
+const footBtn: CSSProperties = {
+  width: '100%', fontFamily: MONO, fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+  padding: '9px 14px', borderRadius: 8, cursor: 'pointer', lineHeight: 1, background: 'transparent',
+};
 
 export interface PlaylistPickerProps {
   item: LibraryItem;
@@ -67,70 +74,74 @@ export default function PlaylistPicker({ item, serverUrl, onClose }: PlaylistPic
       style={{
         position: 'fixed', inset: 0, zIndex: 2000,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'rgba(0,0,0,0.6)',
+        background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+        padding: 24,
       }}
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div style={{
-        width: 340,
-        background: 'var(--onyx-panel2)',
-        border: '1px solid var(--onyx-line)',
-        borderRadius: 12,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.7)',
-        padding: '20px 0 8px',
-        display: 'flex',
-        flexDirection: 'column',
-        maxHeight: '60vh',
+        width: 360, maxHeight: '70vh',
+        background: 'var(--onyx-panel)', border: '1px solid var(--onyx-glass-edge)',
+        borderRadius: 16,
+        boxShadow: '0 40px 100px rgba(0,0,0,0.72), 0 0 0 1px rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.06), inset 0 1px 0 rgba(255,255,255,0.04)',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
       }}>
         {/* Header */}
-        <div style={{ padding: '0 20px 14px', borderBottom: '1px solid var(--onyx-line)' }}>
-          <div style={{ fontFamily: SERIF, fontSize: 17, fontWeight: 500, color: 'var(--onyx-text)' }}>
-            Add to Playlist
+        <div style={{ flexShrink: 0, padding: '20px 20px 0 22px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: SERIF, fontSize: 19, fontWeight: 500, letterSpacing: '-0.015em', lineHeight: 1.1 }}>Add to Playlist</div>
+            <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em', marginTop: 6 }}>Choose a playlist for this book</div>
           </div>
-          <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', marginTop: 4, letterSpacing: '0.04em' }}>
-            Choose a playlist for this book
-          </div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 7, background: 'none', border: '1px solid transparent', color: 'var(--onyx-text-mute)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, lineHeight: 1, flexShrink: 0, marginTop: 1 }}>✕</button>
         </div>
+        <div style={{ flexShrink: 0, height: 1, background: 'var(--onyx-line)', margin: '14px 0 0' }} />
 
         {/* Playlist list */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '6px 0' }}>
           {playlists === null && !error && (
-            <div style={{ padding: '16px 20px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>
-              Loading…
-            </div>
+            <div style={{ padding: '16px 22px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.06em' }}>Loading…</div>
           )}
           {error && (
-            <div style={{ padding: '12px 20px', fontSize: 12, color: '#e8716a' }}>{error}</div>
+            <div style={{ padding: '12px 22px', fontSize: 12, color: '#e8716a', fontFamily: MONO }}>{error}</div>
           )}
-          {playlists !== null && playlists.length === 0 && !newMode && (
-            <div style={{ padding: '12px 20px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>
-              No playlists — create one below
-            </div>
+          {playlists !== null && playlists.length === 0 && (
+            <div style={{ padding: '12px 22px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>No playlists yet — create one below.</div>
           )}
-          {playlists?.map(pl => (
-            <button
-              key={pl.id}
-              disabled={adding !== null || creating}
-              onClick={() => { void handleAdd(pl); }}
-              style={{
-                display: 'block', width: '100%',
-                padding: '10px 20px',
-                background: adding === pl.id ? 'var(--onyx-accent-dim)' : 'transparent',
-                border: 'none',
-                color: adding === pl.id ? 'var(--onyx-accent)' : 'var(--onyx-text)',
-                fontSize: 13.5, textAlign: 'left',
-                cursor: (adding !== null || creating) ? 'default' : 'pointer',
-                fontFamily: 'inherit',
-                transition: 'background 0.1s',
-              }}
-            >
-              {adding === pl.id ? 'Adding…' : pl.name}
-            </button>
-          ))}
+          {playlists?.map(pl => {
+            const rowBusy = adding === pl.id;
+            return (
+              <button
+                key={pl.id}
+                disabled={adding !== null || creating}
+                onClick={() => { void handleAdd(pl); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '10px 20px 10px 18px',
+                  background: rowBusy ? 'var(--onyx-accent-dim)' : 'transparent',
+                  border: 'none', borderLeft: `2px solid ${rowBusy ? 'var(--onyx-accent)' : 'transparent'}`,
+                  color: rowBusy ? 'var(--onyx-accent)' : 'var(--onyx-text)',
+                  fontSize: 13.5, textAlign: 'left', fontFamily: 'inherit',
+                  cursor: (adding !== null || creating) ? 'default' : 'pointer',
+                  opacity: rowBusy ? 0.6 : 1, transition: 'background 0.1s, color 0.1s',
+                }}
+              >
+                <Icon name="playlist" size={15} color={rowBusy ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)'} />
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {rowBusy ? 'Adding…' : pl.name}
+                </span>
+                {/* Membership indicator — always checked since adding closes */}
+                <span style={{
+                  width: 18, height: 18, borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'transparent',
+                  border: `1px solid ${rowBusy ? 'var(--onyx-accent)' : 'var(--onyx-glass-edge)'}`,
+                  color: 'var(--onyx-bg)',
+                }} />
+              </button>
+            );
+          })}
         </div>
 
         {/* Footer */}
-        <div style={{ padding: '10px 20px 6px', borderTop: '1px solid var(--onyx-line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ flexShrink: 0, padding: '12px 16px 16px', borderTop: '1px solid var(--onyx-line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
           {newMode ? (
             <div style={{ display: 'flex', gap: 6 }}>
               <input
@@ -141,55 +152,23 @@ export default function PlaylistPicker({ item, serverUrl, onClose }: PlaylistPic
                 onKeyDown={onNewKeyDown}
                 placeholder="Playlist name…"
                 disabled={creating}
-                style={{
-                  flex: 1,
-                  padding: '7px 10px',
-                  background: 'rgba(0,0,0,0.3)',
-                  border: '1px solid var(--onyx-accent-edge)',
-                  borderRadius: 6,
-                  color: 'var(--onyx-text)',
-                  fontFamily: 'inherit',
-                  fontSize: 13,
-                  outline: 'none',
-                }}
+                onFocus={e => { e.currentTarget.style.borderColor = 'var(--onyx-accent-edge)'; }}
+                onBlur={e => { e.currentTarget.style.borderColor = 'var(--onyx-glass-edge)'; }}
+                style={{ flex: 1, padding: '9px 12px', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8, color: 'var(--onyx-text)', fontFamily: 'inherit', fontSize: 13, outline: 'none', transition: 'border-color 0.15s' }}
               />
               <button
-                onClick={() => { void handleCreate(); }}
+                onClick={handleCreate}
                 disabled={!newName.trim() || creating}
-                style={{
-                  padding: '7px 12px',
-                  background: newName.trim() && !creating ? 'var(--onyx-accent)' : 'var(--onyx-accent-dim)',
-                  border: 'none',
-                  borderRadius: 6,
-                  color: newName.trim() && !creating ? '#0b0b0e' : 'var(--onyx-text-mute)',
-                  fontFamily: MONO,
-                  fontSize: 10,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase' as const,
-                  cursor: newName.trim() && !creating ? 'pointer' : 'default',
-                  whiteSpace: 'nowrap' as const,
-                }}
+                style={{ ...footBtn, width: 'auto', whiteSpace: 'nowrap', border: '1px solid transparent', fontWeight: 600, background: newName.trim() && !creating ? 'var(--onyx-accent)' : 'var(--onyx-accent-dim)', color: newName.trim() && !creating ? 'var(--onyx-bg)' : 'var(--onyx-text-mute)', cursor: newName.trim() && !creating ? 'pointer' : 'default' }}
               >
-                {creating ? 'Creating…' : 'Create & Add'}
+                {creating ? 'Creating…' : 'Create'}
               </button>
             </div>
           ) : (
             <button
               onClick={() => setNewMode(true)}
               disabled={adding !== null}
-              style={{
-                background: 'transparent',
-                border: '1px solid var(--onyx-accent-edge)',
-                borderRadius: 6,
-                color: 'var(--onyx-accent)',
-                fontFamily: MONO,
-                fontSize: 10,
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase' as const,
-                padding: '6px 14px',
-                cursor: 'pointer',
-                alignSelf: 'flex-start',
-              }}
+              style={{ ...footBtn, border: '1px dashed var(--onyx-accent-edge)', color: 'var(--onyx-accent)' }}
             >
               + New Playlist
             </button>
@@ -197,19 +176,7 @@ export default function PlaylistPicker({ item, serverUrl, onClose }: PlaylistPic
 
           <button
             onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--onyx-glass-edge)',
-              borderRadius: 6,
-              color: 'var(--onyx-text-dim)',
-              fontFamily: MONO,
-              fontSize: 10,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase' as const,
-              padding: '6px 14px',
-              cursor: 'pointer',
-              alignSelf: 'flex-start',
-            }}
+            style={{ ...footBtn, border: '1px solid var(--onyx-glass-edge)', color: 'var(--onyx-text-dim)' }}
           >
             Cancel
           </button>

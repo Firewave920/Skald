@@ -139,6 +139,7 @@ function Glyph({ name, size = 16, color = 'currentColor', sw = 1.6 }: {
     case 'arrow':   return <svg style={s} viewBox="0 0 16 16"><path d="M3 8 L13 8 M9 4 L13 8 L9 12" {...p} /></svg>;
     case 'revert':  return <svg style={s} viewBox="0 0 16 16"><path d="M6 3 L3 6 L6 9 M3 6 L11 6 Q13 6 13 9 L13 13" {...p} /></svg>;
     case 'edit':    return <svg style={s} viewBox="0 0 16 16"><path d="M11 2.5 L13.5 5 L6 12.5 L3 13 L3.5 10 Z" {...p} /></svg>;
+    case 'search':  return <svg style={s} viewBox="0 0 16 16"><circle cx="6.6" cy="6.6" r="4.2" {...p} /><path d="M9.8 9.8 L14 14 M6.6 4.7 L6.6 8.5 M4.7 6.6 L8.5 6.6" {...p} /></svg>;
     case 'sparkle': return <svg style={s} viewBox="0 0 16 16"><path d="M8 2 L9.2 6.2 L13 8 L9.2 9.8 L8 14 L6.8 9.8 L3 8 L6.8 6.2 Z" fill={color} stroke="none" /></svg>;
     case 'bolt':    return <svg style={s} viewBox="0 0 16 16"><path d="M9 2 L4 9 L7.5 9 L7 14 L12 7 L8.5 7 Z" fill={color} stroke="none" /></svg>;
     default: return null;
@@ -417,6 +418,9 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
   const [queryTitle, setQueryTitle]   = useState(meta.title ?? '');
   const [queryAuthor, setQueryAuthor] = useState(bookAuthor(item));
   const [searching, setSearching]     = useState(false);
+  // Gates the "No results found" empty state — stays false until a search runs,
+  // so it never shows on open even though the title field is pre-filled.
+  const [hasSearched, setHasSearched] = useState(false);
   const [searchErr, setSearchErr]     = useState<string | null>(null);
   const [results, setResults]         = useState<SearchResult[]>([]);
   const [selected, setSelected]       = useState<SearchResult | null>(null);
@@ -548,7 +552,7 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleSearch = useCallback(async () => {
-    setSearching(true); setSearchErr(null);
+    setSearching(true); setSearchErr(null); setHasSearched(true);
     try {
       const raw = await searchBooks(serverUrl, queryTitle, queryAuthor, provider);
       const arr = Array.isArray(raw)
@@ -621,7 +625,7 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
   };
   const labelStyle: CSSProperties = {
     fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em',
-    textTransform: 'uppercase', color: 'var(--onyx-text-mute)', marginBottom: 5,
+    textTransform: 'uppercase', color: 'var(--onyx-accent)', marginBottom: 5,
   };
 
   const providerLabel = providers.find(p => p.id === provider)?.name ?? provider;
@@ -650,7 +654,9 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 500 }}>Match Book</div>
             </div>
-            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-text-mute)', fontSize: 18, lineHeight: 1, padding: 4, flexShrink: 0 }}>✕</button>
+            <button onClick={onClose} title="Close" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--onyx-text-dim)', lineHeight: 1, padding: 4, flexShrink: 0, display: 'flex' }}>
+              <Glyph name="close" size={16} color="var(--onyx-text-dim)" />
+            </button>
           </div>
         )}
 
@@ -675,16 +681,19 @@ export default function MatchModal({ item, serverUrl, onClose, onComplete, onRef
                 <div style={labelStyle}>Author</div>
                 <input value={queryAuthor} onChange={e => setQueryAuthor(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} placeholder="Author…" style={{ ...inputStyle }} />
               </div>
-              <button onClick={handleSearch} disabled={searching} style={{ padding: '8px 20px', borderRadius: 8, cursor: searching ? 'default' : 'pointer', background: 'var(--onyx-accent)', border: 'none', color: 'var(--onyx-bg)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.06em', fontWeight: 600, opacity: searching ? 0.6 : 1 }}>
+              <button onClick={handleSearch} disabled={searching} style={{ padding: '8px 20px', borderRadius: 8, cursor: searching ? 'default' : 'pointer', background: 'var(--onyx-accent)', border: 'none', color: 'var(--onyx-bg)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, opacity: searching ? 0.6 : 1 }}>
                 {searching ? 'Searching…' : 'Search'}
               </button>
             </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0', display: 'flex', flexDirection: 'column' }}>
               {searchErr && <div style={{ padding: '24px', color: '#e87c7c', fontFamily: MONO, fontSize: 11 }}>{searchErr}</div>}
-              {!searching && !searchErr && results.length === 0 && (
-                <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--onyx-text-mute)', fontFamily: MONO, fontSize: 11, letterSpacing: '0.06em' }}>
-                  {queryTitle ? 'No results found.' : 'Enter a title and click Search.'}
+              {/* Empty state: shown only after a search has actually run and come back empty —
+                  never on open, even though the title field is pre-populated. */}
+              {hasSearched && !searching && !searchErr && results.length === 0 && (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, padding: '48px 24px', color: 'var(--onyx-text-mute)' }}>
+                  <Glyph name="search" size={32} color="var(--onyx-text-mute)" sw={1.4} />
+                  <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase' }}>No results found</div>
                 </div>
               )}
               {results.map((r, i) => (

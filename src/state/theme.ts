@@ -20,8 +20,8 @@ export type Theme = {
 export const ONYX_DARK_BASE: Theme = {
   bg:          '#0b0b0e',
   bgDeep:      '#08080b',
-  panel:       '#131319',
-  panel2:      '#1a1a22',
+  panel:       '#131316',  // modal surface — near-neutral; small blue delta (rgb 19,19,22) keeps the same hue as panel2 without a cool cast
+  panel2:      '#161619',  // elevated surface (context menu, select dropdowns) — dark but near-neutral; small blue delta (rgb 22,22,25) avoids a cool cast
   line:        'rgba(255,255,255,0.06)',
   text:        '#ebe7df',
   textDim:     'rgba(235,231,223,0.62)',

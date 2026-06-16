@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react';
+import type { CSSProperties } from 'react';
 import ReactDOM from 'react-dom';
 import { fetchItem } from '../../api/abs';
 import type { LibraryFile } from '../../api/abs';
 
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
+const SANS = "'Inter', system-ui, -apple-system, sans-serif";
+
+// Muted gold tint for the column headers — accent hue, dimmed so it reads as a
+// label rather than competing with the type badges below.
+const HEAD_ACCENT = 'rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.65)';
 
 export interface FilesModalProps {
   bookId: string;
@@ -17,6 +23,47 @@ function fmtSize(bytes: number): string {
   if (bytes >= 1_000_000)     return `${(bytes / 1_000_000).toFixed(1)} MB`;
   if (bytes >= 1_000)         return `${(bytes / 1_000).toFixed(1)} KB`;
   return `${bytes} B`;
+}
+
+// Per-file-type badge palette. Audio reuses the gold accent (the common case,
+// fully on-brand); image/ebook/video get contained, desaturated tints. Every
+// other ABS fileType (text, metadata, unknown…) falls back to neutral gray so
+// the colour accents stay reserved for the primary media kinds.
+const TYPE_COLORS: Record<string, { fg: string; border: string; bg: string }> = {
+  audio: { fg: 'var(--onyx-accent)', border: 'var(--onyx-accent-edge)', bg: 'var(--onyx-accent-dim)' },
+  image: { fg: '#52b2cc', border: 'rgba(82,178,204,0.40)', bg: 'rgba(82,178,204,0.13)' },
+  ebook: { fg: '#ab8fd6', border: 'rgba(171,143,214,0.38)', bg: 'rgba(171,143,214,0.12)' },
+  video: { fg: '#6cc0a0', border: 'rgba(108,192,160,0.38)', bg: 'rgba(108,192,160,0.12)' },
+};
+const TYPE_NEUTRAL = { fg: 'var(--onyx-text-dim)', border: 'var(--onyx-glass-edge)', bg: 'rgba(255,255,255,0.04)' };
+
+function TypeBadge({ fileType }: { fileType: string }) {
+  const c = TYPE_COLORS[fileType?.toLowerCase()] ?? TYPE_NEUTRAL;
+  return (
+    <span style={{
+      display: 'inline-block', fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.1em',
+      textTransform: 'uppercase', color: c.fg, background: c.bg, border: `1px solid ${c.border}`,
+      borderRadius: 5, padding: '3px 8px', lineHeight: 1, whiteSpace: 'nowrap',
+    }}>{fileType}</span>
+  );
+}
+
+// Render a filename with the human title in bright sans and the trailing
+// "[ASIN].ext" (or bare extension) in dim mono — matching the reference. A
+// leading "[" splits title from code; otherwise the final extension is dimmed.
+function renderName(filename: string) {
+  const title: CSSProperties = { fontFamily: SANS, fontSize: 13.5, color: 'var(--onyx-text)' };
+  const code: CSSProperties = { fontFamily: MONO, fontSize: 12, color: 'var(--onyx-text-dim)' };
+
+  const bracket = filename.match(/^(.*?)(\s*\[[^\]]*\].*)$/);
+  if (bracket) {
+    return <><span style={title}>{bracket[1].trimEnd()}</span> <span style={code}>{bracket[2].trimStart()}</span></>;
+  }
+  const dot = filename.lastIndexOf('.');
+  if (dot > 0) {
+    return <><span style={title}>{filename.slice(0, dot)}</span><span style={code}>{filename.slice(dot)}</span></>;
+  }
+  return <span style={title}>{filename}</span>;
 }
 
 export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalProps) {
@@ -44,8 +91,8 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
         maxWidth: '90vw',
         background: 'var(--onyx-panel2)',
         border: '1px solid var(--onyx-line)',
-        borderRadius: 12,
-        boxShadow: '0 24px 60px rgba(0,0,0,0.7)',
+        borderRadius: 16,
+        boxShadow: '0 32px 80px rgba(0,0,0,0.72)',
         display: 'flex',
         flexDirection: 'column',
         maxHeight: '70vh',
@@ -66,13 +113,13 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
               style={{
                 background: fullPath ? 'var(--onyx-accent-dim)' : 'transparent',
                 border: `1px solid ${fullPath ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
-                borderRadius: 6,
+                borderRadius: 8,
                 color: fullPath ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)',
                 fontFamily: MONO,
                 fontSize: 10,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase' as const,
-                padding: '5px 12px',
+                padding: '6px 14px',
                 cursor: 'pointer',
               }}
             >
@@ -83,13 +130,13 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
               style={{
                 background: 'transparent',
                 border: '1px solid var(--onyx-glass-edge)',
-                borderRadius: 6,
+                borderRadius: 8,
                 color: 'var(--onyx-text-dim)',
                 fontFamily: MONO,
                 fontSize: 10,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase' as const,
-                padding: '5px 12px',
+                padding: '6px 14px',
                 cursor: 'pointer',
               }}
             >
@@ -121,7 +168,7 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
                     <th key={h} style={{
                       padding: '8px 24px',
                       fontFamily: MONO, fontSize: 9, letterSpacing: '0.12em',
-                      textTransform: 'uppercase', color: 'var(--onyx-text-mute)',
+                      textTransform: 'uppercase', color: HEAD_ACCENT,
                       fontWeight: 400, textAlign: 'left',
                     }}>{h}</th>
                   ))}
@@ -133,14 +180,16 @@ export default function FilesModal({ bookId, serverUrl, onClose }: FilesModalPro
                     key={f.ino}
                     style={{ borderBottom: i < files.length - 1 ? '1px solid var(--onyx-line)' : 'none' }}
                   >
-                    <td style={{ padding: '10px 24px', fontSize: 12.5, color: 'var(--onyx-text)', fontFamily: MONO, wordBreak: 'break-all' }}>
-                      {fullPath ? (f.metadata.path ?? f.metadata.filename) : f.metadata.filename}
+                    <td style={{ padding: '12px 24px', wordBreak: 'break-all' }}>
+                      {fullPath
+                        ? <span style={{ fontFamily: MONO, fontSize: 12, color: 'var(--onyx-text-dim)' }}>{f.metadata.path ?? f.metadata.filename}</span>
+                        : renderName(f.metadata.filename)}
                     </td>
-                    <td style={{ padding: '10px 24px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-dim)', whiteSpace: 'nowrap' }}>
+                    <td style={{ padding: '12px 24px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-dim)', whiteSpace: 'nowrap' }}>
                       {fmtSize(f.metadata.size)}
                     </td>
-                    <td style={{ padding: '10px 24px', fontFamily: MONO, fontSize: 11, color: 'var(--onyx-accent)', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>
-                      {f.fileType}
+                    <td style={{ padding: '12px 24px', whiteSpace: 'nowrap' }}>
+                      <TypeBadge fileType={f.fileType} />
                     </td>
                   </tr>
                 ))}

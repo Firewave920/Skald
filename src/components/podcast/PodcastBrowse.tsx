@@ -382,7 +382,7 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
               key={(pid ?? '') + episodeKey(ep)}
               className="onyx-row"
               onClick={onRow}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 8px', borderRadius: 8, borderBottom: '1px solid var(--onyx-line)', cursor: 'pointer' }}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', borderBottom: '1px solid var(--onyx-line)', cursor: 'pointer' }}
             >
               {/* Podcast cover thumb */}
               <div style={{ width: 44, height: 44, flexShrink: 0, borderRadius: 6, overflow: 'hidden', background: 'rgba(0,0,0,0.25)' }}>
@@ -393,24 +393,24 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
                 onClick={(e) => { e.stopPropagation(); if (!downloaded) { openUndownloaded(ep); return; } if (nowPlaying) togglePlayback(st).catch(console.error); else playEp(ep); }}
                 title={!downloaded ? 'Download episode' : (nowPlaying && st.playing ? 'Pause' : 'Play')}
                 style={{
-                  width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                  width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
                   background: nowPlaying ? 'var(--onyx-accent)' : 'rgba(255,255,255,0.06)',
-                  color: nowPlaying ? 'var(--onyx-bg)' : (downloaded ? 'var(--onyx-text)' : 'var(--onyx-text-mute)'),
-                  border: '1px solid var(--onyx-glass-edge)', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: nowPlaying ? 'var(--onyx-bg)' : (downloaded ? 'var(--onyx-text-mute)' : 'var(--onyx-text-mute)'),
+                  border: `1px solid ${nowPlaying ? 'var(--onyx-accent)' : 'rgba(255,255,255,0.11)'}`, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.1s',
                 }}
               >
-                <Icon name={!downloaded ? 'plus' : (nowPlaying && st.playing ? 'pause' : 'play')} size={13} />
+                <Icon name={!downloaded ? 'plus' : (nowPlaying && st.playing ? 'pause' : 'play')} size={12} />
               </button>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: downloaded ? 'var(--onyx-text)' : 'var(--onyx-text-dim)', fontWeight: nowPlaying ? 600 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep.title}</div>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.03em', marginTop: 2, display: 'flex', gap: 10, overflow: 'hidden' }}>
-                  {!selectedId && podTitle && <span style={{ color: 'var(--onyx-text-dim)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200 }}>{podTitle}</span>}
-                  {date && <span>{date}</span>}
+                <div style={{ fontSize: 13, color: downloaded ? 'var(--onyx-text)' : 'var(--onyx-text-dim)', fontWeight: downloaded ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: 1.2 }}>{ep.title}</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: 'var(--onyx-text-mute)', letterSpacing: '0.03em', marginTop: 3, display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
+                  {!selectedId && podTitle && <><span style={{ color: 'var(--onyx-text-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{podTitle}</span><span style={{ margin: '0 5px', display: 'inline-flex', width: 2, height: 2, borderRadius: '50%', background: 'rgba(235,231,223,0.2)', flexShrink: 0 }} /></>}
+                  {date && <>{date}<span style={{ margin: '0 5px', display: 'inline-flex', width: 2, height: 2, borderRadius: '50%', background: 'rgba(235,231,223,0.2)', flexShrink: 0 }} /></>}
                   {dur > 0 && <span>{fmtRemaining(dur)}</span>}
-                  {!downloaded ? <span style={{ color: 'var(--onyx-text-mute)' }}>not downloaded</span>
-                    : finished ? <span style={{ color: 'var(--onyx-accent)' }}>finished</span>
-                    : pct > 0 ? <span>{fmtTime(mp?.currentTime ?? 0)} · {pct}%</span> : null}
+                  {!downloaded && <><span style={{ margin: '0 5px', display: 'inline-flex', width: 2, height: 2, borderRadius: '50%', background: 'rgba(235,231,223,0.2)', flexShrink: 0 }} /><span style={{ color: 'rgba(235,231,223,0.5)' }}>not downloaded</span></>}
+                  {downloaded && finished && <><span style={{ margin: '0 5px', display: 'inline-flex', width: 2, height: 2, borderRadius: '50%', background: 'rgba(235,231,223,0.2)', flexShrink: 0 }} /><span style={{ color: 'var(--onyx-accent)' }}>finished</span></>}
+                  {downloaded && pct > 0 && !finished && <><span style={{ margin: '0 5px', display: 'inline-flex', width: 2, height: 2, borderRadius: '50%', background: 'rgba(235,231,223,0.2)', flexShrink: 0 }} /><span>{fmtTime(mp?.currentTime ?? 0)} · {pct}%</span></>}
                 </div>
                 {pct > 0 && !finished && (
                   <div style={{ height: 2, background: 'var(--onyx-line)', borderRadius: 1, marginTop: 5, overflow: 'hidden' }}>
@@ -418,6 +418,9 @@ export default function PodcastBrowse({ st }: PodcastBrowseProps) {
                   </div>
                 )}
               </div>
+              {!downloaded && (
+                <div style={{ fontFamily: MONO, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 5, background: 'var(--onyx-accent-dim)', color: 'var(--onyx-accent)', border: `1px solid var(--onyx-accent-edge)`, flexShrink: 0, whiteSpace: 'nowrap' }}>New</div>
+              )}
             </div>
           );
         })}

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { getAudioDevices, setAudioDevice as setAudioDeviceCmd } from '../../api/abs';
 import type { AudioDevice } from '../../api/abs';
 import {
   getEqSettings, getEqPresets, getEqBandFrequencies,
-  setEqEnabled, setEqBand, setEqPreamp, applyEqPreset,
+  setEqEnabled, setEqBand, setEqPreamp, applyEqPreset, resetEq,
 } from '../../api/eq';
 import type { EqSettings, EqPreset } from '../../api/eq';
 import Icon from '../Icon';
@@ -21,6 +21,102 @@ function formatGain(g: number): string {
   return r > 0 ? `+${r}` : `${r}`;
 }
 
+// ── Shared visual tokens (mirrors the Appearance panel facelift) ──────────────
+const DIM_GOLD = 'rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.6)';
+const panelStyle: CSSProperties = {
+  background: 'rgba(255,255,255,0.02)',
+  border: '1px solid var(--onyx-glass-edge)',
+  borderRadius: 14,
+  overflow: 'hidden',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.04)',
+  marginTop: 24,
+};
+const panelHeadStyle: CSSProperties = {
+  padding: '14px 20px', borderBottom: '1px solid var(--onyx-line)',
+  fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DIM_GOLD,
+};
+const eyebrowStyle: CSSProperties = {
+  fontFamily: MONO, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DIM_GOLD,
+};
+
+/** Segmented control button — rectangular uppercase pill (accent when active). */
+function Seg({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        padding: '6px 11px', borderRadius: 6, fontFamily: MONO, fontSize: 10,
+        letterSpacing: '0.06em', textTransform: 'uppercase', whiteSpace: 'nowrap', cursor: 'pointer',
+        background: active ? 'var(--onyx-accent-dim)' : 'transparent',
+        border: `1px solid ${active ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)'}`,
+        color: active ? 'var(--onyx-accent)' : 'var(--onyx-text-mute)',
+        fontWeight: active ? 600 : 400,
+      }}
+    >{children}</button>
+  );
+}
+
+// ── EQ response-curve graph ───────────────────────────────────────────────────
+const GRAPH_H = 150;   // svg plot height (matches the band-slider track height)
+const GRAPH_MAX = 12;  // ± dB shown on the graph / band scale
+
+/** Catmull-Rom → cubic-bezier smoothing through the band points. */
+function smoothPath(pts: Array<[number, number]>): string {
+  if (pts.length < 2) return pts.length ? `M ${pts[0][0]} ${pts[0][1]}` : '';
+  let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [x0, y0] = pts[i - 1] ?? pts[i];
+    const [x1, y1] = pts[i];
+    const [x2, y2] = pts[i + 1];
+    const [x3, y3] = pts[i + 2] ?? pts[i + 1];
+    const c1x = x1 + (x2 - x0) / 6, c1y = y1 + (y2 - y0) / 6;
+    const c2x = x2 - (x3 - x1) / 6, c2y = y2 - (y3 - y1) / 6;
+    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+  }
+  return d;
+}
+
+/** Live response curve drawn from the current band gains. Uses a fixed viewBox
+ *  stretched with preserveAspectRatio=none; strokes stay crisp via
+ *  vector-effect=non-scaling-stroke, and the dB labels are HTML in the gutter. */
+function EqGraph({ bands }: { bands: number[] }) {
+  const W = 1000, H = GRAPH_H, padY = 14;
+  const n = bands.length || 1;
+  const yFor = (g: number) => {
+    const c = Math.max(-GRAPH_MAX, Math.min(GRAPH_MAX, g));
+    return H / 2 - (c / GRAPH_MAX) * (H / 2 - padY);
+  };
+  const pts: Array<[number, number]> = bands.map((g, i) => [n === 1 ? W / 2 : (i / (n - 1)) * W, yFor(g)]);
+  const line = smoothPath(pts);
+  const area = pts.length ? `${line} L ${W} ${H} L 0 ${H} Z` : '';
+  const yTop = yFor(GRAPH_MAX), y0 = yFor(0), yBot = yFor(-GRAPH_MAX);
+
+  return (
+    <div style={{ position: 'relative', paddingLeft: 34 }}>
+      {/* dB axis labels in the left gutter */}
+      <div style={{ position: 'absolute', left: 0, top: 0, height: H, width: 30, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: `${padY - 5}px 0`, alignItems: 'flex-end', pointerEvents: 'none' }}>
+        {['+12', '0', '-12'].map(l => (
+          <span key={l} style={{ fontFamily: MONO, fontSize: 8.5, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>{l}</span>
+        ))}
+      </div>
+      <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="eq-fill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--onyx-accent)" stopOpacity="0.20" />
+            <stop offset="100%" stopColor="var(--onyx-accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        {/* grid lines: top (+12), zero (brighter), bottom (-12) */}
+        {[yTop, y0, yBot].map((y, i) => (
+          <line key={i} x1="0" y1={y} x2={W} y2={y} stroke="var(--onyx-line)" strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={i === 1 ? 0.9 : 0.45} />
+        ))}
+        {area && <path d={area} fill="url(#eq-fill)" />}
+        {line && <path d={line} fill="none" stroke="var(--onyx-accent)" strokeWidth={2} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />}
+      </svg>
+    </div>
+  );
+}
+
 export interface AudioSectionProps {}
 
 export default function AudioSection() {
@@ -29,7 +125,7 @@ export default function AudioSection() {
   const [eqSettings, setEqSettings] = useState<EqSettings | null>(null);
   const [presets, setPresets] = useState<EqPreset[]>([]);
   const [frequencies, setFrequencies] = useState<number[]>([]);
-  // Local copies so sliders update instantly during drag without invoking Tauri on every tick.
+  // Local copies so sliders/graph update instantly during drag without invoking Tauri on every tick.
   const [localBands, setLocalBands] = useState<number[]>(Array(10).fill(0));
   const [localPreamp, setLocalPreamp] = useState(0);
 
@@ -75,6 +171,18 @@ export default function AudioSection() {
       .catch(console.error);
   }
 
+  function handleResetFlat() {
+    console.log('[Audio] reset EQ to flat');
+    resetEq()
+      .then(() => getEqSettings())
+      .then(s => {
+        setEqSettings(s);
+        setLocalBands([...s.bands]);
+        setLocalPreamp(s.preamp);
+      })
+      .catch(console.error);
+  }
+
   function handleBandCommit(i: number, gain: number) {
     setEqSettings(s => {
       if (!s) return s;
@@ -100,21 +208,21 @@ export default function AudioSection() {
     return match ? String(match.index) : '__custom__';
   })();
 
+  // Band-slider layout heights — used to align the left dB scale with the tracks.
+  const FREQ_H = 18, TRACK_H = GRAPH_H, VAL_H = 18;
+
   return (
     <div>
       <SectionHead title="Audio" subtitle="Output device and signal-chain preferences." />
 
+      {/* Output device — kept as a standalone line item above the signal chain. */}
       <Row
         label="Output device"
         hint="Active right now. Pick a different device any time from the toolbar."
         align="top"
       >
         {devices.length === 0 ? (
-          <div style={{
-            fontFamily: MONO, fontSize: 11,
-            color: 'var(--onyx-text-mute)',
-            padding: '8px 12px', letterSpacing: '0.06em',
-          }}>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', padding: '8px 12px', letterSpacing: '0.06em' }}>
             Loading devices…
           </div>
         ) : (
@@ -133,117 +241,122 @@ export default function AudioSection() {
         )}
       </Row>
 
-      <Row label="Equalizer" hint="10-band DSP equalizer powered by LibVLC. Changes apply live.">
-        {eqSettings !== null && (
-          <Toggle on={eqEnabled} onChange={handleToggleEq} />
-        )}
-      </Row>
+      {/* ── Signal chain panel ── */}
+      <div style={panelStyle}>
+        <div style={panelHeadStyle}>Signal chain</div>
+        <div style={{ padding: '2px 20px 18px' }}>
+          {/* Equalizer master toggle */}
+          <Row label="Equalizer" hint="10-band DSP equalizer powered by LibVLC. Changes apply live.">
+            {eqSettings !== null && <Toggle on={eqEnabled} onChange={handleToggleEq} />}
+          </Row>
 
-      {/* EQ controls — greyed and non-interactive while disabled */}
-      <div style={{
-        opacity: eqEnabled ? 1 : 0.35,
-        pointerEvents: eqEnabled ? 'auto' : 'none',
-        transition: 'opacity 0.2s',
-      }}>
-        <Row label="Preset">
-          <select
-            className="onyx-select"
-            value={presetSelectValue}
-            onChange={e => {
-              const v = e.target.value;
-              if (v !== '__custom__') handlePresetChange(parseInt(v, 10));
-            }}
-          >
-            <option value="__custom__">Custom</option>
-            {presets.map(p => (
-              <option key={p.index} value={String(p.index)}>{p.name}</option>
-            ))}
-          </select>
-        </Row>
+          {/* EQ controls — greyed and non-interactive while disabled */}
+          <div style={{ opacity: eqEnabled ? 1 : 0.35, pointerEvents: eqEnabled ? 'auto' : 'none', transition: 'opacity 0.2s' }}>
+            {/* Preset pills (replaces the dropdown) */}
+            <Row label="Preset">
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                {presets.map(p => (
+                  <Seg key={p.index} active={presetSelectValue === String(p.index)} onClick={() => handlePresetChange(p.index)}>{p.name}</Seg>
+                ))}
+                {/* Custom is an indicator (active when bands were hand-tuned), not directly applicable. */}
+                <Seg active={presetSelectValue === '__custom__'} onClick={() => {}}>Custom</Seg>
+              </div>
+            </Row>
 
-        <Row label="Preamp">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <input
-              type="range"
-              min={-20}
-              max={20}
-              step={0.5}
-              value={localPreamp}
-              onChange={e => setLocalPreamp(Number(e.target.value))}
-              onPointerUp={e => handlePreampCommit(Number((e.target as HTMLInputElement).value))}
-              style={{ width: 200, accentColor: 'var(--onyx-accent)', cursor: 'pointer' }}
-            />
-            <span style={{
-              fontFamily: MONO, fontSize: 11,
-              color: 'var(--onyx-text-dim)',
-              minWidth: 52, textAlign: 'right',
-            }}>
-              {formatGain(localPreamp)} dB
-            </span>
-          </div>
-        </Row>
+            {/* Preamp */}
+            <Row label="Preamp">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <input
+                  type="range"
+                  min={-20}
+                  max={20}
+                  step={0.5}
+                  value={localPreamp}
+                  onChange={e => setLocalPreamp(Number(e.target.value))}
+                  onPointerUp={e => handlePreampCommit(Number((e.target as HTMLInputElement).value))}
+                  style={{ width: 280, accentColor: 'var(--onyx-accent)', cursor: 'pointer' }}
+                />
+                <span style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-dim)', minWidth: 48, textAlign: 'right' }}>
+                  {formatGain(localPreamp)} dB
+                </span>
+              </div>
+            </Row>
 
-        {/* 10 vertical band sliders */}
-        {frequencies.length > 0 && (
-          <div style={{ padding: '16px 0 20px', borderBottom: '1px solid var(--onyx-line)' }}>
-            <div style={{ display: 'flex', gap: 4 }}>
-              {frequencies.map((hz, i) => (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 4,
-                  }}
-                >
-                  <span style={{
-                    fontFamily: MONO, fontSize: 9,
-                    color: 'var(--onyx-text-mute)',
-                    letterSpacing: '0.04em',
-                  }}>
-                    {formatHz(hz)}
-                  </span>
-                  <input
-                    type="range"
-                    min={-20}
-                    max={20}
-                    step={0.5}
-                    value={localBands[i] ?? 0}
-                    onChange={e => {
-                      const gain = Number(e.target.value);
-                      setLocalBands(prev => {
-                        const next = [...prev];
-                        next[i] = gain;
-                        return next;
-                      });
-                    }}
-                    onPointerUp={e =>
-                      handleBandCommit(i, Number((e.target as HTMLInputElement).value))
-                    }
-                    className="onyx-eq-slider"
+            {/* 10-band EQ: sub-header + reset, response graph, then the band sliders */}
+            {frequencies.length > 0 && (
+              <div style={{ paddingTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <span style={eyebrowStyle}>10-Band EQ</span>
+                  <button
+                    onClick={handleResetFlat}
                     style={{
-                      writingMode: 'vertical-lr',
-                      direction: 'rtl',
-                      height: 120,
-                      width: 24,
-                      cursor: 'pointer',
-                      accentColor: 'var(--onyx-accent)',
-                    } as React.CSSProperties}
-                  />
-                  <span style={{
-                    fontFamily: MONO, fontSize: 9,
-                    color: 'var(--onyx-text-dim)',
-                    letterSpacing: '0.04em',
-                  }}>
-                    {formatGain(localBands[i] ?? 0)}
-                  </span>
+                      padding: '5px 11px', borderRadius: 6, background: 'transparent',
+                      border: '1px solid var(--onyx-glass-edge)', color: 'var(--onyx-text-dim)',
+                      fontFamily: MONO, fontSize: 9.5, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer',
+                    }}
+                  >
+                    Reset to flat
+                  </button>
                 </div>
-              ))}
-            </div>
+
+                {/* Live response curve */}
+                <EqGraph bands={localBands} />
+
+                {/* Band sliders with a left dB scale aligned to the tracks */}
+                <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                  {/* dB scale column */}
+                  <div style={{ width: 24, flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                    <div style={{ height: FREQ_H }} />
+                    <div style={{ height: TRACK_H, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                      {['+12', '+6', '0', '-6', '-12'].map(l => (
+                        <span key={l} style={{ fontFamily: MONO, fontSize: 8.5, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em', lineHeight: 1 }}>{l}</span>
+                      ))}
+                    </div>
+                    <div style={{ height: VAL_H }} />
+                  </div>
+
+                  {/* Sliders */}
+                  <div style={{ flex: 1, display: 'flex', gap: 4 }}>
+                    {frequencies.map((hz, i) => {
+                      const gain = localBands[i] ?? 0;
+                      return (
+                        <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                          <span style={{ height: FREQ_H, lineHeight: `${FREQ_H}px`, fontFamily: MONO, fontSize: 9, color: 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>
+                            {formatHz(hz)}
+                          </span>
+                          <input
+                            type="range"
+                            min={-GRAPH_MAX}
+                            max={GRAPH_MAX}
+                            step={0.5}
+                            value={gain}
+                            onChange={e => {
+                              const v = Number(e.target.value);
+                              setLocalBands(prev => { const next = [...prev]; next[i] = v; return next; });
+                            }}
+                            onPointerUp={e => handleBandCommit(i, Number((e.target as HTMLInputElement).value))}
+                            className="onyx-eq-slider"
+                            style={{
+                              writingMode: 'vertical-lr',
+                              direction: 'rtl',
+                              height: TRACK_H,
+                              width: 24,
+                              cursor: 'pointer',
+                              accentColor: 'var(--onyx-accent)',
+                            } as React.CSSProperties}
+                          />
+                          <span style={{ height: VAL_H, lineHeight: `${VAL_H}px`, fontFamily: MONO, fontSize: 9, color: gain !== 0 ? 'var(--onyx-text-dim)' : 'var(--onyx-text-mute)', letterSpacing: '0.04em' }}>
+                            {formatGain(gain)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

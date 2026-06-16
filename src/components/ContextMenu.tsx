@@ -53,6 +53,12 @@ export default function ContextMenu({ x, y, sections, onClose }: ContextMenuProp
   const [hovered, setHovered] = useState<string | null>(null);
   const [openSub, setOpenSub] = useState<string | null>(null);
 
+  // Submenu close is delayed so the cursor can travel across the gap into the
+  // flyout without it dismissing; entering the flyout (or its parent row) cancels it.
+  const subTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelSubClose = () => { if (subTimer.current) { clearTimeout(subTimer.current); subTimer.current = null; } };
+  const scheduleSubClose = () => { cancelSubClose(); subTimer.current = setTimeout(() => setOpenSub(null), 260); };
+
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!ref.current?.contains(e.target as Node)) onClose();
@@ -60,6 +66,9 @@ export default function ContextMenu({ x, y, sections, onClose }: ContextMenuProp
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
   }, [onClose]);
+
+  // Clear any pending submenu-close timer on unmount.
+  useEffect(() => () => { if (subTimer.current) clearTimeout(subTimer.current); }, []);
 
   // Estimate height for the upward-flip check from the visible row/header count.
   const rowCount = sections.reduce((n, s) => n + s.items.length + (s.label ? 1 : 0), 0);
@@ -103,8 +112,19 @@ export default function ContextMenu({ x, y, sections, onClose }: ContextMenuProp
       <div
         key={key}
         style={{ position: 'relative' }}
-        onMouseEnter={() => { setHovered(key); if (hasSub) setOpenSub(key); else if (!inSub) setOpenSub(null); }}
-        onMouseLeave={() => { setHovered(h => (h === key ? null : h)); if (hasSub) setOpenSub(s => (s === key ? null : s)); }}
+        onMouseEnter={() => {
+          setHovered(key);
+          // Entering a submenu parent (or re-entering it via its open flyout)
+          // cancels the pending close and keeps it open.
+          if (hasSub) { cancelSubClose(); setOpenSub(key); }
+          // Hovering a different top-level row dismisses any open flyout at once.
+          else if (!inSub) { cancelSubClose(); setOpenSub(null); }
+        }}
+        onMouseLeave={() => {
+          setHovered(h => (h === key ? null : h));
+          // Delay the close so the cursor can reach the flyout across the gap.
+          if (hasSub) scheduleSubClose();
+        }}
       >
         <button
           disabled={disabled}
