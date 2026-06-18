@@ -15,7 +15,8 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
-use crate::scanner;
+use crate::{ingest, scanner};
+use std::path::Path;
 
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
@@ -82,7 +83,15 @@ fn stable_lib_id(root_path: &str) -> String {
 /// Build the frontend-facing Library JSON for a local library row. `source:
 /// "local"` is the routing tag the frontend branches on; the other fields keep
 /// the shape parity the existing `Library` interface expects.
-fn library_json(id: &str, name: &str, media_type: &str, root_path: &str, created_at: i64) -> Value {
+fn library_json(
+    id: &str,
+    name: &str,
+    media_type: &str,
+    root_path: &str,
+    staging_path: Option<&str>,
+    organize_mode: &str,
+    created_at: i64,
+) -> Value {
     json!({
         "id": id,
         "name": name,
@@ -96,22 +105,34 @@ fn library_json(id: &str, name: &str, media_type: &str, root_path: &str, created
         "lastScan": Value::Null,
         "createdAt": created_at,
         "lastUpdate": Value::Null,
+        // Local-only config the ingest UI reads/writes.
+        "stagingPath": staging_path,
+        "organizeMode": organize_mode,
     })
+}
+
+// SELECT column list shared by get_library / list_libraries so the row→JSON
+// mapping below stays in lockstep with it.
+const LIB_COLS: &str = "id, name, media_type, root_path, staging_path, organize_mode, created_at";
+
+fn row_to_library(r: &rusqlite::Row) -> rusqlite::Result<Value> {
+    let staging: Option<String> = r.get(4)?;
+    Ok(library_json(
+        &r.get::<_, String>(0)?,
+        &r.get::<_, String>(1)?,
+        &r.get::<_, String>(2)?,
+        &r.get::<_, String>(3)?,
+        staging.as_deref(),
+        &r.get::<_, String>(5)?,
+        r.get::<_, i64>(6)?,
+    ))
 }
 
 fn get_library(conn: &Connection, id: &str) -> Result<Value, String> {
     conn.query_row(
-        "SELECT id, name, media_type, root_path, created_at FROM libraries WHERE id = ?1",
+        &format!("SELECT {LIB_COLS} FROM libraries WHERE id = ?1"),
         params![id],
-        |r| {
-            Ok(library_json(
-                &r.get::<_, String>(0)?,
-                &r.get::<_, String>(1)?,
-                &r.get::<_, String>(2)?,
-                &r.get::<_, String>(3)?,
-                r.get::<_, i64>(4)?,
-            ))
-        },
+        row_to_library,
     )
     .map_err(|e| format!("get library: {e}"))
 }
@@ -133,21 +154,38 @@ pub fn create_library(name: &str, root_path: &str) -> Result<Value, String> {
 pub fn list_libraries() -> Result<Vec<Value>, String> {
     let conn = open()?;
     let mut stmt = conn
-        .prepare("SELECT id, name, media_type, root_path, created_at FROM libraries ORDER BY name")
+        .prepare(&format!("SELECT {LIB_COLS} FROM libraries ORDER BY name"))
         .map_err(|e| format!("list libraries: {e}"))?;
     let rows = stmt
-        .query_map([], |r| {
-            Ok(library_json(
-                &r.get::<_, String>(0)?,
-                &r.get::<_, String>(1)?,
-                &r.get::<_, String>(2)?,
-                &r.get::<_, String>(3)?,
-                r.get::<_, i64>(4)?,
-            ))
-        })
+        .query_map([], row_to_library)
         .map_err(|e| format!("list libraries query: {e}"))?;
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("list libraries collect: {e}"))
+}
+
+/// Update a local library's ingest config (staging folder, copy/move mode).
+/// Either field is optional; only provided fields are written.
+pub fn set_config(
+    library_id: &str,
+    staging_path: Option<&str>,
+    organize_mode: Option<&str>,
+) -> Result<Value, String> {
+    let conn = open()?;
+    if let Some(sp) = staging_path {
+        conn.execute(
+            "UPDATE libraries SET staging_path = ?1 WHERE id = ?2",
+            params![sp, library_id],
+        )
+        .map_err(|e| format!("set staging_path: {e}"))?;
+    }
+    if let Some(om) = organize_mode {
+        conn.execute(
+            "UPDATE libraries SET organize_mode = ?1 WHERE id = ?2",
+            params![om, library_id],
+        )
+        .map_err(|e| format!("set organize_mode: {e}"))?;
+    }
+    get_library(&conn, library_id)
 }
 
 pub fn delete_library(id: &str) -> Result<(), String> {
@@ -215,4 +253,104 @@ pub fn list_items(library_id: &str) -> Result<Vec<Value>, String> {
         }
     }
     Ok(out)
+}
+
+/// A local library's ingest-relevant config.
+struct LibConfig {
+    root_path: String,
+    organize_mode: String,
+}
+
+fn lib_config(conn: &Connection, id: &str) -> Result<LibConfig, String> {
+    conn.query_row(
+        "SELECT root_path, organize_mode FROM libraries WHERE id = ?1",
+        params![id],
+        |r| Ok(LibConfig { root_path: r.get(0)?, organize_mode: r.get(1)? }),
+    )
+    .map_err(|e| format!("lib config: {e}"))
+}
+
+/// Ingest each source path into the library's managed tree (Phase 3).
+///
+/// For every book unit found under a source: identified books are filed into
+/// `<root>/Author/[Series/]Title`; unidentified ones go to `<root>/_Unidentified`.
+/// Copy vs. move follows the library's `organize_mode`. After placing everything,
+/// the catalog is rebuilt from the managed root (the scanner skips `_Unidentified`,
+/// so quarantined books never reach the shelf). Blocking — call from spawn_blocking.
+pub fn ingest(library_id: &str, sources: &[String]) -> Result<Vec<ingest::IngestOutcome>, String> {
+    let conn = open()?;
+    let cfg = lib_config(&conn, library_id)?;
+    let root = Path::new(&cfg.root_path);
+    let unidentified_root = root.join("_Unidentified");
+    let move_files = cfg.organize_mode == "move";
+
+    let mut outcomes: Vec<ingest::IngestOutcome> = Vec::new();
+    for src in sources {
+        let scanned = match scanner::scan_folder(src, library_id) {
+            Ok(s) => s,
+            Err(e) => {
+                outcomes.push(ingest::IngestOutcome {
+                    title: src.clone(),
+                    outcome: "error".into(),
+                    target_path: String::new(),
+                    message: e,
+                });
+                continue;
+            }
+        };
+
+        for s in &scanned {
+            let meta = s.item.get("media").and_then(|m| m.get("metadata"));
+            let title = meta
+                .and_then(|m| m.get("title"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown Title")
+                .to_string();
+            let author = meta
+                .and_then(|m| m.get("authorName"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown Author");
+            let series = meta
+                .and_then(|m| m.get("seriesName"))
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.trim().is_empty());
+
+            let source_dir = Path::new(&s.source_path);
+            // Confidence gate: a book with both author and title (from tags or a
+            // recognisable folder layout) is filed; otherwise it is quarantined.
+            let (target, kind) = if s.identified {
+                (ingest::unique_dir(ingest::book_target_dir(root, author, series, &title)), "filed")
+            } else {
+                let name = source_dir.file_name().and_then(|n| n.to_str()).unwrap_or("book");
+                (ingest::unique_dir(unidentified_root.join(ingest::sanitize_component(name))), "quarantined")
+            };
+
+            match ingest::place_book(source_dir, &target, move_files) {
+                Ok(()) => outcomes.push(ingest::IngestOutcome {
+                    title,
+                    outcome: kind.into(),
+                    target_path: target.to_string_lossy().into_owned(),
+                    message: String::new(),
+                }),
+                Err(e) => outcomes.push(ingest::IngestOutcome {
+                    title,
+                    outcome: "error".into(),
+                    target_path: String::new(),
+                    message: e,
+                }),
+            }
+        }
+    }
+
+    // Rebuild the catalog from the managed root so newly filed books appear.
+    scan_library(library_id)?;
+
+    let filed = outcomes.iter().filter(|o| o.outcome == "filed").count();
+    let quarantined = outcomes.iter().filter(|o| o.outcome == "quarantined").count();
+    log::info!(
+        target: "skald::library",
+        "catalog: ingest into {library_id} filed={filed} quarantined={quarantined} total={}",
+        outcomes.len()
+    );
+    Ok(outcomes)
 }

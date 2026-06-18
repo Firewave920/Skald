@@ -48,6 +48,10 @@ export interface Library {
   lastUpdate: number | null;
   /** Local Library: "local" for catalog-backed libraries; undefined/"abs" for ABS. */
   source?: string;
+  /** Local Library: staging/inbox folder watched for imports (Phase 3). */
+  stagingPath?: string | null;
+  /** Local Library: "copy" (default) or "move" — how ingest places files. */
+  organizeMode?: string;
 }
 
 /** Minimal folder entry used in create/update request bodies — only fullPath is sent. */
@@ -220,6 +224,33 @@ export async function scanLocalLibrary(libraryId: string): Promise<number> {
 /** Load a local library's catalogued items (ABS-shaped). */
 export async function getLocalLibraryItems(libraryId: string): Promise<LibraryItem[]> {
   return invoke<LibraryItem[]>('get_local_library_items', { libraryId });
+}
+
+// ── Local Library ingest (Phase 3) ───────────────────────────────────────────
+
+/** The outcome of ingesting one book unit. */
+export interface IngestOutcome {
+  title: string;
+  /** "filed" | "quarantined" | "error". */
+  outcome: string;
+  /** Absolute destination directory (empty on error). */
+  targetPath: string;
+  /** Error detail when outcome === "error". */
+  message: string;
+}
+
+/** Ingest folders/files into a local library's managed Author/Series/Title tree. */
+export async function ingestLocalPaths(libraryId: string, sources: string[]): Promise<IngestOutcome[]> {
+  return invoke<IngestOutcome[]>('ingest_local_paths', { libraryId, sources });
+}
+
+/** Update a local library's ingest config (staging folder, copy/move mode). */
+export async function setLocalLibraryConfig(
+  libraryId: string,
+  stagingPath?: string | null,
+  organizeMode?: string,
+): Promise<Library> {
+  return invoke<Library>('set_local_library_config', { libraryId, stagingPath, organizeMode });
 }
 
 // ── Podcasts (cluster E) ─────────────────────────────────────────────────────

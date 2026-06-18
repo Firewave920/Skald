@@ -273,6 +273,11 @@ pub fn scan_folder(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, Str
         if !p.is_file() {
             continue;
         }
+        // Skip the quarantine folder — unidentified books awaiting a match
+        // (ingest.rs) live under `_Unidentified/` and must not surface on the shelf.
+        if p.components().any(|c| c.as_os_str() == "_Unidentified") {
+            continue;
+        }
         if is_audio(p) {
             if let Some(parent) = p.parent() {
                 by_dir.entry(parent.to_path_buf()).or_default().push(p.to_path_buf());

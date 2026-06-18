@@ -914,6 +914,34 @@ pub async fn get_local_library_items(
         .map_err(|e| format!("get_local_library_items task panicked: {e}"))?
 }
 
+// ── Local library ingest (Local Library roadmap, Phase 3) ────────────────────
+
+/// Ingest source paths (folders/files) into a local library's managed tree —
+/// filing identified books as Author/Series/Title and quarantining the rest.
+#[tauri::command]
+pub async fn ingest_local_paths(
+    library_id: String,
+    sources: Vec<String>,
+) -> Result<Vec<crate::ingest::IngestOutcome>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::ingest(&library_id, &sources))
+        .await
+        .map_err(|e| format!("ingest_local_paths task panicked: {e}"))?
+}
+
+/// Update a local library's ingest config (staging folder, copy/move mode).
+#[tauri::command]
+pub async fn set_local_library_config(
+    library_id: String,
+    staging_path: Option<String>,
+    organize_mode: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        crate::catalog::set_config(&library_id, staging_path.as_deref(), organize_mode.as_deref())
+    })
+    .await
+    .map_err(|e| format!("set_local_library_config task panicked: {e}"))?
+}
+
 pub type ShortcutActionMap =
     std::sync::Arc<std::sync::RwLock<std::collections::HashMap<u32, String>>>;
 
