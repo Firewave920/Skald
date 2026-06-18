@@ -855,6 +855,21 @@ pub async fn play_local_file(
     mgr.play_local(&file_path, &item_id, start_time, app).await
 }
 
+/// Scan a local folder and return ABS-shaped library items (Local Library
+/// roadmap, Phase 1). Runs on a blocking thread so a large scan never stalls the
+/// async runtime. `library_id` tags the emitted items so they slot into a local
+/// library; defaults to "local" for the standalone spike.
+#[tauri::command]
+pub async fn scan_folder(
+    path: String,
+    library_id: Option<String>,
+) -> Result<Vec<crate::scanner::ScannedItem>, String> {
+    let lib = library_id.unwrap_or_else(|| "local".to_string());
+    tokio::task::spawn_blocking(move || crate::scanner::scan_folder(&path, &lib))
+        .await
+        .map_err(|e| format!("scan task panicked: {e}"))?
+}
+
 pub type ShortcutActionMap =
     std::sync::Arc<std::sync::RwLock<std::collections::HashMap<u32, String>>>;
 

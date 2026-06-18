@@ -8,6 +8,7 @@ pub mod session;
 pub mod cover_cache;
 pub mod socket;    // Phase B: Socket.IO transport for live sync
 pub mod downloads; // Phase B: persistent registry of downloaded books
+pub mod scanner;   // Local Library: local folder scanner (emits ABS-shaped items)
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -201,6 +202,8 @@ pub fn run() {
             commands::cancel_download,
             // Downloads — Phase D: offline playback via local file
             commands::play_local_file,
+            // Local Library — Phase 1: scan a local folder into ABS-shaped items
+            commands::scan_folder,
             // Listening sessions — Settings → Playback → Sessions tab
             commands::get_listening_sessions,
             commands::delete_session,

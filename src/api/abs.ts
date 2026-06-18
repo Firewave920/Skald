@@ -167,6 +167,27 @@ export interface LibraryItem {
   mediaType: string;
   media: BookMedia;
   libraryFiles?: LibraryFile[];
+  /** Local Library only: absolute on-disk path of the book unit (playback/ingest source). */
+  localPath?: string;
+  /** Local Library only: true when an embedded cover was detected during the scan. */
+  hasLocalCover?: boolean;
+}
+
+// ── Local Library (scanner) ──────────────────────────────────────────────────
+// A scanned book unit: an ABS-shaped LibraryItem the existing shelf/player can
+// render verbatim, plus scanner-only context (disk path + identification quality).
+export interface ScannedItem {
+  item: LibraryItem;
+  sourcePath: string;
+  /** 0..=100 — how much of title/author/series came from real tags vs. folder guesses. */
+  confidence: number;
+  /** True when both a title and an author were resolved. */
+  identified: boolean;
+}
+
+/** Scan a local folder into ABS-shaped items (Local Library roadmap, Phase 1). */
+export async function scanFolder(path: string, libraryId?: string): Promise<ScannedItem[]> {
+  return invoke<ScannedItem[]>('scan_folder', { path, libraryId });
 }
 
 // ── Podcasts (cluster E) ─────────────────────────────────────────────────────

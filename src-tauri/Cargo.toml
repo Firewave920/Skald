@@ -49,3 +49,21 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # Used temporarily in connect_socket to decode JWT payload for expiry diagnostics
 base64 = "0.21"
 
+# ── Local library: scanner / catalog / ingest / providers ────────────────────
+# (Local Library & Split Libraries roadmap.) Added together so the dependency
+# fetch is a single rebuild even though the modules land across several phases.
+# rusqlite: local catalog DB (items, progress, sessions, bookmarks, collections,
+# playlists). "bundled" compiles SQLite in-tree so no system sqlite3 is required.
+rusqlite = { version = "0.31", features = ["bundled"] }
+# lofty: read embedded audio tags, cover art, (and where available) chapters
+# across ID3v2 / MP4·M4B / Vorbis. The scanner's primary metadata source.
+lofty = "0.21"
+# symphonia: pure-Rust format probe / duration fallback when tags lack it.
+symphonia = { version = "0.5", features = ["all"] }
+# walkdir: recursive directory traversal for the scanner.
+walkdir = "2"
+# notify: file-system watcher for the staging folder (Phase 7).
+notify = "6"
+# image: decode + resize embedded/sidecar cover art locally (no server resizer; Phase 8).
+image = "0.25"
+
