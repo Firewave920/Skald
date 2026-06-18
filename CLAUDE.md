@@ -24,7 +24,7 @@ Work proceeds one scoped feature at a time. A planning assistant (Claude in the 
 - Stay within the scope of the current instruction. Surface ambiguities rather than guessing.
 - If a referenced file does not exist, create it. Do not refactor unrelated files.
 - **Document generated code** — comments should explain *why*, matching the density of the surrounding code.
-- **Add diagnostic logging when building a feature** (`println!` in Rust commands, `console.log` in the frontend) so the user can validate behavior during `pnpm tauri dev`. Keep it in place for the whole roadmap, not just one phase. The established rhythm: build with diagnostics → user validates each phase → commit → (only after the full roadmap is complete) remove diagnostics → commit. See *Notes*.
+- **Add diagnostic logging when building a feature** using the structured logging framework — `log.{info,warn,error,debug}(category, msg, ctx?)` from `src/lib/log.ts` (frontend) and `log::info!/warn!/error!(target: "skald::<category>", …)` (Rust). Both land in one rotated file (`skald.log`) and are viewable in **Settings → Logs → Skald**. **Valuable diagnostics are permanent**, not stripped: only temporary scaffolding is removed in the final pass. Categories: `auth library playback sync downloads sharing metadata app`. Never log secrets — pass context as keyed objects (`{ token }` is auto-redacted; a raw token string is not). Plain `console.log`/`println!` is for throwaway local tracing only. See the *Diagnostic Logging & Skald Log Viewer Roadmap* and *Notes*.
 - **Commit to local git between phases.** Use `pnpm` (not npm) — the project standardizes on it.
 
 Feature roadmaps (current and historical) are kept in the user's Obsidian vault at `Vault/Skald/` — completed ones are marked "Complete" and are a reliable reference for how an existing feature works. The vault is git-ignored.
@@ -238,9 +238,8 @@ Verification is typically `pnpm tauri dev` followed by a manual UI check and a r
 ## Notes
 
 - **Ensure created code is appropriately commented.** Comments should explain *why*, matching the density and style of the surrounding code.
-- **Ensure that new features are accompanied by appropriate diagnostic code** (`println!` in Rust commands, `console.log` in the frontend) for ease of troubleshooting and validation.
-- **Diagnostic code should only be removed once the current roadmap has been completed** — not after a single phase. Keep it in place across the whole feature build so the user can validate end-to-end, then strip it in a final cleanup pass and commit.
-- **Diagnostic code potential outputs should be documented** — To ease troubleshooting, ensure that all diagnostic code has it's potential output logged at the bottom of a troubleshooting section that should be created whenever a roadmap is implemented. Ensure this section also contains what diagnostics were added to troubleshoot incase we need to return and troubleshoot in the future.
+- **Ensure that new features are accompanied by appropriate diagnostic code** via the structured logging framework (`log.*` in `src/lib/log.ts`; `log::*` with a `skald::<category>` target in Rust) — categorised, redacted, and captured to `skald.log`. These boundary logs (feature start, success, failure) are **permanent**; they power the in-app Skald log viewer and the About diagnostic report. Only throwaway scaffolding (`console.log`/`println!`) is stripped in the final pass.
+- **Document a feature's retained logs** in its roadmap Troubleshooting section — the categories/targets used and the common failure signatures — so the catalog stays the source of truth for what's logged and where the failure boundaries are. (This catalog is also what future instrumentation passes mine from.)
 
 
 ---
