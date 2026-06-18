@@ -453,7 +453,12 @@ pub fn ingest_staging(library_id: &str) -> Result<Vec<ingest::IngestOutcome>, St
         .map_err(|e| format!("staging lookup: {e}"))?
         .flatten();
     match staging {
-        Some(s) if Path::new(&s).exists() => ingest_sources(library_id, &[s], true),
+        Some(s) if Path::new(&s).exists() => {
+            let outcomes = ingest_sources(library_id, &[s.clone()], true)?;
+            // Books were moved out — remove the empty folder skeletons left in Staging.
+            ingest::prune_empty_dirs(Path::new(&s));
+            Ok(outcomes)
+        }
         _ => Ok(Vec::new()),
     }
 }

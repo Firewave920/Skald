@@ -100,6 +100,30 @@ pub fn unique_dir(target: PathBuf) -> PathBuf {
     target
 }
 
+/// Recursively remove empty subdirectories of `root` (depth-first), leaving
+/// `root` itself in place. Used to clean up the folder skeletons left behind in
+/// Staging after a move-based distribution (files get moved out; the now-empty
+/// `Author/Book/…` folders should not linger).
+pub fn prune_empty_dirs(root: &Path) {
+    let entries = match std::fs::read_dir(root) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let p = entry.path();
+        if p.is_dir() {
+            // Prune children first, then remove this dir if it became empty.
+            prune_empty_dirs(&p);
+            let now_empty = std::fs::read_dir(&p)
+                .map(|mut it| it.next().is_none())
+                .unwrap_or(false);
+            if now_empty {
+                let _ = std::fs::remove_dir(&p);
+            }
+        }
+    }
+}
+
 /// Move or copy the **direct files** of `source_dir` (audio + supplemental; not
 /// subdirectories, which are separate book units) into `target_dir`.
 ///
