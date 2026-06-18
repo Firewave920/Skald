@@ -607,19 +607,19 @@ impl AbsClient {
         let sv = match value.get("mediaItemShare") {
             Some(v) if !v.is_null() => v.clone(),
             _ => {
-                println!("[share] get_item_share: item {item_id} has no mediaItemShare");
+                log::info!(target: "skald::sharing", "get_item_share: item {item_id} has no share");
                 return Ok(None);
             }
         };
         // ShareManager.findByMediaItemId returns a *sanitized* share object (not the
         // toJSONForClient shape create uses), so it may omit fields the strict model
         // requires. Extract leniently — only id + slug are needed to show the link.
-        println!("[share] get_item_share raw mediaItemShare: {sv}");
+        log::debug!(target: "skald::sharing", "get_item_share raw mediaItemShare: {sv}");
         let s = |k: &str| sv.get(k).and_then(|x| x.as_str()).map(str::to_string);
         let id = s("id").unwrap_or_default();
         let slug = s("slug").unwrap_or_default();
         if id.is_empty() || slug.is_empty() {
-            println!("[share] get_item_share: mediaItemShare missing id/slug");
+            log::warn!(target: "skald::sharing", "get_item_share: share missing id/slug");
             return Ok(None);
         }
         let expires_at = sv.get("expiresAt").and_then(|x| match x {

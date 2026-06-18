@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task, Library, PodcastEpisode } from '../api/abs';
 import { type AdvFilter, type SearchScope, EMPTY_ADV_FILTER } from '../lib/shelfFilters';
 import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings } from '../api/abs';
+import { log } from '../lib/log';
 
 export type { ServerSettings };
 
@@ -597,6 +598,7 @@ export function useOnyxState(): OnyxState {
           setAuthToken(loggedInUser.token);
           setUserId(loggedInUser.id);
           setUser(loggedInUser);
+          log.info('auth', 'login ok', { userId: loggedInUser.id, type: loggedInUser.type });
         } else {
           await saveToken(token);
         }
@@ -611,6 +613,7 @@ export function useOnyxState(): OnyxState {
         const items = await fetchLibraryItems(serverUrl, activeLib.id);
         if (cancelled) return;
         setLibraryRaw(patchLibraryItems(items));
+        log.info('library', 'library loaded', { libraryId: activeLib.id, items: items.length });
         // Server responded successfully — we are online; clear any offline indicator.
         setIsOffline(false);
         // Persist the library to disk after every successful fetch so it is
@@ -620,7 +623,7 @@ export function useOnyxState(): OnyxState {
         // Fire-and-forget; no toast here — the reconnect handler shows one if needed.
         flushOfflineProgress(serverUrl).catch(e => console.error('[offline] startup flush failed:', e));
       } catch (e) {
-        console.warn('[library] fetch failed, attempting cache fallback:', e);
+        log.warn('library', 'fetch failed — attempting cache fallback', { err: String(e) });
         try {
           const cached = await loadLibraryCache();
           // If there is no cache and no auth token, this is a fresh install —

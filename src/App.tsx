@@ -5,6 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { useOnyxState } from './state/onyx';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 import { closeActiveSession, connectSocket, disconnectSocket, flushOfflineProgress, getMe, recordStopPoint } from './api/abs';
+import { log } from './lib/log';
 import Toast from './components/ui/Toast';
 import ConfirmDialog from './components/ui/ConfirmDialog';
 import DownloadProgressToast from './components/downloads/DownloadProgressToast';
@@ -53,7 +54,7 @@ export default function App() {
     if (localStorage.getItem('onyx.sync.live') === 'true') {
       connectSocket(st.serverUrl, st.authToken).catch(e => {
         // Non-fatal: the toggle in Settings → Sync remains the manual fallback.
-        console.warn('[sync] auto-connect on startup failed:', e);
+        log.warn('sync', 'auto-connect on startup failed', { err: String(e) });
       });
     }
     return () => {
@@ -75,6 +76,7 @@ export default function App() {
 
     // socket-disconnected fires on clean teardown or unexpected drops.
     listen('socket-disconnected', () => {
+      log.warn('sync', 'socket disconnected');
       if (localStorage.getItem('onyx.sync.live') === 'true') {
         st.setToast({ message: 'Live sync disconnected — reconnecting…', type: 'info' });
       }
@@ -82,6 +84,7 @@ export default function App() {
 
     // socket-reconnected fires after the socket re-authenticates following a drop.
     listen('socket-reconnected', async () => {
+      log.info('sync', 'socket reconnected');
       if (localStorage.getItem('onyx.sync.live') === 'true') {
         st.setToast({ message: 'Live sync restored', type: 'success' });
       }
@@ -90,6 +93,7 @@ export default function App() {
       try {
         const count = await flushOfflineProgress(st.serverUrl);
         if (count > 0) {
+          log.info('downloads', 'flushed offline progress on reconnect', { count });
           // Override the "live sync restored" toast with a more informative one.
           st.setToast({
             message: `Synced ${count} offline progress update${count > 1 ? 's' : ''} to server`,
@@ -100,7 +104,7 @@ export default function App() {
           st.setMediaProgress(me.mediaProgress);
         }
       } catch (e) {
-        console.error('[offline] progress flush failed:', e);
+        log.error('downloads', 'offline progress flush failed', { err: String(e) });
       }
     }).then(fn => { unlistenReconnected = fn; });
 

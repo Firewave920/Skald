@@ -10,6 +10,7 @@ import {
   addTrackedShare, removeTrackedShare, findTrackedShareForItem, suggestSlug, publicBase, absoluteFeedUrl,
   type TrackedShare,
 } from '../lib/shareTracker';
+import { log } from '../lib/log';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO  = "'JetBrains Mono', ui-monospace, monospace";
@@ -87,7 +88,7 @@ export default function ShareModal({ item, st, onClose }: ShareModalProps) {
         if (cancelled) return;
         setMediaId(full.media?.id ?? null);
       })
-      .catch(e => console.error('[ShareModal] media.id resolve failed:', e));
+      .catch(e => log.error('sharing', 'media.id resolve failed', { err: String(e) }));
     return () => { cancelled = true; };
   }, [mediaId, canShare, st.serverUrl, item.id]);
 
@@ -100,7 +101,7 @@ export default function ShareModal({ item, st, onClose }: ShareModalProps) {
     let cancelled = false;
     getItemShare(st.serverUrl, item.id)
       .then(existing => {
-        console.log('[ShareModal] getItemShare result:', existing);
+        log.info('sharing', 'getItemShare result', { hasShare: !!existing, slug: existing?.slug });
         if (cancelled || !existing) return;
         const tracked: TrackedShare = {
           id: existing.id,
@@ -116,7 +117,7 @@ export default function ShareModal({ item, st, onClose }: ShareModalProps) {
         addTrackedShare(tracked);
         setShare(tracked);
       })
-      .catch(e => console.error('[ShareModal] getItemShare failed:', e));
+      .catch(e => log.error('sharing', 'getItemShare failed', { err: String(e) }));
     return () => { cancelled = true; };
   }, [canShare, st.serverUrl, item.id, title]);
 
@@ -129,7 +130,7 @@ export default function ShareModal({ item, st, onClose }: ShareModalProps) {
         if (cancelled) return;
         setFeed(feeds.find(f => f.entityId === item.id) ?? null);
       })
-      .catch(e => console.error('[ShareModal] feed lookup failed:', e))
+      .catch(e => log.error('sharing', 'feed lookup failed', { err: String(e) }))
       .finally(() => { if (!cancelled) setFeedLoading(false); });
     return () => { cancelled = true; };
   }, [st.serverUrl, item.id]);

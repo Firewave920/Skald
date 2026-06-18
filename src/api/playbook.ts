@@ -5,6 +5,7 @@
 import type { OnyxState } from '../state/onyx';
 import type { PodcastEpisode } from './abs';
 import { closeActiveSession, openPlaybackSession, playAudio, pauseAudio, setVolume as setAudioVolume, playLocalFile, getOfflineProgress } from './abs';
+import { log } from '../lib/log';
 
 // Guard against concurrent playBook calls.
 // openPlaybackSession is async and slow — a second click during the await
@@ -33,6 +34,7 @@ export async function playBook(
     // If the book is downloaded locally, play from disk rather than opening a
     // server session — this enables offline playback without network access.
     const localDownload = st.downloads.find(d => d.itemId === bookId);
+    log.info('playback', 'playBook', { bookId, offline: !!localDownload, override: startTimeOverride !== undefined });
     if (localDownload) {
       // Clear any stale online session state — there is no server session in the
       // offline path, so these flags must not mislead other components.
@@ -92,7 +94,7 @@ export async function playBook(
     // We still proceed even on failure — a new session open will work regardless,
     // but the server may have a dangling open session.
     await closeActiveSession().catch(e =>
-      console.error('[playbook] closeActiveSession failed:', e)
+      log.error('playback', 'closeActiveSession failed', { err: String(e) })
     );
     st.setSessionReady(false);
     st.setSessionId('');
@@ -108,7 +110,14 @@ export async function playBook(
 
     // 3. Open the session at the resolved position — server tells LibVLC
     //    to begin decoding from startTime so there is no seek glitch.
-    const result = await openPlaybackSession(st.serverUrl, bookId, startTime);
+    let result;
+    try {
+      result = await openPlaybackSession(st.serverUrl, bookId, startTime);
+    } catch (e) {
+      log.error('playback', 'openPlaybackSession failed', { bookId, err: String(e) });
+      throw e;
+    }
+    log.info('playback', 'session opened', { bookId, sessionId: result.sessionId });
     st.setSessionId(result.sessionId);
     st.setSessionReady(true);
     st.setCurrentBookId(bookId);
