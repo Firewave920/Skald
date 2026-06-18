@@ -1,10 +1,111 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { OnyxState } from '../../state/onyx';
-import { getLoggerData, startLogStream, stopLogStream, LOGGER_LEVELS, type LogEntry } from '../../api/abs';
-import { SectionHead, MONO, Panel } from './shared';
+import { getLoggerData, startLogStream, stopLogStream, LOGGER_LEVELS, readSkaldLog, openLogDir, type LogEntry } from '../../api/abs';
+import { SectionHead, MONO, Panel, Seg } from './shared';
+import { getLogBuffer, subscribeLog, clearLogBuffer, type LogCategory, type LogLevel } from '../../lib/log';
 
 export interface LogsSectionProps { st: OnyxState; }
+
+// ── Skald app-log subtab ──────────────────────────────────────────────────────
+// Reads the in-memory ring buffer (current session) from src/lib/log; "Full file"
+// loads the on-disk skald.log via the Rust command.
+const SKALD_LEVELS: { value: LogLevel; label: string; rank: number; color: string }[] = [
+  { value: 'debug', label: 'Debug', rank: 0, color: 'var(--onyx-text-mute)' },
+  { value: 'info',  label: 'Info',  rank: 1, color: 'var(--onyx-text-dim)' },
+  { value: 'warn',  label: 'Warn',  rank: 2, color: '#f59e0b' },
+  { value: 'error', label: 'Error', rank: 3, color: '#e08a8a' },
+];
+const LEVEL_RANK: Record<LogLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 };
+const SKALD_CATS: Array<LogCategory | 'all'> = ['all', 'app', 'auth', 'library', 'playback', 'sync', 'downloads', 'sharing', 'metadata'];
+
+function SkaldLogPanel() {
+  // Re-render when the ring buffer changes.
+  const [, force] = useState(0);
+  useEffect(() => subscribeLog(() => force(n => n + 1)), []);
+
+  const [minRank, setMinRank] = useState(0); // show everything by default
+  const [cat, setCat] = useState<LogCategory | 'all'>('all');
+  const [search, setSearch] = useState('');
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [fullFile, setFullFile] = useState<string | null>(null); // null = live buffer view
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const inputStyle = { fontFamily: MONO, fontSize: 11, background: 'var(--onyx-panel2)', color: 'var(--onyx-text)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, padding: '5px 8px' } as const;
+
+  const entries = getLogBuffer();
+  const q = search.toLowerCase();
+  const filtered = entries.filter(e =>
+    LEVEL_RANK[e.level] >= minRank &&
+    (cat === 'all' || e.cat === cat) &&
+    (q === '' || e.msg.toLowerCase().includes(q) || e.cat.includes(q)),
+  );
+
+  useEffect(() => {
+    if (autoScroll && fullFile === null && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [filtered.length, autoScroll, fullFile]);
+
+  const colorFor = (lvl: LogLevel) => SKALD_LEVELS.find(l => l.value === lvl)?.color ?? 'var(--onyx-text)';
+  const fmtTs = (ts: number) => `${new Date(ts).toLocaleTimeString(undefined, { hour12: false })}.${String(ts % 1000).padStart(3, '0')}`;
+
+  return (
+    <Panel label="Skald app log">
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '10px 0 14px' }}>
+        <select value={minRank} onChange={e => setMinRank(Number(e.target.value))} style={{ ...inputStyle, cursor: 'pointer' }}>
+          {SKALD_LEVELS.map(l => <option key={l.value} value={l.rank}>{l.label}+</option>)}
+        </select>
+        <select value={cat} onChange={e => setCat(e.target.value as LogCategory | 'all')} style={{ ...inputStyle, cursor: 'pointer' }}>
+          {SKALD_CATS.map(c => <option key={c} value={c}>{c === 'all' ? 'All categories' : c}</option>)}
+        </select>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="filter text…" style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--onyx-text-dim)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={autoScroll} onChange={e => setAutoScroll(e.target.checked)} />
+          Auto-scroll
+        </label>
+        <button onClick={() => clearLogBuffer()} style={{ ...inputStyle, cursor: 'pointer', color: 'var(--onyx-text-dim)' }}>Clear</button>
+        <button
+          onClick={() => {
+            if (fullFile !== null) { setFullFile(null); return; }
+            readSkaldLog().then(setFullFile).catch(err => setFullFile(`Failed to read log file: ${String(err)}`));
+          }}
+          style={{ ...inputStyle, cursor: 'pointer', color: fullFile !== null ? 'var(--onyx-accent)' : 'var(--onyx-text-dim)', borderColor: fullFile !== null ? 'var(--onyx-accent-edge)' : 'var(--onyx-glass-edge)' }}
+        >
+          {fullFile !== null ? 'Live buffer' : 'Full file'}
+        </button>
+        <button onClick={() => { void openLogDir(); }} style={{ ...inputStyle, cursor: 'pointer', color: 'var(--onyx-text-dim)' }}>Open folder</button>
+      </div>
+
+      <div
+        ref={scrollRef}
+        className="onyx-selectable"
+        style={{ maxHeight: '58vh', overflowY: 'auto', background: 'var(--onyx-bg-deep)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8, padding: '8px 10px', fontFamily: MONO, fontSize: 11, lineHeight: 1.6 }}
+      >
+        {fullFile !== null ? (
+          fullFile.trim() === ''
+            ? <div style={{ color: 'var(--onyx-text-mute)' }}>Log file is empty.</div>
+            : <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--onyx-text)' }}>{fullFile}</pre>
+        ) : filtered.length === 0 ? (
+          <div style={{ color: 'var(--onyx-text-mute)' }}>No log entries this session.</div>
+        ) : filtered.map((e, i) => (
+          <div key={i} style={{ display: 'flex', gap: 8, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            <span style={{ color: 'var(--onyx-text-mute)', flexShrink: 0 }}>{fmtTs(e.ts)}</span>
+            <span style={{ color: colorFor(e.level), flexShrink: 0, minWidth: 40, textTransform: 'uppercase' }}>{e.level}</span>
+            <span style={{ color: 'var(--onyx-accent)', flexShrink: 0, minWidth: 64 }}>{e.cat}</span>
+            <span style={{ color: 'var(--onyx-text)' }}>{e.msg}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 12, paddingBottom: 4 }}>
+        {fullFile !== null
+          ? 'Showing the on-disk log file (skald.log).'
+          : `Showing ${filtered.length} of ${entries.length} buffered (current session). The full history is in the log file.`}
+      </div>
+    </Panel>
+  );
+}
 
 // Cap the in-memory buffer — logs can be high-volume.
 const MAX_LOGS = 2000;
@@ -27,6 +128,11 @@ export default function LogsSection({ st }: LogsSectionProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Which log source is shown — persisted like other subtab choices.
+  const [subtab, setSubtab] = useState<'server' | 'skald'>(
+    () => (localStorage.getItem('onyx.logs.subtab') === 'skald' ? 'skald' : 'server'),
+  );
+  const switchSubtab = (t: 'server' | 'skald') => { localStorage.setItem('onyx.logs.subtab', t); setSubtab(t); };
 
   // Admin guard — non-admins should never reach this section.
   if (!st.isAdmin) return null;
@@ -98,8 +204,17 @@ export default function LogsSection({ st }: LogsSectionProps) {
 
   return (
     <div>
-      <SectionHead title="Logs" subtitle="Live server log. Admin only." />
+      <SectionHead title="Logs" subtitle="Server and Skald app logs for diagnosing failures. Admin only." />
 
+      {/* Source switcher: Audiobookshelf server log vs Skald's own app log */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 4 }}>
+        <Seg active={subtab === 'server'} onClick={() => switchSubtab('server')}>Server</Seg>
+        <Seg active={subtab === 'skald'} onClick={() => switchSubtab('skald')}>Skald</Seg>
+      </div>
+
+      {subtab === 'skald' && <SkaldLogPanel />}
+
+      {subtab === 'server' && (
       <Panel label="Server log">
       {/* Controls */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', padding: '10px 0 14px' }}>
@@ -188,6 +303,7 @@ export default function LogsSection({ st }: LogsSectionProps) {
         Showing {filtered.length} of {logs.length} buffered. Log level and retention are configured in Settings → Server → Logging.
       </div>
       </Panel>
+      )}
     </div>
   );
 }
