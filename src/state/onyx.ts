@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } fr
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task, Library, PodcastEpisode } from '../api/abs';
 import { type AdvFilter, type SearchScope, EMPTY_ADV_FILTER } from '../lib/shelfFilters';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems, getLocalLibraryProgress } from '../api/abs';
 import { log } from '../lib/log';
 
 export type { ServerSettings };
@@ -85,6 +85,15 @@ function patchLibraryItems(items: LibraryItem[]): LibraryItem[] {
 async function loadItemsForLibrary(lib: Library, serverUrl: string): Promise<LibraryItem[]> {
   if (lib.source === 'local') return getLocalLibraryItems(lib.id);
   return fetchLibraryItems(serverUrl, lib.id);
+}
+
+// Merge progress records by item (+episode), newest write wins. Used to fold
+// local-library progress into the same mediaProgress the ABS path populates.
+function mergeProgress(prev: MediaProgress[], next: MediaProgress[]): MediaProgress[] {
+  const key = (p: MediaProgress) => p.libraryItemId + '|' + (p.episodeId ?? '');
+  const byId = new Map(prev.map(p => [key(p), p]));
+  for (const n of next) byId.set(key(n), n);
+  return Array.from(byId.values());
 }
 
 // ─── Display helpers for real LibraryItem ─────────────────────────────────────
@@ -551,6 +560,12 @@ export function useOnyxState(): OnyxState {
       // catalog already, so caching them would just duplicate state.
       if (lib?.source !== 'local') {
         saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
+      } else {
+        // Fold this local library's catalog progress into mediaProgress so cover
+        // overlays and Pick-it-up reflect local playback.
+        getLocalLibraryProgress(lib.id)
+          .then(lp => setMediaProgress(prev => mergeProgress(prev, lp)))
+          .catch(e => console.error('[library] local progress load failed:', e));
       }
     } catch (e) {
       console.error('[setActiveLibrary] failed:', e);
@@ -676,6 +691,10 @@ export function useOnyxState(): OnyxState {
         // persist in the catalog.
         if (activeLib.source !== 'local') {
           saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
+        } else {
+          getLocalLibraryProgress(activeLib.id)
+            .then(lp => { if (!cancelled) setMediaProgress(prev => mergeProgress(prev, lp)); })
+            .catch(e => console.error('[library] local progress load failed:', e));
         }
       } catch (e) {
         console.error('[library] active library load failed:', e);

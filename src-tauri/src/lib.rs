@@ -215,6 +215,12 @@ pub fn run() {
             // Local Library — Phase 3: ingest/organize into Author/Series/Title
             commands::ingest_local_paths,
             commands::set_local_library_config,
+            // Local Library — Phase 4: local progress + bookmarks
+            commands::get_local_progress,
+            commands::get_local_library_progress,
+            commands::add_local_bookmark,
+            commands::get_local_bookmarks,
+            commands::delete_local_bookmark,
             // Listening sessions — Settings → Playback → Sessions tab
             commands::get_listening_sessions,
             commands::delete_session,
@@ -355,7 +361,11 @@ pub fn run() {
                                         let p = guard.player.lock().unwrap();
                                         p.as_ref().map(|pl| pl.duration()).unwrap_or(0.0)
                                     };
-                                    if let Ok(dl_dir) = downloads::downloads_dir() {
+                                    if guard.is_local_library {
+                                        // Local-library item — final position to the catalog.
+                                        let _ = catalog::set_progress(item_id, pos, dur, false);
+                                    } else if let Ok(dl_dir) = downloads::downloads_dir() {
+                                        // Downloaded ABS book — offline queue (flushes later).
                                         let entry = downloads::OfflineProgressEntry {
                                             item_id: item_id.clone(),
                                             current_time: pos,

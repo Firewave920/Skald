@@ -4,7 +4,7 @@
 // server position (or an explicit override), start audio, and sync the UI.
 import type { OnyxState } from '../state/onyx';
 import type { PodcastEpisode } from './abs';
-import { closeActiveSession, openPlaybackSession, playAudio, pauseAudio, setVolume as setAudioVolume, playLocalFile, getOfflineProgress } from './abs';
+import { closeActiveSession, openPlaybackSession, playAudio, pauseAudio, setVolume as setAudioVolume, playLocalFile, getOfflineProgress, getLocalProgress } from './abs';
 import { log } from '../lib/log';
 
 // Guard against concurrent playBook calls.
@@ -39,7 +39,10 @@ export async function playBook(
     // local-library item (scanned from disk, carrying localPath). Either case
     // skips the server session entirely and uses the same LibVLC local path.
     const localFilePath = localDownload?.filePath ?? libItem?.localPath;
-    log.info('playback', 'playBook', { bookId, offline: !!localFilePath, override: startTimeOverride !== undefined });
+    // A local-library item (scanned from disk, not a downloaded ABS book) keeps
+    // its progress in the catalog, never the server-bound offline queue.
+    const isLocalLibrary = !localDownload && !!libItem?.localPath;
+    log.info('playback', 'playBook', { bookId, offline: !!localFilePath, local: isLocalLibrary, override: startTimeOverride !== undefined });
     if (localFilePath) {
       // Clear any stale online session state — there is no server session in the
       // offline path, so these flags must not mislead other components.
@@ -53,10 +56,18 @@ export async function playBook(
       if (startTime === undefined) {
         const saved = st.mediaProgress.find(p => p.libraryItemId === bookId);
         if (saved) {
-          // Server progress available (cached from a prior online launch).
+          // Progress already in state (server cache, or local progress merged in).
           startTime = saved.currentTime;
+        } else if (isLocalLibrary) {
+          // Local-library item — resume from the catalog progress store.
+          try {
+            const lp = await getLocalProgress(bookId);
+            startTime = lp?.currentTime ?? 0;
+          } catch {
+            startTime = 0;
+          }
         } else {
-          // No server progress — query the local offline queue written by the tick task.
+          // Downloaded ABS book — query the local offline queue written by the tick task.
           try {
             const offlineProgress = await getOfflineProgress(bookId);
             startTime = offlineProgress?.currentTime ?? 0;
@@ -70,7 +81,7 @@ export async function playBook(
       // construction and starts the 1-second tick loop so playback-tick events flow.
       // bookId is passed so the session layer can key offline progress queue entries
       // to the correct item.
-      await playLocalFile(localFilePath, bookId, startTime);
+      await playLocalFile(localFilePath, bookId, startTime, isLocalLibrary);
 
       // Signal to the frontend that we are in local playback mode so transport
       // controls bypass session management and call audio commands directly.

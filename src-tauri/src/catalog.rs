@@ -11,7 +11,7 @@
 // `spawn_blocking`. Future phases add progress/sessions/bookmarks/collections/
 // playlists tables via additional CREATE TABLE IF NOT EXISTS statements here.
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 
@@ -67,7 +67,24 @@ fn init_schema(conn: &Connection) -> Result<(), String> {
             added_at    INTEGER NOT NULL,
             updated_at  INTEGER NOT NULL
          );
-         CREATE INDEX IF NOT EXISTS idx_items_library ON items(library_id);",
+         CREATE INDEX IF NOT EXISTS idx_items_library ON items(library_id);
+         CREATE TABLE IF NOT EXISTS progress (
+            item_id      TEXT PRIMARY KEY,
+            library_id   TEXT NOT NULL DEFAULT '',
+            current_time REAL NOT NULL DEFAULT 0,
+            duration     REAL NOT NULL DEFAULT 0,
+            is_finished  INTEGER NOT NULL DEFAULT 0,
+            updated_at   INTEGER NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_progress_library ON progress(library_id);
+         CREATE TABLE IF NOT EXISTS bookmarks (
+            id           TEXT PRIMARY KEY,
+            item_id      TEXT NOT NULL,
+            title        TEXT NOT NULL DEFAULT '',
+            time         REAL NOT NULL DEFAULT 0,
+            created_at   INTEGER NOT NULL
+         );
+         CREATE INDEX IF NOT EXISTS idx_bookmarks_item ON bookmarks(item_id);",
     )
     .map_err(|e| format!("init schema: {e}"))
 }
@@ -253,6 +270,108 @@ pub fn list_items(library_id: &str) -> Result<Vec<Value>, String> {
         }
     }
     Ok(out)
+}
+
+// ── Local progress (Phase 4) ──────────────────────────────────────────────────
+// Local items have no server, so their playback progress lives here. Shaped as
+// the frontend MediaProgress so it merges into the same `mediaProgress` state the
+// ABS path populates (Pick-it-up, cover overlays, resume).
+
+fn media_progress_json(item_id: &str, current_time: f64, duration: f64, is_finished: bool, updated_at: i64) -> Value {
+    json!({
+        "id": item_id,
+        "libraryItemId": item_id,
+        "episodeId": Value::Null,
+        "duration": duration,
+        "progress": if duration > 0.0 { current_time / duration } else { 0.0 },
+        "currentTime": current_time,
+        "isFinished": is_finished,
+        "lastUpdate": updated_at,
+    })
+}
+
+/// Upsert local playback progress for an item. `library_id` is resolved from the
+/// items table so callers (e.g. the playback tick) only need the item id.
+pub fn set_progress(item_id: &str, current_time: f64, duration: f64, is_finished: bool) -> Result<(), String> {
+    let conn = open()?;
+    let library_id: String = conn
+        .query_row("SELECT library_id FROM items WHERE id = ?1", params![item_id], |r| r.get(0))
+        .optional()
+        .map_err(|e| format!("progress lib lookup: {e}"))?
+        .unwrap_or_default();
+    conn.execute(
+        "INSERT OR REPLACE INTO progress
+            (item_id, library_id, current_time, duration, is_finished, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![item_id, library_id, current_time, duration, is_finished as i64, now_ms()],
+    )
+    .map_err(|e| format!("set progress: {e}"))?;
+    Ok(())
+}
+
+pub fn get_progress(item_id: &str) -> Result<Option<Value>, String> {
+    let conn = open()?;
+    conn.query_row(
+        "SELECT current_time, duration, is_finished, updated_at FROM progress WHERE item_id = ?1",
+        params![item_id],
+        |r| Ok(media_progress_json(item_id, r.get::<_, f64>(0)?, r.get::<_, f64>(1)?, r.get::<_, i64>(2)? != 0, r.get::<_, i64>(3)?)),
+    )
+    .optional()
+    .map_err(|e| format!("get progress: {e}"))
+}
+
+pub fn list_progress(library_id: &str) -> Result<Vec<Value>, String> {
+    let conn = open()?;
+    let mut stmt = conn
+        .prepare("SELECT item_id, current_time, duration, is_finished, updated_at FROM progress WHERE library_id = ?1")
+        .map_err(|e| format!("list progress: {e}"))?;
+    let rows = stmt
+        .query_map(params![library_id], |r| {
+            let id: String = r.get(0)?;
+            Ok(media_progress_json(&id, r.get::<_, f64>(1)?, r.get::<_, f64>(2)?, r.get::<_, i64>(3)? != 0, r.get::<_, i64>(4)?))
+        })
+        .map_err(|e| format!("list progress query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("list progress collect: {e}"))
+}
+
+// ── Local bookmarks (Phase 4) ─────────────────────────────────────────────────
+
+fn bookmark_json(id: &str, item_id: &str, title: &str, time: f64) -> Value {
+    json!({ "id": id, "libraryItemId": item_id, "title": title, "time": time })
+}
+
+pub fn add_bookmark(item_id: &str, title: &str, time: f64) -> Result<Value, String> {
+    use std::hash::{Hash, Hasher};
+    let conn = open()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    format!("{item_id}:{time}:{}", now_ms()).hash(&mut h);
+    let id = format!("bm_{:016x}", h.finish());
+    conn.execute(
+        "INSERT OR REPLACE INTO bookmarks (id, item_id, title, time, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![id, item_id, title, time, now_ms()],
+    )
+    .map_err(|e| format!("add bookmark: {e}"))?;
+    Ok(bookmark_json(&id, item_id, title, time))
+}
+
+pub fn list_bookmarks(item_id: &str) -> Result<Vec<Value>, String> {
+    let conn = open()?;
+    let mut stmt = conn
+        .prepare("SELECT id, item_id, title, time FROM bookmarks WHERE item_id = ?1 ORDER BY time")
+        .map_err(|e| format!("list bookmarks: {e}"))?;
+    let rows = stmt
+        .query_map(params![item_id], |r| {
+            Ok(bookmark_json(&r.get::<_, String>(0)?, &r.get::<_, String>(1)?, &r.get::<_, String>(2)?, r.get::<_, f64>(3)?))
+        })
+        .map_err(|e| format!("list bookmarks query: {e}"))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(|e| format!("list bookmarks collect: {e}"))
+}
+
+pub fn delete_bookmark(id: &str) -> Result<(), String> {
+    let conn = open()?;
+    conn.execute("DELETE FROM bookmarks WHERE id = ?1", params![id])
+        .map_err(|e| format!("delete bookmark: {e}"))?;
+    Ok(())
 }
 
 /// A local library's ingest-relevant config.

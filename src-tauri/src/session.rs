@@ -25,6 +25,11 @@ pub struct SessionManager {
     // ABS library item ID of the locally-playing book. Set by play_local() and
     // used by the shutdown handler to write a final offline progress entry on exit.
     pub local_item_id: Option<String>,
+    // True when the locally-playing item is a *local-library* item (no server
+    // counterpart) rather than a downloaded ABS book. Local-library progress goes
+    // to the SQLite catalog; downloaded-book progress goes to the offline queue
+    // (which later flushes to the server). Set by play_local().
+    pub is_local_library: bool,
 }
 
 impl SessionManager {
@@ -38,6 +43,7 @@ impl SessionManager {
             active: Arc::new(AtomicBool::new(false)),
             is_local: false,
             local_item_id: None,
+            is_local_library: false,
         }
     }
 
@@ -59,6 +65,7 @@ impl SessionManager {
         self.active.store(false, Ordering::Relaxed);
         // Clear the local flag — this is an online session, sync is required.
         self.is_local = false;
+        self.is_local_library = false;
         // Clear the local item ID — no longer tracking offline progress.
         self.local_item_id = None;
 
@@ -184,6 +191,7 @@ impl SessionManager {
         file_path: &str,
         item_id: &str,
         start_time: f64,
+        local_library: bool,
         app: tauri::AppHandle<R>,
     ) -> Result<(), String> {
         // Kill any background tasks from a previous online or local session so
@@ -196,6 +204,9 @@ impl SessionManager {
 
         // Mark as local so any code that inspects this flag knows we are offline.
         self.is_local = true;
+        // Distinguish a local-library item (catalog progress) from a downloaded
+        // ABS book (offline queue → server flush).
+        self.is_local_library = local_library;
         // Store the ABS item ID so the tick task and shutdown handler can key
         // offline progress queue entries to the correct library item.
         self.local_item_id = Some(item_id.to_string());
@@ -283,6 +294,9 @@ impl SessionManager {
         // Resolve the downloads dir once before spawning; propagate None if it
         // fails (unlikely) so the tick loop still runs without queue writes.
         let dl_dir_tick     = crate::downloads::downloads_dir().ok();
+        // Local-library items persist progress to the SQLite catalog; downloaded
+        // ABS books persist to the offline queue (which later flushes to the server).
+        let local_library_tick = local_library;
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -310,10 +324,13 @@ impl SessionManager {
                         "isPlaying":   playing,
                     }),
                 );
-                // Queue progress locally on every tick during offline/local playback.
-                // This ensures no progress is lost even if the app closes mid-session.
-                // The queue is flushed to the server when connectivity is restored.
-                if let Some(ref dl_dir) = dl_dir_tick {
+                // Persist progress on every tick so nothing is lost if the app
+                // closes mid-session. Local-library items → SQLite catalog (never
+                // synced to a server); downloaded ABS books → offline queue (which
+                // flushes to the server on reconnect).
+                if local_library_tick {
+                    let _ = crate::catalog::set_progress(&item_id_tick, pos, dur, false);
+                } else if let Some(ref dl_dir) = dl_dir_tick {
                     let entry = crate::downloads::OfflineProgressEntry {
                         item_id: item_id_tick.clone(),
                         current_time: pos,

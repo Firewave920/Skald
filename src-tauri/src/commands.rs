@@ -848,11 +848,57 @@ pub async fn play_local_file(
     file_path: String,
     item_id: String,
     start_time: f64,
+    // True for local-library items (progress → catalog); false/absent for
+    // downloaded ABS books (progress → offline queue → server flush).
+    local_library: Option<bool>,
     app: tauri::AppHandle,
     state: tauri::State<'_, Arc<Mutex<SessionManager>>>,
 ) -> Result<(), String> {
     let mut mgr = state.lock().await;
-    mgr.play_local(&file_path, &item_id, start_time, app).await
+    mgr.play_local(&file_path, &item_id, start_time, local_library.unwrap_or(false), app).await
+}
+
+// ── Local progress & bookmarks (Local Library roadmap, Phase 4) ──────────────
+
+#[tauri::command]
+pub async fn get_local_progress(item_id: String) -> Result<Option<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::get_progress(&item_id))
+        .await
+        .map_err(|e| format!("get_local_progress task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn get_local_library_progress(
+    library_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::list_progress(&library_id))
+        .await
+        .map_err(|e| format!("get_local_library_progress task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn add_local_bookmark(
+    item_id: String,
+    title: String,
+    time: f64,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::add_bookmark(&item_id, &title, time))
+        .await
+        .map_err(|e| format!("add_local_bookmark task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn get_local_bookmarks(item_id: String) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::list_bookmarks(&item_id))
+        .await
+        .map_err(|e| format!("get_local_bookmarks task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn delete_local_bookmark(id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || crate::catalog::delete_bookmark(&id))
+        .await
+        .map_err(|e| format!("delete_local_bookmark task panicked: {e}"))?
 }
 
 /// Scan a local folder and return ABS-shaped library items (Local Library
@@ -1003,6 +1049,9 @@ pub async fn flush_offline_progress(server_url: String) -> Result<u32, String> {
     if queue.is_empty() { return Ok(0); }
     let mut flushed: u32 = 0;
     for entry in &queue {
+        // Local-library items (id prefix "local_") have no server counterpart —
+        // their progress lives in the catalog, so never attempt to flush them.
+        if entry.item_id.starts_with("local_") { continue; }
         // Offline downloads are book-only (the queue carries no episode id), so
         // episode_id is None here — see OfflineProgressEntry in downloads.rs.
         match client.update_progress(&entry.item_id, None, entry.current_time, entry.duration, entry.is_finished).await {

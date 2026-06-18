@@ -5,6 +5,7 @@ import {
   createBookmark, getMe, fetchItem,
   recordStopPoint, getStopPoints,
   asPodcastItem, downloadEpisodes,
+  addLocalBookmark, getLocalBookmarks,
 } from '../api/abs';
 import type { LocalStopPoint } from '../api/abs';
 import type { CSSProperties } from 'react';
@@ -197,14 +198,37 @@ export default function Player({ st }: PlayerProps) {
     getStopPoints(focusId).then(setStopPoints).catch(console.error);
   }, [focusId, bookmarkTab]);
 
+  // A local-library item has no server — bookmarks go to the catalog instead.
+  const isLocalItem = !!st.library.find(b => b.id === st.currentBookId)?.localPath;
+
+  // Load a local item's catalog bookmarks into shared state so they render in the
+  // same list as server bookmarks (playerBookmarks filters by libraryItemId).
+  useEffect(() => {
+    if (!isLocalItem || !st.currentBookId) return;
+    getLocalBookmarks(st.currentBookId)
+      .then(bms => {
+        const others = st.bookmarks.filter(b => b.libraryItemId !== st.currentBookId);
+        st.setBookmarks([...others, ...bms]);
+      })
+      .catch(err => console.error('[bookmark] local load failed:', err));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLocalItem, st.currentBookId]);
+
   const addBookmark = async () => {
     try {
       const title = curCh.t
         ? `${curCh.t} — ${fmtTime(st.position)}`
         : fmtTime(st.position);
-      await createBookmark(st.serverUrl, st.currentBookId, st.position, title);
-      const me = await getMe(st.serverUrl);
-      st.setBookmarks(me.bookmarks);
+      if (isLocalItem) {
+        await addLocalBookmark(st.currentBookId, title, st.position);
+        const bms = await getLocalBookmarks(st.currentBookId);
+        const others = st.bookmarks.filter(b => b.libraryItemId !== st.currentBookId);
+        st.setBookmarks([...others, ...bms]);
+      } else {
+        await createBookmark(st.serverUrl, st.currentBookId, st.position, title);
+        const me = await getMe(st.serverUrl);
+        st.setBookmarks(me.bookmarks);
+      }
     } catch (err) {
       console.error('[bookmark] create failed:', err);
     }

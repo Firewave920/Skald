@@ -380,6 +380,8 @@ export interface Bookmark {
   libraryItemId: string;
   title: string;
   time: number;
+  /** Local Library bookmarks carry a catalog id used for deletion; ABS omits it. */
+  id?: string;
 }
 
 // Mirrors downloads::LocalStopPoint — a position snapshot recorded locally
@@ -1044,8 +1046,35 @@ export function cancelDownload(itemId: string): Promise<void> {
  *  Starts the 1-second playback-tick loop so all transport controls remain live.
  *  itemId is the ABS library item ID — stored so progress can be queued offline.
  *  Does NOT open a server session — no network access is required. */
-export function playLocalFile(filePath: string, itemId: string, startTime: number): Promise<void> {
-  return invoke('play_local_file', { filePath, itemId, startTime });
+export function playLocalFile(filePath: string, itemId: string, startTime: number, localLibrary = false): Promise<void> {
+  return invoke('play_local_file', { filePath, itemId, startTime, localLibrary });
+}
+
+// ── Local Library progress & bookmarks (Phase 4) ─────────────────────────────
+
+/** Local playback progress for one item (MediaProgress-shaped), or null. */
+export async function getLocalProgress(itemId: string): Promise<MediaProgress | null> {
+  return invoke<MediaProgress | null>('get_local_progress', { itemId });
+}
+
+/** All local progress for a library — merges into the shelf's mediaProgress. */
+export async function getLocalLibraryProgress(libraryId: string): Promise<MediaProgress[]> {
+  return invoke<MediaProgress[]>('get_local_library_progress', { libraryId });
+}
+
+/** Add a local bookmark; returns the stored bookmark (with its catalog id). */
+export async function addLocalBookmark(itemId: string, title: string, time: number): Promise<Bookmark> {
+  return invoke<Bookmark>('add_local_bookmark', { itemId, title, time });
+}
+
+/** List a local item's bookmarks. */
+export async function getLocalBookmarks(itemId: string): Promise<Bookmark[]> {
+  return invoke<Bookmark[]>('get_local_bookmarks', { itemId });
+}
+
+/** Delete a local bookmark by its catalog id. */
+export async function deleteLocalBookmark(id: string): Promise<void> {
+  return invoke('delete_local_bookmark', { id });
 }
 
 /** GET /api/users/online → openSessions — returns all currently active playback sessions.
