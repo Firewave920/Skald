@@ -297,23 +297,24 @@ fn build_item(dir: &Path, root: &Path, mut files: Vec<PathBuf>, library_id: &str
 }
 
 /// Scan `root` recursively and return one ScannedItem per directory that directly
-/// contains audio files, **skipping the `_Unidentified` quarantine folder**.
-/// Blocking I/O — call from `spawn_blocking`.
+/// contains audio files. Blocking I/O — call from `spawn_blocking`.
 pub fn scan_folder(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, String> {
-    scan_impl(root, library_id, true)
+    scan_impl(root, library_id)
 }
 
-/// Scan a managed subfolder itself (e.g. `_Unidentified` or `staging`) without
-/// skipping it. Used to list quarantined books (Phase 5) and to scan staging on
-/// import (Phase 3).
+/// Alias kept for callers that scan the Staging / Unidentified folders directly.
+/// Now identical to scan_folder — the managed folders are siblings of Audiobooks,
+/// so each scan simply targets the correct folder (no skip logic needed).
 pub fn scan_unidentified(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, String> {
-    scan_impl(root, library_id, false)
+    scan_impl(root, library_id)
 }
 
-fn scan_impl(root: &str, library_id: &str, skip_managed: bool) -> Result<Vec<ScannedItem>, String> {
+fn scan_impl(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, String> {
     let root_path = Path::new(root);
     if !root_path.exists() {
-        return Err(format!("Scan path does not exist: {root}"));
+        // Not yet created (e.g. a freshly-made library's Audiobooks folder is
+        // empty) — treat as no items rather than an error.
+        return Ok(Vec::new());
     }
     log::info!(target: "skald::library", "scan: start path={root}");
 
@@ -326,21 +327,6 @@ fn scan_impl(root: &str, library_id: &str, skip_managed: bool) -> Result<Vec<Sca
         let p = entry.path();
         if !p.is_file() {
             continue;
-        }
-        // Skip Skald's managed subfolders at the top level of the library root —
-        // `staging/` (the import inbox) and `_Unidentified/` (quarantine) must not
-        // surface on the shelf. Only the FIRST path component under the scan root
-        // is checked, so scanning staging/_Unidentified directly (import/match)
-        // still works (scan_unidentified passes skip_managed=false anyway).
-        if skip_managed {
-            if let Ok(rel) = p.strip_prefix(root_path) {
-                if let Some(first) = rel.components().next() {
-                    let n = first.as_os_str();
-                    if n == "_Unidentified" || n == "staging" {
-                        continue;
-                    }
-                }
-            }
         }
         if is_audio(p) {
             if let Some(parent) = p.parent() {

@@ -221,6 +221,7 @@ pub fn run() {
             commands::get_local_library_items,
             // Local Library — Phase 3: ingest/organize into Author/Series/Title
             commands::ingest_local_paths,
+            commands::auto_ingest_staging,
             commands::set_local_library_config,
             // Local Library — Phase 4: local progress + bookmarks
             commands::get_local_progress,

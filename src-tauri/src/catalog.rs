@@ -18,6 +18,14 @@ use std::path::PathBuf;
 use crate::{ingest, scanner};
 use std::path::Path;
 
+// Managed subfolders created inside every local library root. Organized books
+// live under Audiobooks/Author/Series/Title; Staging is the intake inbox;
+// Unidentified is the quarantine; Podcasts is reserved for future local podcasts.
+const STAGING_DIR: &str = "Staging";
+const UNIDENTIFIED_DIR: &str = "Unidentified";
+const AUDIOBOOKS_DIR: &str = "Audiobooks";
+const PODCASTS_DIR: &str = "Podcasts";
+
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -161,9 +169,11 @@ fn get_library(conn: &Connection, id: &str) -> Result<Value, String> {
 pub fn create_library(name: &str, parent_path: &str) -> Result<Value, String> {
     let conn = open()?;
     let root = Path::new(parent_path).join(ingest::sanitize_component(name));
-    let staging = root.join("staging");
+    let staging = root.join(STAGING_DIR);
     std::fs::create_dir_all(&staging).map_err(|e| format!("create library/staging dir: {e}"))?;
-    std::fs::create_dir_all(root.join("_Unidentified")).map_err(|e| format!("create quarantine dir: {e}"))?;
+    std::fs::create_dir_all(root.join(UNIDENTIFIED_DIR)).map_err(|e| format!("create quarantine dir: {e}"))?;
+    std::fs::create_dir_all(root.join(AUDIOBOOKS_DIR)).map_err(|e| format!("create audiobooks dir: {e}"))?;
+    std::fs::create_dir_all(root.join(PODCASTS_DIR)).map_err(|e| format!("create podcasts dir: {e}"))?;
 
     let root_str = root.to_string_lossy().into_owned();
     let staging_str = staging.to_string_lossy().into_owned();
@@ -239,7 +249,10 @@ fn library_root(conn: &Connection, id: &str) -> Result<String, String> {
 pub fn scan_library(library_id: &str) -> Result<usize, String> {
     let conn = open()?;
     let root = library_root(&conn, library_id)?;
-    let scanned = scanner::scan_folder(&root, library_id)?;
+    // The shelf catalog is everything under Audiobooks/ — Staging/Unidentified/
+    // Podcasts are siblings and are scanned (or not) separately.
+    let books_root = Path::new(&root).join(AUDIOBOOKS_DIR);
+    let scanned = scanner::scan_folder(&books_root.to_string_lossy(), library_id)?;
 
     // Single transaction so a re-scan is atomic (no window where the library
     // appears empty mid-rebuild).
@@ -422,9 +435,39 @@ fn lib_config(conn: &Connection, id: &str) -> Result<LibConfig, String> {
 pub fn ingest(library_id: &str, sources: &[String]) -> Result<Vec<ingest::IngestOutcome>, String> {
     let conn = open()?;
     let cfg = lib_config(&conn, library_id)?;
+    ingest_sources(library_id, sources, cfg.organize_mode == "move")
+}
+
+/// Auto-distribute everything currently in the library's staging folder. Always
+/// MOVES so staging empties itself — it is a transient intake zone, not a copy
+/// source. Returns an empty result when there is no staging folder / nothing in it.
+pub fn ingest_staging(library_id: &str) -> Result<Vec<ingest::IngestOutcome>, String> {
+    let conn = open()?;
+    let staging: Option<String> = conn
+        .query_row(
+            "SELECT staging_path FROM libraries WHERE id = ?1",
+            params![library_id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .map_err(|e| format!("staging lookup: {e}"))?
+        .flatten();
+    match staging {
+        Some(s) if Path::new(&s).exists() => ingest_sources(library_id, &[s], true),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn ingest_sources(
+    library_id: &str,
+    sources: &[String],
+    move_files: bool,
+) -> Result<Vec<ingest::IngestOutcome>, String> {
+    let conn = open()?;
+    let cfg = lib_config(&conn, library_id)?;
     let root = Path::new(&cfg.root_path);
-    let unidentified_root = root.join("_Unidentified");
-    let move_files = cfg.organize_mode == "move";
+    let books_root = root.join(AUDIOBOOKS_DIR);
+    let unidentified_root = root.join(UNIDENTIFIED_DIR);
 
     let mut outcomes: Vec<ingest::IngestOutcome> = Vec::new();
     for src in sources {
@@ -461,7 +504,7 @@ pub fn ingest(library_id: &str, sources: &[String]) -> Result<Vec<ingest::Ingest
             // Confidence gate: a book with both author and title (from tags or a
             // recognisable folder layout) is filed; otherwise it is quarantined.
             let (target, kind) = if s.identified {
-                (ingest::unique_dir(ingest::book_target_dir(root, author, series, &title)), "filed")
+                (ingest::unique_dir(ingest::book_target_dir(&books_root, author, series, &title)), "filed")
             } else {
                 let name = source_dir.file_name().and_then(|n| n.to_str()).unwrap_or("book");
                 (ingest::unique_dir(unidentified_root.join(ingest::sanitize_component(name))), "quarantined")
@@ -505,7 +548,7 @@ pub fn ingest(library_id: &str, sources: &[String]) -> Result<Vec<ingest::Ingest
 pub fn get_unidentified(library_id: &str) -> Result<Vec<scanner::ScannedItem>, String> {
     let conn = open()?;
     let root = library_root(&conn, library_id)?;
-    let un = Path::new(&root).join("_Unidentified");
+    let un = Path::new(&root).join(UNIDENTIFIED_DIR);
     if !un.exists() {
         return Ok(Vec::new());
     }
@@ -526,7 +569,8 @@ pub fn file_matched(
 ) -> Result<String, String> {
     let conn = open()?;
     let root = library_root(&conn, library_id)?;
-    let target = ingest::unique_dir(ingest::book_target_dir(Path::new(&root), author, series, title));
+    let books_root = Path::new(&root).join(AUDIOBOOKS_DIR);
+    let target = ingest::unique_dir(ingest::book_target_dir(&books_root, author, series, title));
     // Move (not copy) — the book is leaving the quarantine folder.
     ingest::place_book(Path::new(source_path), &target, true)?;
     log::info!(target: "skald::metadata", "match filed {source_path} -> {}", target.display());

@@ -1073,6 +1073,17 @@ pub async fn ingest_local_paths(
         .map_err(|e| format!("ingest_local_paths task panicked: {e}"))?
 }
 
+/// Auto-distribute everything in a local library's staging folder (always moves,
+/// so staging empties). Triggered by the staging watcher and the manual button.
+#[tauri::command]
+pub async fn auto_ingest_staging(
+    library_id: String,
+) -> Result<Vec<crate::ingest::IngestOutcome>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::ingest_staging(&library_id))
+        .await
+        .map_err(|e| format!("auto_ingest_staging task panicked: {e}"))?
+}
+
 /// Update a local library's ingest config (staging folder, copy/move mode).
 #[tauri::command]
 pub async fn set_local_library_config(

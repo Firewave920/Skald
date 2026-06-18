@@ -245,6 +245,11 @@ export async function ingestLocalPaths(libraryId: string, sources: string[]): Pr
   return invoke<IngestOutcome[]>('ingest_local_paths', { libraryId, sources });
 }
 
+/** Auto-distribute a local library's staging folder (always moves; staging empties). */
+export async function autoIngestStaging(libraryId: string): Promise<IngestOutcome[]> {
+  return invoke<IngestOutcome[]>('auto_ingest_staging', { libraryId });
+}
+
 /** Update a local library's ingest config (staging folder, copy/move mode). */
 export async function setLocalLibraryConfig(
   libraryId: string,

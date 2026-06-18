@@ -1,9 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
-import { listen } from '@tauri-apps/api/event';
 import type { OnyxState } from '../../state/onyx';
 import type { Library, ScannedItem } from '../../api/abs';
-import { createLocalLibrary, deleteLocalLibrary, scanLocalLibrary, ingestLocalPaths, setLocalLibraryConfig, getUnidentifiedItems, startStagingWatch, type IngestOutcome } from '../../api/abs';
+import { createLocalLibrary, deleteLocalLibrary, scanLocalLibrary, ingestLocalPaths, autoIngestStaging, setLocalLibraryConfig, getUnidentifiedItems, type IngestOutcome } from '../../api/abs';
 import { log } from '../../lib/log';
 import Icon from '../Icon';
 import { SectionHead, Panel, Seg, MONO, DIM_GOLD, TextInput } from './shared';
@@ -39,31 +38,10 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
     setUnidentified(map);
   }, [st.libraries]);
 
+  // The needs-attention list re-loads automatically whenever the library set
+  // changes (App's app-wide staging watcher calls refreshLibrary after an
+  // auto-distribute, which re-runs this). The OS watcher itself lives in App.tsx.
   useEffect(() => { void reloadUnidentified(); }, [reloadUnidentified]);
-
-  // Watch the local libraries' staging folders. Re-armed when the set of staging
-  // paths changes (stagingKey). An empty list tears the Rust watcher down.
-  const stagingKey = st.libraries
-    .filter(l => l.source === 'local')
-    .map(l => l.stagingPath)
-    .filter(Boolean)
-    .join('|');
-  useEffect(() => {
-    const paths = stagingKey ? stagingKey.split('|') : [];
-    startStagingWatch(paths).catch(e => log.error('library', 'staging watch start failed', { err: String(e) }));
-  }, [stagingKey]);
-
-  // Coalesce bursty staging-changed events (a drop/copy fires many) into one
-  // refresh of the quarantine/needs-attention view.
-  const debounceRef = useRef<number | null>(null);
-  useEffect(() => {
-    let un: (() => void) | undefined;
-    listen('staging-changed', () => {
-      if (debounceRef.current) window.clearTimeout(debounceRef.current);
-      debounceRef.current = window.setTimeout(() => { void reloadUnidentified(); }, 2500);
-    }).then(fn => { un = fn; });
-    return () => { un?.(); if (debounceRef.current) window.clearTimeout(debounceRef.current); };
-  }, [reloadUnidentified]);
 
   // Choose the parent location where the new library folder will be created.
   async function chooseLocation() {
@@ -129,7 +107,8 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
     if (!lib.stagingPath) return;
     try {
       setBusy(lib.id);
-      const outcomes = await ingestLocalPaths(lib.id, [lib.stagingPath]);
+      // Same path the watcher uses — always MOVES, so staging empties.
+      const outcomes = await autoIngestStaging(lib.id);
       if (st.currentLibraryId === lib.id) await st.setActiveLibrary(lib.id);
       else await st.refreshLibrary();
       void reloadUnidentified();
@@ -226,8 +205,8 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--onyx-text-mute)', fontFamily: MONO }}>
               {newParent
-                ? `Will create: ${newParent.replace(/[\\/]+$/, '')}\\${newName.trim() || '<name>'}\\  (with staging\\ and _Unidentified\\)`
-                : 'Pick a location; Skald creates the library folder, its staging inbox, and a quarantine folder.'}
+                ? `Will create: ${newParent.replace(/[\\/]+$/, '')}\\${newName.trim() || '<name>'}\\  (with Staging\\, Unidentified\\, Audiobooks\\, Podcasts\\)`
+                : 'Pick a location; Skald creates the library folder with Staging, Unidentified, Audiobooks, and Podcasts subfolders.'}
             </div>
           </div>
         )}

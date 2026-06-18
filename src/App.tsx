@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { useOnyxState } from './state/onyx';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { closeActiveSession, connectSocket, disconnectSocket, flushOfflineProgress, getMe, recordStopPoint } from './api/abs';
+import { closeActiveSession, connectSocket, disconnectSocket, flushOfflineProgress, getMe, recordStopPoint, startStagingWatch, autoIngestStaging } from './api/abs';
 import { log } from './lib/log';
 import Toast from './components/ui/Toast';
 import ConfirmDialog from './components/ui/ConfirmDialog';
@@ -129,6 +129,57 @@ export default function App() {
     const iv = setInterval(flush, 30_000);
     return () => { clearInterval(iv); flush(); };
   }, [st.isLocalPlayback, st.serverUrl]);
+
+  // ── Local staging watcher + auto-distribute (app-wide) ───────────────────
+  // Staging is an intake zone: when files land there, scan and MOVE identified
+  // books into Author/Series/Title (unidentified → _Unidentified). Runs here
+  // (always mounted) so it works regardless of which screen is open.
+  const localLibsRef = useRef<{ id: string }[]>([]);
+  useEffect(() => {
+    localLibsRef.current = st.libraries.filter(l => l.source === 'local').map(l => ({ id: l.id }));
+  });
+
+  // Re-arm the OS watcher whenever the set of staging paths changes.
+  const stagingKey = st.libraries
+    .filter(l => l.source === 'local')
+    .map(l => l.stagingPath)
+    .filter(Boolean)
+    .join('|');
+  useEffect(() => {
+    const paths = stagingKey ? stagingKey.split('|') : [];
+    startStagingWatch(paths).catch(e => log.warn('library', 'staging watch start failed', { err: String(e) }));
+  }, [stagingKey]);
+
+  useEffect(() => {
+    let un: (() => void) | undefined;
+    let timer: number | null = null;
+    listen('staging-changed', () => {
+      // Debounce so a drop / large copy settles before we move anything.
+      if (timer) window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        try {
+          let filed = 0, quarantined = 0;
+          for (const lib of localLibsRef.current) {
+            const outcomes = await autoIngestStaging(lib.id);
+            filed += outcomes.filter(o => o.outcome === 'filed').length;
+            quarantined += outcomes.filter(o => o.outcome === 'quarantined').length;
+          }
+          if (filed || quarantined) {
+            await st.refreshLibrary();
+            const parts = [`${filed} added`];
+            if (quarantined) parts.push(`${quarantined} need attention`);
+            st.setToast({ message: `Imported from staging — ${parts.join(', ')}`, type: 'success' });
+            log.info('library', 'auto-ingest staging', { filed, quarantined });
+          }
+        } catch (e) {
+          log.error('library', 'auto-ingest staging failed', { err: String(e) });
+        }
+      }, 4000);
+    }).then(fn => { un = fn; });
+    return () => { un?.(); if (timer) window.clearTimeout(timer); };
+  // Listener is set up once; current libraries are read via localLibsRef.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Shutdown safety net ─────────────────────────────────────────────────
   // beforeunload fires when the WebView is dismissed and gives the frontend
