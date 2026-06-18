@@ -234,6 +234,8 @@ pub fn run() {
             commands::apply_local_match,
             // Local Library — Phase 7: staging-folder watcher
             commands::start_staging_watch,
+            // Local Library — Phase 8: local cover (sidecar/embedded, resized)
+            commands::get_local_cover,
             // Listening sessions — Settings → Playback → Sessions tab
             commands::get_listening_sessions,
             commands::delete_session,

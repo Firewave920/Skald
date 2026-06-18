@@ -901,6 +901,39 @@ pub async fn delete_local_bookmark(id: String) -> Result<(), String> {
         .map_err(|e| format!("delete_local_bookmark task panicked: {e}"))?
 }
 
+// ── Local covers (Local Library roadmap, Phase 8) ────────────────────────────
+
+/// Resolve a local item's cover (sidecar image or embedded art), resize to 400px,
+/// cache it, and return the on-disk path (the frontend loads it via asset://,
+/// exactly like ABS covers). Errors when the item has no cover — the caller then
+/// falls back to the generated template.
+#[tauri::command]
+pub async fn get_local_cover(item_id: String, bust: Option<u32>) -> Result<String, String> {
+    let version = bust.unwrap_or(0);
+    if cover_cache::is_cached(&item_id, Some(400), version) {
+        return Ok(cover_cache::cache_path(&item_id, Some(400), version).to_string_lossy().into_owned());
+    }
+    let id_for_path = item_id.clone();
+    let bytes = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, String> {
+        let dir = crate::catalog::get_item_path(&id_for_path)?
+            .ok_or_else(|| "item has no path".to_string())?;
+        let raw = crate::scanner::find_cover_bytes(std::path::Path::new(&dir))
+            .ok_or_else(|| "no cover found".to_string())?;
+        let img = image::load_from_memory(&raw).map_err(|e| format!("decode cover: {e}"))?;
+        // thumbnail preserves aspect within 400×400; covers render square via CSS.
+        let small = img.thumbnail(400, 400);
+        let mut buf = std::io::Cursor::new(Vec::new());
+        small
+            .write_to(&mut buf, image::ImageFormat::Jpeg)
+            .map_err(|e| format!("encode cover: {e}"))?;
+        Ok(buf.into_inner())
+    })
+    .await
+    .map_err(|e| format!("local cover task panicked: {e}"))??;
+    cover_cache::save_cover(&item_id, Some(400), version, &bytes)?;
+    Ok(cover_cache::cache_path(&item_id, Some(400), version).to_string_lossy().into_owned())
+}
+
 /// (Re)start watching the given staging folders; emits `staging-changed` events.
 /// Pass an empty list to stop watching. (Local Library roadmap, Phase 7.)
 #[tauri::command]

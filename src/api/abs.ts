@@ -1105,6 +1105,11 @@ export async function getUnidentifiedItems(libraryId: string): Promise<ScannedIt
   return invoke<ScannedItem[]>('get_unidentified_items', { libraryId });
 }
 
+/** Resolve a local item's cover (sidecar/embedded, resized); returns a cached disk path. */
+export async function getLocalCover(itemId: string, bust?: number): Promise<string> {
+  return invoke<string>('get_local_cover', { itemId, bust });
+}
+
 /** (Re)start watching local staging folders; emits `staging-changed` events. Empty list stops it. */
 export async function startStagingWatch(paths: string[]): Promise<void> {
   return invoke('start_staging_watch', { paths });

@@ -4,7 +4,7 @@ import { useState, useEffect, type CSSProperties } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import type { LibraryItem } from '../state/onyx';
 import { bookPalette, bookTpl, bookTitle, bookAuthor, bookSeries } from '../state/onyx';
-import { getCover } from '../api/abs';
+import { getCover, getLocalCover } from '../api/abs';
 import { subscribeCover } from '../lib/coverBust';
 
 export interface CoverProps {
@@ -31,27 +31,27 @@ export default function Cover({ item, size = 180, scale = 1, fill = false, class
   useEffect(() => subscribeCover(item.id, () => setBust(b => b + 1)), [item.id]);
 
   useEffect(() => {
-    if (!serverUrl) return;
-    // Local-library items have no ABS cover — skip the server fetch (it would
-    // 404) and let the generated template render. Real embedded/sidecar cover
-    // loading for local items is a later phase.
-    if (item.localPath) return;
     let cancelled = false;
-    // get_cover now returns an absolute file path, not raw bytes — store it
-    // directly and let convertFileSrc handle the asset:// conversion at render.
-    // Request a 400px-wide cover: the shelf maxes at 148px and the Focus panel
-    // and Player stay within 400px on a 1280px window, so 400px gives ~2×
-    // headroom for high-DPI rendering without over-fetching full-size art.
+    // Local-library item: load its embedded/sidecar cover from the catalog folder
+    // (resized + cached by the backend). Skip when the scan found no cover so we
+    // fall straight through to the generated template — and note this path needs
+    // no serverUrl, so it works in standalone mode too.
+    if (item.localPath) {
+      if (!item.hasLocalCover) return;
+      getLocalCover(item.id, bust)
+        .then(path => { if (!cancelled) setCoverSrc(path); })
+        .catch(() => {});
+      return () => { cancelled = true; };
+    }
+    if (!serverUrl) return;
+    // get_cover returns an absolute file path; convertFileSrc turns it into an
+    // asset:// URL at render. 400px gives ~2× headroom for high-DPI shelves.
     getCover(serverUrl, item.id, 400, bust)
-      .then(path => {
-        if (cancelled) return;
-        setCoverSrc(path);
-      })
-      // Server cover may be absent (e.g. podcasts without a downloaded cover);
-      // the fallbackImageUrl / generated template handle that case.
+      .then(path => { if (!cancelled) setCoverSrc(path); })
+      // Cover may be absent (podcasts w/o art); fallbackImageUrl / template cover it.
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [serverUrl, item.id, bust]);
+  }, [serverUrl, item.id, item.localPath, item.hasLocalCover, bust]);
 
   const [bg, mid, accent] = bookPalette(item);
   const tpl = bookTpl(item);

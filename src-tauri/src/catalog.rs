@@ -374,6 +374,19 @@ pub fn delete_bookmark(id: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The on-disk directory of a catalogued item (its book-unit folder), if known.
+pub fn get_item_path(item_id: &str) -> Result<Option<String>, String> {
+    let conn = open()?;
+    conn.query_row(
+        "SELECT source_path FROM items WHERE id = ?1",
+        params![item_id],
+        |r| r.get::<_, Option<String>>(0),
+    )
+    .optional()
+    .map(|o| o.flatten())
+    .map_err(|e| format!("get item path: {e}"))
+}
+
 /// A local library's ingest-relevant config.
 struct LibConfig {
     root_path: String,

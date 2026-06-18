@@ -105,6 +105,46 @@ fn read_track_tags(path: &Path) -> TrackTags {
     t
 }
 
+/// Sidecar cover file names checked (in order) when looking for folder art.
+const COVER_NAMES: &[&str] = &["cover.jpg", "cover.jpeg", "cover.png", "cover.webp", "folder.jpg", "folder.png"];
+
+fn has_sidecar_cover(dir: &Path) -> bool {
+    COVER_NAMES.iter().any(|n| dir.join(n).is_file())
+}
+
+/// Return raw cover bytes for a book directory: a sidecar image if present, else
+/// the embedded art of the first audio file. None when neither exists. (Phase 8;
+/// the caller resizes/caches.)
+pub fn find_cover_bytes(dir: &Path) -> Option<Vec<u8>> {
+    // 1. Sidecar image file.
+    for n in COVER_NAMES {
+        let p = dir.join(n);
+        if p.is_file() {
+            if let Ok(b) = std::fs::read(&p) {
+                return Some(b);
+            }
+        }
+    }
+    // 2. Embedded art from the first audio file (alphabetical).
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| is_audio(p))
+        .collect();
+    files.sort();
+    for f in files {
+        if let Ok(tagged) = Probe::open(&f).and_then(|p| p.read()) {
+            if let Some(tag) = tagged.primary_tag().or_else(|| tagged.first_tag()) {
+                if let Some(pic) = tag.pictures().first() {
+                    return Some(pic.data().to_vec());
+                }
+            }
+        }
+    }
+    None
+}
+
 /// Stable id derived from the directory path. Deterministic for the same path so
 /// a re-scan of an un-moved book yields the same id. The catalog (Phase 2) owns
 /// long-term identity across moves; this is the pre-catalog seed.
@@ -206,7 +246,9 @@ fn build_item(dir: &Path, root: &Path, mut files: Vec<PathBuf>, library_id: &str
         .collect();
 
     let id = stable_id(dir);
-    let has_cover = tracks.iter().any(|t| t.has_cover);
+    // A cover exists if any track carries embedded art OR a sidecar image sits
+    // in the folder (cover.jpg from a match, etc.).
+    let has_cover = tracks.iter().any(|t| t.has_cover) || has_sidecar_cover(dir);
 
     // ── Confidence: title/author dominate; series is a bonus ───────────────────
     let mut confidence: u8 = 0;
