@@ -32,6 +32,10 @@ export default function Cover({ item, size = 180, scale = 1, fill = false, class
 
   useEffect(() => {
     if (!serverUrl) return;
+    // Local-library items have no ABS cover — skip the server fetch (it would
+    // 404) and let the generated template render. Real embedded/sidecar cover
+    // loading for local items is a later phase.
+    if (item.localPath) return;
     let cancelled = false;
     // get_cover now returns an absolute file path, not raw bytes — store it
     // directly and let convertFileSrc handle the asset:// conversion at render.

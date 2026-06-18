@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } fr
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task, Library, PodcastEpisode } from '../api/abs';
 import { type AdvFilter, type SearchScope, EMPTY_ADV_FILTER } from '../lib/shelfFilters';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems } from '../api/abs';
 import { log } from '../lib/log';
 
 export type { ServerSettings };
@@ -76,6 +76,15 @@ function patchLibraryItems(items: LibraryItem[]): LibraryItem[] {
     }
     return it;
   });
+}
+
+// ─── Library source routing (Local Library) ──────────────────────────────────
+// A library is either an ABS library (HTTP, needs serverUrl) or a local library
+// (SQLite catalog, no server). All item loads route through here so the rest of
+// the state layer is source-agnostic.
+async function loadItemsForLibrary(lib: Library, serverUrl: string): Promise<LibraryItem[]> {
+  if (lib.source === 'local') return getLocalLibraryItems(lib.id);
+  return fetchLibraryItems(serverUrl, lib.id);
 }
 
 // ─── Display helpers for real LibraryItem ─────────────────────────────────────
@@ -502,16 +511,19 @@ export function useOnyxState(): OnyxState {
   }, []);
 
   const refreshLibrary = useCallback(async () => {
-    if (!serverUrl) return;
     try {
-      const libs = await fetchLibraries(serverUrl);
+      // Merge ABS libraries (when a server is configured) with local libraries
+      // (always available — catalog read, no server). Either source may be empty.
+      const absLibs = serverUrl ? await fetchLibraries(serverUrl).catch(() => [] as Library[]) : [];
+      const localLibs = await getLocalLibraries().catch(() => [] as Library[]);
+      const libs = [...absLibs, ...localLibs];
       setLibraries(libs);
       // Reload whichever library is currently active; fall back to the picker if
       // the active one vanished (deleted) or was never set.
       const target = libs.find(l => l.id === currentLibraryId) ?? pickActiveLibrary(libs);
       if (!target) return;
       setCurrentLibraryId(target.id);
-      const items = await fetchLibraryItems(serverUrl, target.id);
+      const items = await loadItemsForLibrary(target, serverUrl);
       setLibraryRaw(patchLibraryItems(items));
       // A successful refresh means the server is reachable — clear the OFFLINE
       // indicator (it may have been set if the app launched from disk cache).
@@ -525,21 +537,27 @@ export function useOnyxState(): OnyxState {
   // contextFilter, shelfTab, focus) are done by the caller (TopNav) since those
   // setters live further down the hook.
   const setActiveLibrary = useCallback(async (id: string) => {
-    if (!serverUrl) return;
     localStorage.setItem('skald.activeLibraryId', id);
     setCurrentLibraryId(id);
     setLibraryLoadingRaw(true);
     try {
-      const items = await fetchLibraryItems(serverUrl, id);
+      // Route by source: local libraries read the catalog; ABS libraries fetch
+      // over HTTP. Look the library up in the already-loaded list.
+      const lib = libraries.find(l => l.id === id);
+      const items = lib ? await loadItemsForLibrary(lib, serverUrl) : [];
       setLibraryRaw(patchLibraryItems(items));
       setIsOffline(false);
-      saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
+      // Only the ABS shelf is cached for offline launch; local items live in the
+      // catalog already, so caching them would just duplicate state.
+      if (lib?.source !== 'local') {
+        saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
+      }
     } catch (e) {
       console.error('[setActiveLibrary] failed:', e);
     } finally {
       setLibraryLoadingRaw(false);
     }
-  }, [serverUrl]);
+  }, [serverUrl, libraries]);
   const [libraryLoading, setLibraryLoadingRaw] = useState(
     () => Boolean(localStorage.getItem('skald.serverUrl') && localStorage.getItem('skald.authToken')),
   );
@@ -587,70 +605,87 @@ export function useOnyxState(): OnyxState {
   }, []); // runs once on mount; callers use setDownloads for immediate optimistic updates
 
   useEffect(() => {
-    if (!serverUrl || (!authToken && !(username && password))) {
-      setLibraryLoadingRaw(false);
-      return;
-    }
+    // Whether we can talk to an ABS server this launch. Local libraries load
+    // regardless, so we no longer early-return when there are no server creds.
+    const canQueryServer = !!serverUrl && (!!authToken || !!(username && password));
     let cancelled = false;
     setLibraryLoadingRaw(true);
     (async () => {
+      // ── ABS libraries (only when a server is configured) ──────────────────
+      let absLibs: Library[] = [];
       try {
-        let token = authToken;
-        if (!token && username && password) {
-          const result = await login(serverUrl, username, password);
-          const loggedInUser = result.user;
-          // Capture server settings returned with the login response
-          if (result.serverSettings) setServerSettings(result.serverSettings);
-          token = loggedInUser.token;
-          setAuthToken(loggedInUser.token);
-          setUserId(loggedInUser.id);
-          setUser(loggedInUser);
-          log.info('auth', 'login ok', { userId: loggedInUser.id, type: loggedInUser.type });
-        } else {
-          await saveToken(token);
+        if (canQueryServer) {
+          let token = authToken;
+          if (!token && username && password) {
+            const result = await login(serverUrl, username, password);
+            const loggedInUser = result.user;
+            // Capture server settings returned with the login response
+            if (result.serverSettings) setServerSettings(result.serverSettings);
+            token = loggedInUser.token;
+            setAuthToken(loggedInUser.token);
+            setUserId(loggedInUser.id);
+            setUser(loggedInUser);
+            log.info('auth', 'login ok', { userId: loggedInUser.id, type: loggedInUser.type });
+          } else {
+            await saveToken(token);
+          }
+          absLibs = await fetchLibraries(serverUrl);
         }
-        const libs = await fetchLibraries(serverUrl);
-        if (cancelled) return;
-        setLibraries(libs);
-        // Pick the active library (last selection → first book → first of any).
-        const activeLib = pickActiveLibrary(libs);
-        if (!activeLib) { setLibraryLoadingRaw(false); return; }
-        // Record the library ID so live sync event handlers can filter by it.
-        setCurrentLibraryId(activeLib.id);
-        const items = await fetchLibraryItems(serverUrl, activeLib.id);
-        if (cancelled) return;
-        setLibraryRaw(patchLibraryItems(items));
-        log.info('library', 'library loaded', { libraryId: activeLib.id, items: items.length });
-        // Server responded successfully — we are online; clear any offline indicator.
-        setIsOffline(false);
-        // Persist the library to disk after every successful fetch so it is
-        // available offline on next launch.
-        saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
-        // Flush any offline progress that was queued while the server was unreachable.
-        // Fire-and-forget; no toast here — the reconnect handler shows one if needed.
-        flushOfflineProgress(serverUrl).catch(e => console.error('[offline] startup flush failed:', e));
       } catch (e) {
-        log.warn('library', 'fetch failed — attempting cache fallback', { err: String(e) });
+        // Server unreachable / auth failure — fall back to the cached ABS shelf,
+        // but still surface local libraries (they need no server) below.
+        log.warn('library', 'server fetch failed — attempting cache + local fallback', { err: String(e) });
         try {
           const cached = await loadLibraryCache();
-          // If there is no cache and no auth token, this is a fresh install —
-          // do not show any error, just wait for the user to log in.
-          if (cached.length === 0) return;
-          setLibraryRaw(cached as LibraryItem[]);
-          // Server unreachable — library came from disk; activate the offline indicator.
-          setIsOffline(true);
-          // Only show the offline warning if the user has already logged in and
-          // is actively using the app — not during the initial login flow where
-          // the library has not been fetched yet and a cache miss is expected.
-          if (authToken && screen !== 'login') {
-            setToast({ message: 'Server unreachable — showing cached library', type: 'info' });
+          if (cached.length > 0 && !cancelled) {
+            setLibraryRaw(cached as LibraryItem[]);
+            setIsOffline(true);
+            if (authToken && screen !== 'login') {
+              setToast({ message: 'Server unreachable — showing cached library', type: 'info' });
+            }
           }
         } catch (ce) {
           console.error('[library] cache load also failed:', ce);
         }
-      } finally {
-        if (!cancelled) setLibraryLoadingRaw(false);
       }
+
+      // ── Local libraries (always — catalog read, no server needed) ─────────
+      let localLibs: Library[] = [];
+      try { localLibs = await getLocalLibraries(); }
+      catch (e) { console.error('[library] local libraries load failed:', e); }
+      if (cancelled) return;
+
+      const allLibs = [...absLibs, ...localLibs];
+      setLibraries(allLibs);
+      // Nothing to show (no server libs reachable and no local libs) — stop here;
+      // any cached ABS shelf set above stays visible.
+      if (allLibs.length === 0) { setLibraryLoadingRaw(false); return; }
+
+      // Pick the active library (last selection → first book → first of any) and
+      // load it through the source router.
+      const activeLib = pickActiveLibrary(allLibs);
+      if (!activeLib) { setLibraryLoadingRaw(false); return; }
+      setCurrentLibraryId(activeLib.id);
+      try {
+        const items = await loadItemsForLibrary(activeLib, serverUrl);
+        if (cancelled) return;
+        setLibraryRaw(patchLibraryItems(items));
+        log.info('library', 'library loaded', { libraryId: activeLib.id, items: items.length, source: activeLib.source ?? 'abs' });
+        setIsOffline(false);
+        // Cache only the ABS shelf for offline launch; local items already
+        // persist in the catalog.
+        if (activeLib.source !== 'local') {
+          saveLibraryCache(items).catch(e => console.error('[library] cache save failed:', e));
+        }
+      } catch (e) {
+        console.error('[library] active library load failed:', e);
+      }
+
+      // Flush any queued offline progress once a server is reachable.
+      if (canQueryServer) {
+        flushOfflineProgress(serverUrl).catch(e => console.error('[offline] startup flush failed:', e));
+      }
+      if (!cancelled) setLibraryLoadingRaw(false);
     })();
     return () => { cancelled = true; };
   }, [serverUrl, authToken, username, password]);
@@ -709,7 +744,12 @@ export function useOnyxState(): OnyxState {
   const [currentBookChapters, setCurrentBookChapters] = useState<Chapter[]>([]);
 
   useEffect(() => {
-    if (!serverUrl || !authToken || !currentBookId) { setCurrentBookChapters([]); return; }
+    if (!currentBookId) { setCurrentBookChapters([]); return; }
+    // Local-library items already carry their chapters from the scan — use them
+    // directly and skip the (server-bound, would-fail) fetchItem path entirely.
+    const localItem = library.find(b => b.id === currentBookId);
+    if (localItem?.localPath) { setCurrentBookChapters(bookChapters(localItem)); return; }
+    if (!serverUrl || !authToken) { setCurrentBookChapters([]); return; }
     let cancelled = false;
     fetchItem(serverUrl, currentBookId)
       .then(item => {
@@ -754,7 +794,7 @@ export function useOnyxState(): OnyxState {
         }
       });
     return () => { cancelled = true; };
-  }, [currentBookId, serverUrl, authToken]);
+  }, [currentBookId, serverUrl, authToken, library]);
 
   const [sessionReady, setSessionReady] = useState(false);
 

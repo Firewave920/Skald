@@ -34,8 +34,13 @@ export async function playBook(
     // If the book is downloaded locally, play from disk rather than opening a
     // server session — this enables offline playback without network access.
     const localDownload = st.downloads.find(d => d.itemId === bookId);
-    log.info('playback', 'playBook', { bookId, offline: !!localDownload, override: startTimeOverride !== undefined });
-    if (localDownload) {
+    const libItem = st.library.find(b => b.id === bookId);
+    // A book plays from a local file when it is a completed download OR a
+    // local-library item (scanned from disk, carrying localPath). Either case
+    // skips the server session entirely and uses the same LibVLC local path.
+    const localFilePath = localDownload?.filePath ?? libItem?.localPath;
+    log.info('playback', 'playBook', { bookId, offline: !!localFilePath, override: startTimeOverride !== undefined });
+    if (localFilePath) {
       // Clear any stale online session state — there is no server session in the
       // offline path, so these flags must not mislead other components.
       st.setSessionReady(false);
@@ -64,8 +69,8 @@ export async function playBook(
       // Tell LibVLC to open the local file. The Rust command handles file:/// URI
       // construction and starts the 1-second tick loop so playback-tick events flow.
       // bookId is passed so the session layer can key offline progress queue entries
-      // to the correct ABS library item.
-      await playLocalFile(localDownload.filePath, bookId, startTime);
+      // to the correct item.
+      await playLocalFile(localFilePath, bookId, startTime);
 
       // Signal to the frontend that we are in local playback mode so transport
       // controls bypass session management and call audio commands directly.

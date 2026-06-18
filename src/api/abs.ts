@@ -46,6 +46,8 @@ export interface Library {
   lastScan: number | null;
   createdAt: number | null;
   lastUpdate: number | null;
+  /** Local Library: "local" for catalog-backed libraries; undefined/"abs" for ABS. */
+  source?: string;
 }
 
 /** Minimal folder entry used in create/update request bodies — only fullPath is sent. */
@@ -188,6 +190,36 @@ export interface ScannedItem {
 /** Scan a local folder into ABS-shaped items (Local Library roadmap, Phase 1). */
 export async function scanFolder(path: string, libraryId?: string): Promise<ScannedItem[]> {
   return invoke<ScannedItem[]>('scan_folder', { path, libraryId });
+}
+
+// ── Local Library catalog (Phase 2) ──────────────────────────────────────────
+// Local libraries are SQLite-backed and need no server. They return the same
+// Library / LibraryItem shapes as the ABS commands; `Library.source === 'local'`
+// is the routing tag the state layer branches on.
+
+/** Create (or return existing) a local library rooted at `rootPath`. */
+export async function createLocalLibrary(name: string, rootPath: string): Promise<Library> {
+  return invoke<Library>('create_local_library', { name, rootPath });
+}
+
+/** List all local libraries from the catalog. */
+export async function getLocalLibraries(): Promise<Library[]> {
+  return invoke<Library[]>('get_local_libraries');
+}
+
+/** Delete a local library and its catalogued items (does not touch files on disk). */
+export async function deleteLocalLibrary(id: string): Promise<void> {
+  return invoke('delete_local_library', { id });
+}
+
+/** Re-scan a local library's root folder; returns the number of items catalogued. */
+export async function scanLocalLibrary(libraryId: string): Promise<number> {
+  return invoke<number>('scan_local_library', { libraryId });
+}
+
+/** Load a local library's catalogued items (ABS-shaped). */
+export async function getLocalLibraryItems(libraryId: string): Promise<LibraryItem[]> {
+  return invoke<LibraryItem[]>('get_local_library_items', { libraryId });
 }
 
 // ── Podcasts (cluster E) ─────────────────────────────────────────────────────

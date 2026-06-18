@@ -9,6 +9,7 @@ pub mod cover_cache;
 pub mod socket;    // Phase B: Socket.IO transport for live sync
 pub mod downloads; // Phase B: persistent registry of downloaded books
 pub mod scanner;   // Local Library: local folder scanner (emits ABS-shaped items)
+pub mod catalog;   // Local Library: SQLite catalog for local libraries + items
 
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -204,6 +205,12 @@ pub fn run() {
             commands::play_local_file,
             // Local Library — Phase 1: scan a local folder into ABS-shaped items
             commands::scan_folder,
+            // Local Library — Phase 2: SQLite catalog (libraries + items)
+            commands::create_local_library,
+            commands::get_local_libraries,
+            commands::delete_local_library,
+            commands::scan_local_library,
+            commands::get_local_library_items,
             // Listening sessions — Settings → Playback → Sessions tab
             commands::get_listening_sessions,
             commands::delete_session,

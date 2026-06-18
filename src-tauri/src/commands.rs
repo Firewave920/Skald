@@ -870,6 +870,50 @@ pub async fn scan_folder(
         .map_err(|e| format!("scan task panicked: {e}"))?
 }
 
+// ── Local library catalog (Local Library roadmap, Phase 2) ───────────────────
+// Each command runs the (blocking) SQLite/scan work on a blocking thread so the
+// async runtime is never stalled. Returns ABS-shaped JSON the frontend consumes.
+
+#[tauri::command]
+pub async fn create_local_library(
+    name: String,
+    root_path: String,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::create_library(&name, &root_path))
+        .await
+        .map_err(|e| format!("create_local_library task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn get_local_libraries() -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(crate::catalog::list_libraries)
+        .await
+        .map_err(|e| format!("get_local_libraries task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn delete_local_library(id: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || crate::catalog::delete_library(&id))
+        .await
+        .map_err(|e| format!("delete_local_library task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn scan_local_library(library_id: String) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::scan_library(&library_id))
+        .await
+        .map_err(|e| format!("scan_local_library task panicked: {e}"))?
+}
+
+#[tauri::command]
+pub async fn get_local_library_items(
+    library_id: String,
+) -> Result<Vec<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || crate::catalog::list_items(&library_id))
+        .await
+        .map_err(|e| format!("get_local_library_items task panicked: {e}"))?
+}
+
 pub type ShortcutActionMap =
     std::sync::Arc<std::sync::RwLock<std::collections::HashMap<u32, String>>>;
 

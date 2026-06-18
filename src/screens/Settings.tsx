@@ -10,6 +10,7 @@ import {
   PlaybackSection,
   AudioSection,
   LibrariesSection,
+  LocalLibrarySection,
   DownloadsSection,
   AppearanceSection,
   KeyboardSection,
@@ -27,7 +28,7 @@ export interface SettingsProps { st: OnyxState; onLogout: () => void; }
 
 type SectionId =
   | 'account' | 'server' | 'notifications' | 'backups' | 'scheduled-tasks' | 'logs' | 'sharing' | 'playback' | 'audio'
-  | 'library' | 'downloads' | 'appearance' | 'keyboard' | 'about';
+  | 'library' | 'local-library' | 'downloads' | 'appearance' | 'keyboard' | 'about';
 
 interface NavSection { id: SectionId; label: string; icon: IconName; }
 
@@ -43,6 +44,7 @@ const NAV: NavSection[] = [
   { id: 'downloads',       label: 'Downloads',       icon: 'bookmark'   },
   { id: 'keyboard',        label: 'Keyboard',        icon: 'kbd'        },
   { id: 'library',         label: 'Libraries',       icon: 'grid'       },
+  { id: 'local-library',   label: 'Local Library',   icon: 'bookmark'   },
   { id: 'logs',            label: 'Logs',            icon: 'list'       },
   { id: 'notifications',   label: 'Notifications',   icon: 'airplay'    },
   { id: 'playback',        label: 'Playback',        icon: 'play'       },
@@ -126,6 +128,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           {section === 'playback'   && <PlaybackSection st={st} />}
           {section === 'audio'      && <AudioSection />}
           {section === 'library'    && <LibrariesSection st={st} />}
+          {section === 'local-library' && <LocalLibrarySection st={st} />}
           {section === 'downloads'  && <DownloadsSection st={st} />}
           {section === 'appearance' && <AppearanceSection st={st} />}
           {section === 'keyboard'      && <KeyboardSection />}
