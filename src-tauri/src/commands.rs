@@ -1022,9 +1022,9 @@ pub async fn scan_folder(
 #[tauri::command]
 pub async fn create_local_library(
     name: String,
-    root_path: String,
+    parent_path: String,
 ) -> Result<serde_json::Value, String> {
-    tokio::task::spawn_blocking(move || crate::catalog::create_library(&name, &root_path))
+    tokio::task::spawn_blocking(move || crate::catalog::create_library(&name, &parent_path))
         .await
         .map_err(|e| format!("create_local_library task panicked: {e}"))?
 }

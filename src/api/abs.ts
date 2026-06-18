@@ -201,9 +201,10 @@ export async function scanFolder(path: string, libraryId?: string): Promise<Scan
 // Library / LibraryItem shapes as the ABS commands; `Library.source === 'local'`
 // is the routing tag the state layer branches on.
 
-/** Create (or return existing) a local library rooted at `rootPath`. */
-export async function createLocalLibrary(name: string, rootPath: string): Promise<Library> {
-  return invoke<Library>('create_local_library', { name, rootPath });
+/** Create a managed local library: makes `<parentPath>/<name>/` plus its staging/
+ *  and _Unidentified/ subfolders, with staging pre-configured. */
+export async function createLocalLibrary(name: string, parentPath: string): Promise<Library> {
+  return invoke<Library>('create_local_library', { name, parentPath });
 }
 
 /** List all local libraries from the catalog. */

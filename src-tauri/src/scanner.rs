@@ -303,13 +303,14 @@ pub fn scan_folder(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, Str
     scan_impl(root, library_id, true)
 }
 
-/// Scan the quarantine folder itself (does NOT skip `_Unidentified`). Used to
-/// list books awaiting a metadata match (Phase 5).
+/// Scan a managed subfolder itself (e.g. `_Unidentified` or `staging`) without
+/// skipping it. Used to list quarantined books (Phase 5) and to scan staging on
+/// import (Phase 3).
 pub fn scan_unidentified(root: &str, library_id: &str) -> Result<Vec<ScannedItem>, String> {
     scan_impl(root, library_id, false)
 }
 
-fn scan_impl(root: &str, library_id: &str, skip_unidentified: bool) -> Result<Vec<ScannedItem>, String> {
+fn scan_impl(root: &str, library_id: &str, skip_managed: bool) -> Result<Vec<ScannedItem>, String> {
     let root_path = Path::new(root);
     if !root_path.exists() {
         return Err(format!("Scan path does not exist: {root}"));
@@ -326,11 +327,20 @@ fn scan_impl(root: &str, library_id: &str, skip_unidentified: bool) -> Result<Ve
         if !p.is_file() {
             continue;
         }
-        // Skip the quarantine folder — unidentified books awaiting a match
-        // (ingest.rs) live under `_Unidentified/` and must not surface on the shelf.
-        // Disabled when scanning the quarantine folder itself (scan_unidentified).
-        if skip_unidentified && p.components().any(|c| c.as_os_str() == "_Unidentified") {
-            continue;
+        // Skip Skald's managed subfolders at the top level of the library root —
+        // `staging/` (the import inbox) and `_Unidentified/` (quarantine) must not
+        // surface on the shelf. Only the FIRST path component under the scan root
+        // is checked, so scanning staging/_Unidentified directly (import/match)
+        // still works (scan_unidentified passes skip_managed=false anyway).
+        if skip_managed {
+            if let Ok(rel) = p.strip_prefix(root_path) {
+                if let Some(first) = rel.components().next() {
+                    let n = first.as_os_str();
+                    if n == "_Unidentified" || n == "staging" {
+                        continue;
+                    }
+                }
+            }
         }
         if is_audio(p) {
             if let Some(parent) = p.parent() {

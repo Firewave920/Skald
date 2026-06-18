@@ -6,7 +6,7 @@ import type { Library, ScannedItem } from '../../api/abs';
 import { createLocalLibrary, deleteLocalLibrary, scanLocalLibrary, ingestLocalPaths, setLocalLibraryConfig, getUnidentifiedItems, startStagingWatch, type IngestOutcome } from '../../api/abs';
 import { log } from '../../lib/log';
 import Icon from '../Icon';
-import { SectionHead, Panel, Seg, MONO, DIM_GOLD } from './shared';
+import { SectionHead, Panel, Seg, MONO, DIM_GOLD, TextInput } from './shared';
 import LocalMatchModal from './LocalMatchModal';
 
 // Local Library settings (Local Library & Split Libraries roadmap, Phase 2/3).
@@ -23,6 +23,10 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
   // match-modal target.
   const [unidentified, setUnidentified] = useState<Record<string, ScannedItem[]>>({});
   const [matchTarget, setMatchTarget] = useState<{ libId: string; item: ScannedItem } | null>(null);
+  // Inline "create library" form state.
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newParent, setNewParent] = useState<string | null>(null);
 
   const locals: Library[] = st.libraries.filter(l => l.source === 'local');
 
@@ -61,23 +65,29 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
     return () => { un?.(); if (debounceRef.current) window.clearTimeout(debounceRef.current); };
   }, [reloadUnidentified]);
 
-  // Folder name → default library name (last path segment).
-  const folderName = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() || 'Local Library';
+  // Choose the parent location where the new library folder will be created.
+  async function chooseLocation() {
+    const dir = await open({ directory: true, multiple: false, title: 'Choose where to create the library' });
+    if (typeof dir === 'string') setNewParent(dir);
+  }
 
-  async function addLibrary() {
+  // Create a managed library: Skald makes <parent>/<name>/ plus its staging/ and
+  // _Unidentified/ subfolders. The user then drops books into staging and imports.
+  async function createLibrary() {
+    if (!newName.trim() || !newParent) return;
     try {
-      const dir = await open({ directory: true, multiple: false, title: 'Choose a library folder' });
-      if (typeof dir !== 'string') return; // cancelled
       setBusy('__new__');
-      const name = folderName(dir);
-      log.info('library', 'add local library', { name });
-      const lib = await createLocalLibrary(name, dir);
-      const count = await scanLocalLibrary(lib.id);
+      log.info('library', 'create local library', { name: newName.trim() });
+      await createLocalLibrary(newName.trim(), newParent);
       await st.refreshLibrary();
-      st.setToast({ message: `Added "${name}" — ${count} item${count === 1 ? '' : 's'}`, type: 'success' });
+      void reloadUnidentified();
+      setCreating(false);
+      setNewName('');
+      setNewParent(null);
+      st.setToast({ message: `Created "${newName.trim()}" — drop books into its staging folder, then Import`, type: 'success' });
     } catch (e) {
-      log.error('library', 'add local library failed', { err: String(e) });
-      st.setToast({ message: 'Could not add local library', type: 'error' });
+      log.error('library', 'create local library failed', { err: String(e) });
+      st.setToast({ message: 'Could not create library', type: 'error' });
     } finally {
       setBusy(null);
     }
@@ -129,18 +139,6 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
       st.setToast({ message: 'Import failed', type: 'error' });
     } finally {
       setBusy(null);
-    }
-  }
-
-  async function chooseStaging(lib: Library) {
-    try {
-      const dir = await open({ directory: true, multiple: false, title: 'Choose a staging folder' });
-      if (typeof dir !== 'string') return;
-      await setLocalLibraryConfig(lib.id, dir, undefined);
-      await st.refreshLibrary();
-      st.setToast({ message: 'Staging folder set', type: 'success' });
-    } catch (e) {
-      log.error('library', 'set staging failed', { err: String(e) });
     }
   }
 
@@ -199,24 +197,44 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
         label="Your local libraries"
         action={
           <button
-            onClick={addLibrary}
-            disabled={busy === '__new__'}
+            onClick={() => { setCreating(c => !c); setNewName(''); setNewParent(null); }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 8,
               background: 'var(--onyx-accent-dim)', border: '1px solid var(--onyx-accent-edge)',
-              color: 'var(--onyx-accent)', cursor: busy === '__new__' ? 'default' : 'pointer',
+              color: 'var(--onyx-accent)', cursor: 'pointer',
               fontFamily: MONO, fontSize: 10, letterSpacing: '0.08em', textTransform: 'uppercase',
-              opacity: busy === '__new__' ? 0.6 : 1,
             }}
           >
             <Icon name="plus" size={12} />
-            {busy === '__new__' ? 'Scanning…' : 'Add folder…'}
+            {creating ? 'Close' : 'Create library…'}
           </button>
         }
       >
-        {locals.length === 0 ? (
+        {/* Create form — Skald provisions <location>/<name>/ with staging + quarantine. */}
+        {creating && (
+          <div style={{ padding: '14px 0', borderBottom: '1px solid var(--onyx-line)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <TextInput value={newName} onChange={setNewName} placeholder="Library name (e.g. Audiobooks)" />
+              <button onClick={chooseLocation} style={btn()}>{newParent ? 'Change location' : 'Choose location…'}</button>
+              <button
+                onClick={createLibrary}
+                disabled={!newName.trim() || !newParent || busy === '__new__'}
+                style={btn(!newName.trim() || !newParent || busy === '__new__')}
+              >
+                {busy === '__new__' ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--onyx-text-mute)', fontFamily: MONO }}>
+              {newParent
+                ? `Will create: ${newParent.replace(/[\\/]+$/, '')}\\${newName.trim() || '<name>'}\\  (with staging\\ and _Unidentified\\)`
+                : 'Pick a location; Skald creates the library folder, its staging inbox, and a quarantine folder.'}
+            </div>
+          </div>
+        )}
+
+        {locals.length === 0 && !creating ? (
           <div style={{ padding: '22px 4px', color: 'var(--onyx-text-mute)', fontSize: 13 }}>
-            No local libraries yet. Choose a folder of audiobooks to get started.
+            No local libraries yet. Create one to get started.
           </div>
         ) : (
           locals.map(lib => {
@@ -263,17 +281,14 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
                     <Seg active={(lib.organizeMode ?? 'copy') === 'copy'} onClick={() => setMode(lib, 'copy')}>Copy</Seg>
                     <Seg active={lib.organizeMode === 'move'} onClick={() => setMode(lib, 'move')}>Move</Seg>
                   </div>
-                  {/* Staging folder */}
-                  {lib.stagingPath ? (
+                  {/* Staging folder — auto-created with the library. */}
+                  {lib.stagingPath && (
                     <button onClick={() => importStaging(lib)} disabled={scanning} style={btn(scanning)}>Import staging</button>
-                  ) : (
-                    <button onClick={() => chooseStaging(lib)} style={btn()}>Set staging…</button>
                   )}
                 </div>
                 {lib.stagingPath && (
                   <div style={{ marginTop: 6, fontSize: 10.5, color: 'var(--onyx-text-mute)', fontFamily: MONO, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    staging · {lib.stagingPath} ·{' '}
-                    <button onClick={() => chooseStaging(lib)} style={{ background: 'none', border: 'none', color: DIM_GOLD, cursor: 'pointer', font: 'inherit', padding: 0 }}>change</button>
+                    staging · {lib.stagingPath}
                   </div>
                 )}
               </div>

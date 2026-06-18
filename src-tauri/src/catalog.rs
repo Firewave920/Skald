@@ -154,17 +154,27 @@ fn get_library(conn: &Connection, id: &str) -> Result<Value, String> {
     .map_err(|e| format!("get library: {e}"))
 }
 
-/// Create (or return the existing) local library rooted at `root_path`.
-pub fn create_library(name: &str, root_path: &str) -> Result<Value, String> {
+/// Create a managed local library: makes `<parent_path>/<name>/` on disk plus its
+/// `staging/` (import inbox) and `_Unidentified/` (quarantine) subfolders, and
+/// records it with staging pre-configured. Idempotent — re-creating the same path
+/// returns the existing row. (Folder name is sanitized for the filesystem.)
+pub fn create_library(name: &str, parent_path: &str) -> Result<Value, String> {
     let conn = open()?;
-    let id = stable_lib_id(root_path);
+    let root = Path::new(parent_path).join(ingest::sanitize_component(name));
+    let staging = root.join("staging");
+    std::fs::create_dir_all(&staging).map_err(|e| format!("create library/staging dir: {e}"))?;
+    std::fs::create_dir_all(root.join("_Unidentified")).map_err(|e| format!("create quarantine dir: {e}"))?;
+
+    let root_str = root.to_string_lossy().into_owned();
+    let staging_str = staging.to_string_lossy().into_owned();
+    let id = stable_lib_id(&root_str);
     conn.execute(
-        "INSERT OR IGNORE INTO libraries (id, name, media_type, root_path, organize_mode, created_at)
-         VALUES (?1, ?2, 'book', ?3, 'copy', ?4)",
-        params![id, name, root_path, now_ms()],
+        "INSERT OR IGNORE INTO libraries (id, name, media_type, root_path, staging_path, organize_mode, created_at)
+         VALUES (?1, ?2, 'book', ?3, ?4, 'copy', ?5)",
+        params![id, name, root_str, staging_str, now_ms()],
     )
     .map_err(|e| format!("create library: {e}"))?;
-    log::info!(target: "skald::library", "catalog: create library id={id} root={root_path}");
+    log::info!(target: "skald::library", "catalog: create library id={id} root={root_str}");
     get_library(&conn, &id)
 }
 
