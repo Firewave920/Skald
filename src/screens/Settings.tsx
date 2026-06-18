@@ -129,7 +129,7 @@ export default function Settings({ st, onLogout }: SettingsProps) {
           {section === 'downloads'  && <DownloadsSection st={st} />}
           {section === 'appearance' && <AppearanceSection st={st} />}
           {section === 'keyboard'      && <KeyboardSection />}
-          {section === 'about'         && <AboutSection />}
+          {section === 'about'         && <AboutSection st={st} />}
         </Glass>
       </div>
     </div>
