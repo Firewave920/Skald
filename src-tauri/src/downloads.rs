@@ -102,6 +102,24 @@ pub fn remove_record(downloads_dir: &Path, item_id: &str) -> Result<(), String> 
     save_registry(downloads_dir, &records)
 }
 
+// Drop registry records whose audio file (or book directory) no longer exists on
+// disk — e.g. the user deleted it manually outside the app. The pruned registry
+// is persisted so the change sticks, and the survivors are returned. This keeps
+// the registry, the Downloads list, and the sidebar download count honest.
+pub fn prune_missing(downloads_dir: &Path) -> Vec<DownloadRecord> {
+    let records = load_registry(downloads_dir);
+    let present: Vec<DownloadRecord> = records
+        .iter()
+        .filter(|r| Path::new(&r.file_path).exists())
+        .cloned()
+        .collect();
+    if present.len() != records.len() {
+        // Persist only when something actually changed (avoids needless writes).
+        let _ = save_registry(downloads_dir, &present);
+    }
+    present
+}
+
 // ── Offline progress queue ────────────────────────────────────────────────────
 // Stores progress updates that could not be sent to the server because the
 // device was offline. Persisted to disk so they survive app restart.

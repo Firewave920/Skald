@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import type { OnyxState } from '../../state/onyx';
 import {
-  getCacheDir, revealCacheDir, getDownloads, removeDownload, cancelDownload,
+  getDownloadsDir, revealDownloadsDir, getDownloads, removeDownload, cancelDownload,
 } from '../../api/abs';
 import type { DownloadRecord } from '../../api/abs';
 import ConfirmDialog from '../ui/ConfirmDialog';
@@ -90,10 +90,14 @@ export default function DownloadsSection({ st }: Props) {
   // Active transfers keyed by itemId — populated/cleared by download-progress events.
   const [inProgress, setInProgress] = useState<Map<string, InProgressEntry>>(new Map());
 
-  // Load cache dir path and completed downloads on mount.
+  // Load the downloads dir path and completed downloads on mount. getDownloads
+  // validates the registry against disk (pruning files deleted outside the app),
+  // so we also push the result into global st.downloads — that's what the sidebar
+  // count reads, so opening this section corrects a stale badge.
   useEffect(() => {
-    getCacheDir().then(setCacheDir).catch(console.error);
-    getDownloads().then(setRecords).catch(console.error);
+    getDownloadsDir().then(setCacheDir).catch(console.error);
+    getDownloads().then(recs => { setRecords(recs); st.setDownloads(recs); }).catch(console.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Subscribe to Rust download lifecycle events to keep the In Progress section live.
@@ -235,14 +239,14 @@ export default function DownloadsSection({ st }: Props) {
               }}
             />
             <button
-              onClick={() => revealCacheDir().catch(console.error)}
+              onClick={() => revealDownloadsDir().catch(console.error)}
               style={{
                 padding: '7px 14px', fontSize: 10, fontFamily: MONO, letterSpacing: '0.08em',
                 textTransform: 'uppercase' as const, background: 'transparent',
                 border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text-dim)', cursor: 'pointer',
               }}
             >
-              Reveal
+              Open Folder
             </button>
           </div>
         </Row>

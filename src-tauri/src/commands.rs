@@ -1215,6 +1215,26 @@ pub fn get_cache_dir() -> Result<String, String> {
         .ok_or_else(|| "Could not determine cache directory".to_string())
 }
 
+/// Absolute path of the downloads directory — where offline audio files actually
+/// live. Distinct from get_cache_dir (offline library cache + covers); the
+/// Downloads settings "Location" shows this so it points at the real files.
+#[tauri::command]
+pub fn get_downloads_dir() -> Result<String, String> {
+    Ok(downloads::downloads_dir()?.to_string_lossy().into_owned())
+}
+
+/// Open the downloads directory in the OS file explorer, creating it if needed.
+#[tauri::command]
+pub fn reveal_downloads_dir() -> Result<(), String> {
+    let dir = downloads::downloads_dir()?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    std::process::Command::new("explorer")
+        .arg(&dir)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // Flush offline progress entries to the server after reconnecting.
 // Uses latest-wins conflict resolution — the local recorded_at timestamp
 // is not sent; we simply write what we have. If the server has newer
@@ -2000,7 +2020,9 @@ pub fn get_downloads() -> Result<Vec<downloads::DownloadRecord>, String> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
-    Ok(downloads::load_registry(&dir))
+    // Validate against disk: files deleted manually outside the app are pruned from
+    // the registry here, so the Downloads list and the sidebar count drop to match.
+    Ok(downloads::prune_missing(&dir))
 }
 
 /// Removes a downloaded book: deletes the entire extracted directory (audio file,

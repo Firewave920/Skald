@@ -802,6 +802,16 @@ export function revealCacheDir(): Promise<void> {
   return invoke('reveal_cache_dir');
 }
 
+// Downloads directory — where offline audio files actually live (distinct from the
+// cache dir). Used by Settings → Downloads for the "Location" path + open button.
+export function getDownloadsDir(): Promise<string> {
+  return invoke('get_downloads_dir');
+}
+
+export function revealDownloadsDir(): Promise<void> {
+  return invoke('reveal_downloads_dir');
+}
+
 /** Open an arbitrary local folder in the OS file explorer. */
 export function revealPath(path: string): Promise<void> {
   return invoke('reveal_path', { path });

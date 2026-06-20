@@ -197,6 +197,8 @@ pub fn run() {
             commands::search_providers,
             commands::get_cache_dir,
             commands::reveal_cache_dir,
+            commands::get_downloads_dir,
+            commands::reveal_downloads_dir,
             commands::reveal_path,
             commands::read_skald_log,
             commands::open_log_dir,
