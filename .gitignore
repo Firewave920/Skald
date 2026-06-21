@@ -25,6 +25,11 @@ src-tauri/WixTools/
 *.pfx
 *.p12
 .env
+# Server addresses / API tokens kept locally for testing — never commit.
+# (Covers the root testing-tokens file and the login prototype's tokens.jsx.)
+Skald API Tokens.txt
+*tokens*.txt
+*tokens*.jsx
 
 # Bundled VLC runtime — populated locally from the VLC installation.
 # Not committed; build.rs copies these to the binary output directory.
