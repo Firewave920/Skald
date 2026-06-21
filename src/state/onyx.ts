@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } fr
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task, Library, PodcastEpisode } from '../api/abs';
 import { type AdvFilter, type SearchScope, EMPTY_ADV_FILTER } from '../lib/shelfFilters';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems, getLocalLibraryProgress, scanLocalLibrary, getLocalPodcastItems } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, seekAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems, getLocalLibraryProgress, scanLocalLibrary, getLocalPodcastItems } from '../api/abs';
 import { log } from '../lib/log';
 
 export type { ServerSettings };
@@ -1130,12 +1130,16 @@ export function useOnyxState(): OnyxState {
   const playingRef          = useRef(playing);
   const currentLibraryIdRef = useRef(currentLibraryId);
   const isLocalPlaybackRef  = useRef(isLocalPlayback);
+  // Live position for the global keyboard-seek handler (which is registered once
+  // with a stable dep array and would otherwise capture a stale position).
+  const positionRef         = useRef(position);
   useEffect(() => {
     currentBookIdRef.current    = currentBookId;
     currentEpisodeIdRef.current = currentEpisodeId;
     playingRef.current          = playing;
     currentLibraryIdRef.current = currentLibraryId;
     isLocalPlaybackRef.current  = isLocalPlayback;
+    positionRef.current         = position;
   });
 
   useEffect(() => {
@@ -1402,8 +1406,21 @@ export function useOnyxState(): OnyxState {
         if (playingRef.current) { pauseAudio().catch(console.error); setPlaying(false); }
         else { playAudio().catch(console.error); setPlaying(true); }
       }
-      if (e.code === 'ArrowLeft'  && !e.metaKey && !e.ctrlKey) setPosition(p => Math.max(0, p - 30));
-      if (e.code === 'ArrowRight' && !e.metaKey && !e.ctrlKey) setPosition(p => Math.min(bookSecs, p + 30));
+      // Arrow seek: move the audio engine too, not just the UI. Without the
+      // seekAudio call the playhead snapped back on the next playback-tick because
+      // LibVLC never actually moved. Gated on a loaded book so a stray arrow press
+      // on the shelf is a no-op. Read the live position from the ref (the handler
+      // is registered once, so a captured `position` would be stale).
+      if (e.code === 'ArrowLeft'  && !e.metaKey && !e.ctrlKey && currentBookIdRef.current) {
+        const np = Math.max(0, positionRef.current - 30);
+        setPosition(np);
+        seekAudio(np).catch(console.error);
+      }
+      if (e.code === 'ArrowRight' && !e.metaKey && !e.ctrlKey && currentBookIdRef.current) {
+        const np = Math.min(bookSecs, positionRef.current + 30);
+        setPosition(np);
+        seekAudio(np).catch(console.error);
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         (document.getElementById('onyx-search') as HTMLInputElement | null)?.focus();

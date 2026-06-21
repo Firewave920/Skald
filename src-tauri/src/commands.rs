@@ -1587,11 +1587,36 @@ pub async fn flush_offline_progress(server_url: String) -> Result<u32, String> {
     // file independently of our iteration — no borrow-checker conflict.
     let queue = downloads::load_progress_queue(&dl_dir);
     if queue.is_empty() { return Ok(0); }
+    // Snapshot the server's current progress once for last-write-wins conflict
+    // resolution. The offline queue is book-only (no episode id), so map book-level
+    // (episodeId == null) records by library item id. If the snapshot can't be
+    // fetched (still offline / transient error), proceed without the guard — a
+    // best-effort flush is better than stranding progress, and the guard only
+    // prevents *regressions*, never forward progress.
+    let server_last_update: std::collections::HashMap<String, i64> = match client.get_me().await {
+        Ok(me) => me
+            .media_progress
+            .into_iter()
+            .filter(|p| p.episode_id.is_none())
+            .map(|p| (p.library_item_id, p.last_update))
+            .collect(),
+        Err(_) => std::collections::HashMap::new(),
+    };
     let mut flushed: u32 = 0;
     for entry in &queue {
         // Local-library items (id prefix "local_") have no server counterpart —
         // their progress lives in the catalog, so never attempt to flush them.
         if entry.item_id.starts_with("local_") { continue; }
+        // Skip (and drop) any queued entry the server has already superseded with a
+        // newer update — e.g. the user listened on another device while this one was
+        // offline. Without this, a stale local position would clobber the newer
+        // server one on reconnect.
+        if let Some(&server_lu) = server_last_update.get(&entry.item_id) {
+            if server_lu >= entry.recorded_at {
+                let _ = downloads::remove_progress_entry(&dl_dir, &entry.item_id, entry.recorded_at);
+                continue;
+            }
+        }
         // Offline downloads are book-only (the queue carries no episode id), so
         // episode_id is None here — see OfflineProgressEntry in downloads.rs.
         match client.update_progress(&entry.item_id, None, entry.current_time, entry.duration, entry.is_finished).await {

@@ -146,21 +146,34 @@ impl SessionManager {
                 if !active_tick.load(Ordering::Relaxed) {
                     break;
                 }
-                let (pos, dur, playing) = {
-                    let guard = player_tick.lock().unwrap();
+                let (pos, dur, playing, live, ended) = {
+                    // Poison-tolerant: a panic elsewhere holding the player lock must
+                    // not kill progress capture for the rest of the session.
+                    let guard = player_tick.lock().unwrap_or_else(|e| e.into_inner());
                     match guard.as_ref() {
-                        Some(p) => (p.position(), p.duration(), p.is_playing()),
-                        None => (0.0, 0.0, false),
+                        Some(p) => (p.position(), p.duration(), p.is_playing(), p.position_is_live(), p.book_ended()),
+                        None => (0.0, 0.0, false, false, false),
                     }
                 };
-                *ct_tick.lock().unwrap() = pos;
+                // Guard the shared position against the end-of-media / pre-buffer
+                // collapse to 0: only commit `pos` when the engine reports a live
+                // position. On a true book end, commit the exact duration so the
+                // server marks the item finished instead of resetting it to 0%.
+                if ended && dur > 0.0 {
+                    *ct_tick.lock().unwrap() = dur;
+                } else if live {
+                    *ct_tick.lock().unwrap() = pos;
+                }
                 if playing {
                     *tl_tick.lock().unwrap() += 1.0;
                 }
+                // Report the committed position (held through transient states), not
+                // the raw `pos`, so the UI never flashes 0:00 at the end / during buffer.
+                let report = *ct_tick.lock().unwrap();
                 let _ = app_tick.emit(
                     "playback-tick",
                     serde_json::json!({
-                        "currentTime": pos,
+                        "currentTime": report,
                         "duration":    dur,
                         "isPlaying":   playing,
                     }),
@@ -395,16 +408,20 @@ impl SessionManager {
             // offline queue (downloaded ABS book). Uses the CAPTURED id/pos — never a
             // re-read of the shared player — so a flush after a book-switch still
             // records THIS book, even though the player may already hold the next one.
-            let persist = |pos: f64, dur: f64| {
+            let persist = |pos: f64, dur: f64, finished: bool| {
                 if local_library_tick {
-                    let _ = crate::catalog::set_progress(&item_id_tick, episode_id_tick.as_deref(), pos, dur, false);
+                    if let Err(e) = crate::catalog::set_progress(&item_id_tick, episode_id_tick.as_deref(), pos, dur, finished) {
+                        // Silent loss here is indistinguishable from a desync bug in the
+                        // field — log it so skald.log captures the failure boundary.
+                        log::warn!(target: "skald::library", "local progress persist failed: {e}");
+                    }
                 } else if let Some(ref dl_dir) = dl_dir_tick {
                     let entry = crate::downloads::OfflineProgressEntry {
                         item_id: item_id_tick.clone(),
                         current_time: pos,
                         duration: dur,
                         progress: if dur > 0.0 { pos / dur } else { 0.0 },
-                        is_finished: false,
+                        is_finished: finished,
                         // Stable timestamp without pulling in chrono — same
                         // precision as chrono::Utc::now().timestamp_millis().
                         recorded_at: std::time::SystemTime::now()
@@ -412,47 +429,78 @@ impl SessionManager {
                             .unwrap_or_default()
                             .as_millis() as i64,
                     };
-                    let _ = crate::downloads::upsert_progress_entry(dl_dir, entry);
+                    if let Err(e) = crate::downloads::upsert_progress_entry(dl_dir, entry) {
+                        log::warn!(target: "skald::downloads", "offline progress persist failed: {e}");
+                    }
                 }
             };
 
             let mut interval = tokio::time::interval(Duration::from_secs(1));
             let mut ticks: u32 = 0;
             // Most recent (pos, dur) not yet persisted; flushed when the loop ends so
-            // a throttled write is never lost on book-switch/stop.
+            // a throttled write is never lost on book-switch/stop. A stop is not a
+            // finish, so the loop-end flush always writes finished = false.
             let mut pending: Option<(f64, f64)> = None;
+            // Set once the completed book is recorded so the finished row isn't
+            // rewritten every tick while the player sits in Ended.
+            let mut finished_recorded = false;
             loop {
                 interval.tick().await;
                 if !active_tick.load(Ordering::Relaxed) {
-                    if let Some((pos, dur)) = pending.take() { persist(pos, dur); }
+                    if let Some((pos, dur)) = pending.take() { persist(pos, dur, false); }
                     break;
                 }
-                let (pos, dur, playing) = {
-                    let guard = player_tick.lock().unwrap();
+                let (pos, dur, playing, live, ended) = {
+                    // Poison-tolerant (see online tick) so progress capture survives a
+                    // panic that poisoned the player lock elsewhere.
+                    let guard = player_tick.lock().unwrap_or_else(|e| e.into_inner());
                     match guard.as_ref() {
-                        Some(p) => (p.position(), p.duration(), p.is_playing()),
-                        None    => (0.0, 0.0, false),
+                        Some(p) => (p.position(), p.duration(), p.is_playing(), p.position_is_live(), p.book_ended()),
+                        None    => (0.0, 0.0, false, false, false),
                     }
                 };
-                *ct_tick.lock().unwrap() = pos;
+                // Same end-of-media / pre-buffer guard as the online tick: commit the
+                // exact duration on a true end, the live position while steadily
+                // playing, and hold the last good value through transient states.
+                if ended && dur > 0.0 {
+                    *ct_tick.lock().unwrap() = dur;
+                } else if live {
+                    *ct_tick.lock().unwrap() = pos;
+                }
                 if playing {
                     *tl_tick.lock().unwrap() += 1.0;
                 }
+                // Report the committed position (never the raw 0 from Ended/buffering).
+                let report = *ct_tick.lock().unwrap();
                 let _ = app_tick.emit(
                     "playback-tick",
                     serde_json::json!({
-                        "currentTime": pos,
+                        "currentTime": report,
                         "duration":    dur,
                         "isPlaying":   playing,
                     }),
                 );
-                // Throttled persistence: remember this tick, write on the boundary.
-                pending = Some((pos, dur));
-                ticks += 1;
-                if ticks % PERSIST_EVERY == 0 {
-                    persist(pos, dur);
-                    pending = None;
+                // Persistence — three cases mirror the position guard above:
+                if ended && dur > 0.0 {
+                    // True book end: record completion exactly once (finished = true).
+                    if !finished_recorded {
+                        persist(dur, dur, true);
+                        finished_recorded = true;
+                        pending = None;
+                    }
+                } else if live {
+                    // A live position after an end means the book was restarted — re-arm.
+                    finished_recorded = false;
+                    // Throttled persistence: remember this tick, write on the boundary.
+                    pending = Some((report, dur));
+                    ticks += 1;
+                    if ticks % PERSIST_EVERY == 0 {
+                        persist(report, dur, false);
+                        pending = None;
+                    }
                 }
+                // Transient (Opening/Buffering) states fall through: hold the last
+                // good value, persist nothing.
             }
         });
 

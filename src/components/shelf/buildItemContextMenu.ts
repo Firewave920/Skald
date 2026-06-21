@@ -1,6 +1,6 @@
 import { bookAuthor, type LibraryItem, type OnyxState, type MediaProgress } from '../../state/onyx';
 import type { ContextMenuItem, ContextMenuSection } from '../ContextMenu';
-import { updateProgress, deleteProgress, closeActiveSession, rescanItem, deleteItem, downloadItem, removeDownload, deleteLocalItem, setLocalProgress } from '../../api/abs';
+import { updateProgress, deleteProgress, closeActiveSession, rescanItem, deleteItem, downloadItem, removeDownload, deleteLocalItem, setLocalProgress, seekAudio, pauseAudio } from '../../api/abs';
 // Canonical play function — routes through shared resume and UI-sync logic
 import { playBook } from '../../api/playbook';
 
@@ -131,6 +131,15 @@ export function buildItemContextMenu(
           );
           if (item.localPath) {
             // Local-library item — persist to the catalog (no server session).
+            // If this is the item playing right now, move the playhead to the end and
+            // pause first: the local playback tick has no session to close, so without
+            // this it would converge back on the live (earlier) position and undo the
+            // finished flag. Seeking to the end makes the tick agree it's complete.
+            if (st.currentBookId === item.id) {
+              await seekAudio(item.media.duration).catch(() => {});
+              await pauseAudio().catch(() => {});
+              st.setPlaying(false);
+            }
             setLocalProgress(item.id, item.media.duration, item.media.duration, true)
               .catch(console.error);
           } else {

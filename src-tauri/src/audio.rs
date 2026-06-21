@@ -323,6 +323,30 @@ impl AudioPlayer {
         self.media_player.is_playing()
     }
 
+    /// True only when `get_time()` reflects a real playback position — i.e. the
+    /// engine is steadily Playing or Paused with media loaded. During Opening /
+    /// Buffering / Stopped / Ended / Error, libvlc's `get_time()` returns -1 (which
+    /// `position()` coerces to 0), so callers MUST gate progress writes on this to
+    /// avoid persisting a spurious 0 over a good position (see the tick loops in
+    /// session.rs). Holding the last good value through these transient states is
+    /// always safe: the next steady tick re-reads the true position.
+    pub fn position_is_live(&self) -> bool {
+        matches!(self.media_player.state(), State::Playing | State::Paused)
+    }
+
+    /// True when the whole book has finished — the last (or only) track reached
+    /// `State::Ended`. For a multi-track book a *middle* track ending is NOT a book
+    /// end (the advance task is about to switch to the next track), so this guards
+    /// on being on the final track. Used by the tick loops to record a completed
+    /// position (currentTime = duration, isFinished = true) instead of a 0 collapse.
+    pub fn book_ended(&self) -> bool {
+        if self.media_player.state() != State::Ended {
+            return false;
+        }
+        let tracks = self.tracks.lock().unwrap();
+        tracks.is_empty() || self.current.load(Ordering::Relaxed) + 1 >= tracks.len()
+    }
+
     /// Returns all audio output devices reported by LibVLC for the current output module.
     pub fn get_audio_devices(&self) -> Vec<crate::models::AudioDevice> {
         unsafe {

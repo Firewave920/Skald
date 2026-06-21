@@ -585,6 +585,25 @@ pub fn set_progress(item_id: &str, episode_id: Option<&str>, current_time: f64, 
                 .flatten()
         })
         .unwrap_or_default();
+    // Preserve an existing finished flag against the playback tick's is_finished=false.
+    // The tick streams forward progress and would otherwise silently un-finish a book
+    // the user marked complete (or that end-of-book detection completed) while it is
+    // still the active item. Keep the flag while the new position is at/after the old
+    // one (normal forward play near the end); a clear backward jump (replay from the
+    // start) is allowed to clear it so a re-listen tracks correctly.
+    let effective_finished = if is_finished {
+        true
+    } else {
+        let existing: Option<(f64, i64)> = conn
+            .query_row(
+                "SELECT \"current_time\", is_finished FROM progress WHERE item_id = ?1 AND episode_id = ?2",
+                params![item_id, ep],
+                |r| Ok((r.get::<_, f64>(0)?, r.get::<_, i64>(1)?)),
+            )
+            .optional()
+            .map_err(|e| format!("progress finished lookup: {e}"))?;
+        matches!(existing, Some((old_ct, old_fin)) if old_fin != 0 && current_time + 1.0 >= old_ct)
+    };
     conn.execute(
         // "current_time" is quoted everywhere it appears as an identifier: bare,
         // SQLite parses current_time as the CURRENT_TIME keyword (wall-clock TEXT),
@@ -593,7 +612,7 @@ pub fn set_progress(item_id: &str, episode_id: Option<&str>, current_time: f64, 
         "INSERT OR REPLACE INTO progress
             (item_id, episode_id, library_id, \"current_time\", duration, is_finished, updated_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-        params![item_id, ep, library_id, current_time, duration, is_finished as i64, now_ms()],
+        params![item_id, ep, library_id, current_time, duration, effective_finished as i64, now_ms()],
     )
     .map_err(|e| format!("set progress: {e}"))?;
     Ok(())

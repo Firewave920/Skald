@@ -449,15 +449,23 @@ pub fn run() {
                             if guard.is_local {
                                 if let Some(ref item_id) = guard.local_item_id {
                                     let pos = *guard.current_time.lock().unwrap();
-                                    // Read duration directly from the player.
+                                    // Read duration directly from the player (poison-tolerant
+                                    // so a panicked lock elsewhere can't abort the final write).
                                     let dur = {
-                                        let p = guard.player.lock().unwrap();
+                                        let p = guard.player.lock().unwrap_or_else(|e| e.into_inner());
                                         p.as_ref().map(|pl| pl.duration()).unwrap_or(0.0)
                                     };
+                                    // Preserve the finished state at exit: the tick commits
+                                    // current_time = duration on a true book end, so treat a
+                                    // position at/after the end as finished rather than writing
+                                    // false and relying on the catalog preserve rule alone.
+                                    let finished = dur > 0.0 && pos + 1.0 >= dur;
                                     if guard.is_local_library {
                                         // Local-library item — final position to the catalog
                                         // (keyed per episode for podcasts).
-                                        let _ = catalog::set_progress(item_id, guard.local_episode_id.as_deref(), pos, dur, false);
+                                        if let Err(e) = catalog::set_progress(item_id, guard.local_episode_id.as_deref(), pos, dur, finished) {
+                                            log::warn!(target: "skald::library", "shutdown progress write failed: {e}");
+                                        }
                                     } else if let Ok(dl_dir) = downloads::downloads_dir() {
                                         // Downloaded ABS book — offline queue (flushes later).
                                         let entry = downloads::OfflineProgressEntry {
@@ -465,13 +473,15 @@ pub fn run() {
                                             current_time: pos,
                                             duration: dur,
                                             progress: if dur > 0.0 { pos / dur } else { 0.0 },
-                                            is_finished: false,
+                                            is_finished: finished,
                                             recorded_at: std::time::SystemTime::now()
                                                 .duration_since(std::time::UNIX_EPOCH)
                                                 .unwrap_or_default()
                                                 .as_millis() as i64,
                                         };
-                                        let _ = downloads::upsert_progress_entry(&dl_dir, entry);
+                                        if let Err(e) = downloads::upsert_progress_entry(&dl_dir, entry) {
+                                            log::warn!(target: "skald::downloads", "shutdown progress write failed: {e}");
+                                        }
                                     }
                                 }
                                 return; // no server session — nothing more to do
