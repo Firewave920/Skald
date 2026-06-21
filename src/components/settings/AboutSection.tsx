@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { save } from '@tauri-apps/plugin-dialog';
 import lyreIcon from '../../assets/lyre.png';
+import type { OnyxState } from '../../state/onyx';
 import { SectionHead, Row, SERIF, MONO } from './shared';
 import { writeTextFile } from '../../api/abs';
+import { log } from '../../lib/log';
 
 const ghostBtn = {
   padding: '6px 14px', fontSize: 11, fontFamily: MONO, letterSpacing: '0.06em',
@@ -124,8 +126,16 @@ function LicensesModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-export default function AboutSection() {
+export default function AboutSection({ st }: { st: OnyxState }) {
   const [showLicenses, setShowLicenses] = useState(false);
+
+  // Re-run the full first-launch flow (Onboarding roadmap, Resolved decisions #4).
+  // Clearing the flag re-opens <Onboarding> via the gate in App.tsx; existing
+  // auth/local state is left intact, so the ABS step shows "already connected".
+  const runSetupAgain = () => {
+    log.info('app', 'onboarding rerun requested');
+    st.setOnboarded(false);
+  };
 
   return (
     <div>
@@ -149,6 +159,10 @@ export default function AboutSection() {
 
       <Row label="Open source licenses" hint="Third-party components bundled with Skald and their licenses.">
         <button style={ghostBtn} onClick={() => setShowLicenses(true)}>View</button>
+      </Row>
+
+      <Row label="Run setup again" hint="Re-open the first-launch walkthrough — connect a server, create a local library, or review the folders. Your existing setup is kept.">
+        <button style={ghostBtn} onClick={runSetupAgain}>Run setup</button>
       </Row>
 
       {showLicenses && <LicensesModal onClose={() => setShowLicenses(false)} />}

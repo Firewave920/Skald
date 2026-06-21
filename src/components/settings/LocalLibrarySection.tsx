@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import type { OnyxState } from '../../state/onyx';
 import type { Library, ScannedItem } from '../../api/abs';
-import { createLocalLibrary, deleteLocalLibrary, scanLocalLibrary, getUnidentifiedItems, revealPath } from '../../api/abs';
+import { createLocalLibrary, deleteLocalLibrary, scanLocalLibrary, getUnidentifiedItems, revealPath, ingestLocalPaths } from '../../api/abs';
 import { log } from '../../lib/log';
 import Icon from '../Icon';
 import { SectionHead, Panel, MONO, DIM_GOLD, TextInput } from './shared';
@@ -50,6 +50,8 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
   // match-modal target.
   const [unidentified, setUnidentified] = useState<Record<string, ScannedItem[]>>({});
   const [matchTarget, setMatchTarget] = useState<{ libId: string; item: ScannedItem } | null>(null);
+  // The library currently importing via "Add books…", so its button shows a spinner.
+  const [adding, setAdding] = useState<string | null>(null);
   // Inline "create library" form state.
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -103,6 +105,36 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
       st.setToast({ message: 'Could not create library', type: 'error' });
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Manual import route (Onboarding roadmap, Phase 5 / gap #2) — the permanent
+  // "Add books…" button. Mirrors what onboarding step 5 teaches: pick files or
+  // folders and ingest them straight into the managed Author/Series/Title tree.
+  async function addBooks(lib: Library) {
+    const picked = await open({
+      directory: false, multiple: true, title: `Add books to "${lib.name}"`,
+      filters: [{ name: 'Audio', extensions: ['m4b', 'm4a', 'mp3', 'flac', 'ogg', 'opus', 'aac', 'wav'] }],
+    });
+    const sources = Array.isArray(picked) ? picked : picked ? [picked] : [];
+    if (sources.length === 0) return;
+    try {
+      setAdding(lib.id);
+      log.info('library', 'add books to local library', { count: sources.length });
+      const outcomes = await ingestLocalPaths(lib.id, sources);
+      const filed = outcomes.filter(o => o.outcome === 'filed').length;
+      const quarantined = outcomes.filter(o => o.outcome === 'quarantined').length;
+      if (st.currentLibraryId === lib.id) await st.setActiveLibrary(lib.id);
+      else await st.refreshLibrary();
+      void reloadUnidentified();
+      const parts = [`${filed} added`];
+      if (quarantined) parts.push(`${quarantined} need attention`);
+      st.setToast({ message: `Imported into "${lib.name}" — ${parts.join(', ')}`, type: filed ? 'success' : 'info' });
+    } catch (e) {
+      log.error('library', 'add books failed', { err: String(e) });
+      st.setToast({ message: 'Could not import those files', type: 'error' });
+    } finally {
+      setAdding(null);
     }
   }
 
@@ -228,6 +260,16 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
                   <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
                     {!active && (
                       <button onClick={() => st.setActiveLibrary(lib.id)} style={btn()} title="Switch to this library">Open</button>
+                    )}
+                    {lib.mediaType !== 'podcast' && (
+                      <button
+                        onClick={() => addBooks(lib)}
+                        disabled={adding === lib.id}
+                        style={btn(adding === lib.id)}
+                        title="Pick audiobook files or folders to import directly into this library."
+                      >
+                        {adding === lib.id ? 'Adding…' : 'Add books…'}
+                      </button>
                     )}
                     <button
                       onClick={() => rescan(lib)}

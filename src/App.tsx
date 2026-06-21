@@ -9,9 +9,11 @@ import { log } from './lib/log';
 import Toast from './components/ui/Toast';
 import ConfirmDialog from './components/ui/ConfirmDialog';
 import DownloadProgressToast from './components/downloads/DownloadProgressToast';
+import UnidentifiedNotice from './components/UnidentifiedNotice';
 import OnyxWash from './components/chrome/OnyxWash';
 import Titlebar from './components/chrome/Titlebar';
 import Login from './screens/Login';
+import Onboarding from './screens/Onboarding';
 import Library from './screens/Library';
 import Player from './screens/Player';
 import Settings from './screens/Settings';
@@ -212,6 +214,15 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []); // empty deps — handler uses refs, not captured state
 
+  // ── Onboarding gate ─────────────────────────────────────────────────────
+  // Sits AHEAD of the auth gate. st.onboarded is derived synchronously (false
+  // only for a genuinely fresh profile — see onyx.ts), so this is flash-free.
+  // The flow itself writes auth/local state and flips st.setOnboarded(true) when
+  // it finishes or is skipped, after which this condition is false forever.
+  if (!st.onboarded) {
+    return <Onboarding st={st} />;
+  }
+
   // ── Auth gate ───────────────────────────────────────────────────────────
   // st.authToken is initialised synchronously from localStorage, so this
   // check is instant and produces no flash. When Login succeeds it calls
@@ -276,6 +287,9 @@ export default function App() {
         onCancel={(title) => st.setToast({ message: `Download cancelled — "${title}"`, type: 'info' })}
         onFailed={(title, _error) => st.setToast({ message: `Download failed — "${title}"`, type: 'error' })}
       />
+
+      {/* Quarantine notice — local-library books awaiting a metadata match. */}
+      <UnidentifiedNotice st={st} />
 
       {/* Global toast notification — rendered above all screens */}
       {st.toast && (

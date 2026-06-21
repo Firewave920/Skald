@@ -6,6 +6,7 @@ pub mod audio;
 pub mod commands;
 pub mod session;
 pub mod cover_cache;
+pub mod paths;     // Onboarding: user-relocatable downloads + cache roots
 pub mod socket;    // Phase B: Socket.IO transport for live sync
 pub mod downloads; // Phase B: persistent registry of downloaded books
 pub mod probe;     // Local Library: ffprobe-based metadata + chapter reader
@@ -205,6 +206,8 @@ pub fn run() {
             commands::reveal_cache_dir,
             commands::get_downloads_dir,
             commands::reveal_downloads_dir,
+            commands::set_downloads_dir,
+            commands::set_cache_dir,
             commands::reveal_path,
             commands::read_skald_log,
             commands::open_log_dir,

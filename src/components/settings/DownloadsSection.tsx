@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
+import { open } from '@tauri-apps/plugin-dialog';
 import type { OnyxState } from '../../state/onyx';
 import {
   getDownloadsDir, revealDownloadsDir, getDownloads, removeDownload, cancelDownload,
+  getCacheDir, setDownloadsDir, setCacheDir, revealPath,
 } from '../../api/abs';
+import { log } from '../../lib/log';
 import type { DownloadRecord } from '../../api/abs';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import Cover from '../Cover';
@@ -70,6 +73,35 @@ function WipBadge() {
   );
 }
 
+// Read-only path field + Open/Change buttons for a relocatable storage root.
+function StorageControls({ value, busy, onOpen, onChange }: { value: string; busy: boolean; onOpen: () => void; onChange: () => void }) {
+  const btn = {
+    padding: '7px 14px', fontSize: 10, fontFamily: MONO, letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const, background: 'transparent',
+    border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text-dim)',
+  } as const;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <input
+        readOnly
+        value={value || 'Loading…'}
+        onFocus={e => e.currentTarget.select()}
+        title={value}
+        style={{
+          fontFamily: MONO, fontSize: 11, background: 'rgba(0,0,0,0.3)',
+          border: '1px solid var(--onyx-glass-edge)', borderRadius: 7, color: 'var(--onyx-text-dim)',
+          padding: '7px 10px', width: 260, maxWidth: '32vw', outline: 'none',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      />
+      <button onClick={onOpen} style={{ ...btn, cursor: 'pointer' }}>Open</button>
+      <button onClick={onChange} disabled={busy} style={{ ...btn, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+        {busy ? 'Moving…' : 'Change…'}
+      </button>
+    </div>
+  );
+}
+
 // Tracks a single active download for the In Progress sub-section.
 interface InProgressEntry {
   title: string;
@@ -80,7 +112,12 @@ interface InProgressEntry {
 interface Props { st: OnyxState; }
 
 export default function DownloadsSection({ st }: Props) {
-  const [cacheDir, setCacheDir] = useState('');
+  // The two relocatable storage roots (Onboarding roadmap, Phase 4 / gap #1):
+  // downloadsDir holds offline audio; coverCacheDir holds covers + the offline
+  // library/chapter caches. relocating guards the active move.
+  const [downloadsDir, setDownloadsDirState] = useState('');
+  const [coverCacheDir, setCoverCacheDir] = useState('');
+  const [relocating, setRelocating] = useState<'downloads' | 'cache' | null>(null);
   // Local copy of the registry, kept in sync with Rust on mount and on events.
   const [records, setRecords] = useState<DownloadRecord[]>([]);
   // Record awaiting individual delete confirmation.
@@ -95,10 +132,30 @@ export default function DownloadsSection({ st }: Props) {
   // so we also push the result into global st.downloads — that's what the sidebar
   // count reads, so opening this section corrects a stale badge.
   useEffect(() => {
-    getDownloadsDir().then(setCacheDir).catch(console.error);
+    getDownloadsDir().then(setDownloadsDirState).catch(console.error);
+    getCacheDir().then(setCoverCacheDir).catch(console.error);
     getDownloads().then(recs => { setRecords(recs); st.setDownloads(recs); }).catch(console.error);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Relocate one of the two storage roots: pick a folder, run the backend move
+  // (which also repoints the downloads registry), then refresh the displayed path.
+  async function relocate(which: 'downloads' | 'cache') {
+    const picked = await open({ directory: true, multiple: false, title: which === 'downloads' ? 'Choose where to store downloads' : 'Choose where to store the cache' });
+    if (typeof picked !== 'string') return;
+    try {
+      setRelocating(which);
+      log.info('downloads', 'relocate storage root', { which });
+      if (which === 'downloads') { await setDownloadsDir(picked); setDownloadsDirState(await getDownloadsDir()); }
+      else { await setCacheDir(picked); setCoverCacheDir(await getCacheDir()); }
+      st.setToast({ message: which === 'downloads' ? 'Downloads folder moved' : 'Cache folder moved', type: 'success' });
+    } catch (e) {
+      log.error('downloads', 'relocate storage root failed', { which, err: String(e) });
+      st.setToast({ message: 'Could not move the folder', type: 'error' });
+    } finally {
+      setRelocating(null);
+    }
+  }
 
   // Subscribe to Rust download lifecycle events to keep the In Progress section live.
   useEffect(() => {
@@ -222,33 +279,25 @@ export default function DownloadsSection({ st }: Props) {
         </div>
       )}
 
-      {/* ── Cache ────────────────────────────────────────────────────────── */}
-      <Panel label="Cache">
-        <Row label="Location" hint="Where downloaded audio files are stored on this device.">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <input
-              readOnly
-              value={cacheDir || 'Loading…'}
-              onFocus={e => e.currentTarget.select()}
-              title={cacheDir}
-              style={{
-                fontFamily: MONO, fontSize: 11, background: 'rgba(0,0,0,0.3)',
-                border: '1px solid var(--onyx-glass-edge)', borderRadius: 7, color: 'var(--onyx-text-dim)',
-                padding: '7px 10px', width: 300, maxWidth: '38vw', outline: 'none',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}
-            />
-            <button
-              onClick={() => revealDownloadsDir().catch(console.error)}
-              style={{
-                padding: '7px 14px', fontSize: 10, fontFamily: MONO, letterSpacing: '0.08em',
-                textTransform: 'uppercase' as const, background: 'transparent',
-                border: '1px solid var(--onyx-glass-edge)', borderRadius: 6, color: 'var(--onyx-text-dim)', cursor: 'pointer',
-              }}
-            >
-              Open Folder
-            </button>
-          </div>
+      {/* ── Storage locations ────────────────────────────────────────────── */}
+      {/* Two independently relocatable roots (Onboarding roadmap, Resolved #1):
+          downloaded audio, and the cover/library cache. */}
+      <Panel label="Storage">
+        <Row label="Downloads folder" hint="Where downloaded audio files are stored on this device.">
+          <StorageControls
+            value={downloadsDir}
+            busy={relocating === 'downloads'}
+            onOpen={() => revealDownloadsDir().catch(console.error)}
+            onChange={() => relocate('downloads')}
+          />
+        </Row>
+        <Row label="Cache folder" hint="Where cover images and the offline library cache are kept.">
+          <StorageControls
+            value={coverCacheDir}
+            busy={relocating === 'cache'}
+            onOpen={() => { if (coverCacheDir) revealPath(coverCacheDir).catch(console.error); }}
+            onChange={() => relocate('cache')}
+          />
         </Row>
       </Panel>
 

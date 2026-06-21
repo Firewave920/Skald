@@ -206,6 +206,39 @@ input, textarea, [contenteditable="true"],
   transform: translateY(0);
 }
 
+/* ─── Onboarding: staging explainer animation (Phase 6) ──────────────────────
+   A file glyph drops into the Staging box, rests, then travels to the filed
+   Author/Series shelf — the one place motion does real explanatory work. The
+   filed box pulses as the file "arrives". Both loop, and both are disabled under
+   prefers-reduced-motion below so the scene becomes a static diagram. */
+.onb-file {
+  animation: onb-file 5s cubic-bezier(.4,.1,.3,1) infinite;
+}
+@keyframes onb-file {
+  0%   { left: 14%; top: -8%;  opacity: 0; transform: scale(0.9); }
+  10%  { left: 14%; top: 38%;  opacity: 1; transform: scale(1); }   /* dropped into Staging */
+  38%  { left: 14%; top: 38%;  opacity: 1; }                        /* rest */
+  66%  { left: 80%; top: 38%;  opacity: 1; }                        /* travels to filed shelf */
+  78%  { left: 80%; top: 38%;  opacity: 0; transform: scale(0.8); } /* settles / fades into shelf */
+  100% { left: 14%; top: -8%;  opacity: 0; transform: scale(0.9); } /* reset */
+}
+.onb-filed {
+  animation: onb-filed 5s ease-in-out infinite;
+}
+@keyframes onb-filed {
+  0%, 60%   { box-shadow: none; }
+  70%       { box-shadow: 0 0 0 2px rgba(var(--onyx-accent-r),var(--onyx-accent-g),var(--onyx-accent-b),0.5); }
+  85%, 100% { box-shadow: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Honour the OS "reduce motion" setting: hold the file at the Staging box and
+     drop the step slide-in / explainer loops so nothing animates. */
+  .saga-in { animation: none; }
+  .onb-file { animation: none; left: 14%; top: 38%; opacity: 1; }
+  .onb-filed { animation: none; }
+}
+
 /* Hide scrollbar on the shelf tab pill while keeping horizontal scroll behaviour */
 .shelf-tab-pill::-webkit-scrollbar {
   display: none;

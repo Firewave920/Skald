@@ -1,10 +1,9 @@
 use std::path::PathBuf;
 
-use directories::ProjectDirs;
-
+// Covers live under <cache root>/covers. The cache root resolves via the paths
+// module so a user relocation (set_cache_dir) moves the cover cache with it.
 fn cache_dir() -> Option<PathBuf> {
-    ProjectDirs::from("com", "skald", "Skald")
-        .map(|dirs| dirs.cache_dir().join("covers"))
+    crate::paths::cache_dir().ok().map(|root| root.join("covers"))
 }
 
 /// Full path where the cover for `item_id` at an optional render `width` and a

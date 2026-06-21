@@ -264,6 +264,12 @@ export interface OnyxState {
   // just like an auth token does, so non-ABS users can use local libraries.
   localMode: boolean;
   setLocalMode: (on: boolean) => void;
+  // True once the first-launch onboarding flow has been completed (or skipped).
+  // Gates <Onboarding> ahead of the auth/local gate in App.tsx. Existing users
+  // (an auth token or local mode already present) are treated as onboarded so the
+  // flow never shows to upgraders. (First-Launch Onboarding roadmap, Phase 1.)
+  onboarded: boolean;
+  setOnboarded: (on: boolean) => void;
   // Library
   library: LibraryItem[];
   // All libraries on the server (book + podcast), for the switcher. Populated
@@ -520,6 +526,21 @@ export function useOnyxState(): OnyxState {
   const setLocalMode = useCallback((on: boolean) => {
     localStorage.setItem('skald.localMode', String(on));
     setLocalModeRaw(on);
+  }, []);
+
+  // First-launch onboarding completion. When no explicit flag is stored yet, we
+  // DERIVE it: any existing user (a saved auth token, or local mode already on)
+  // has clearly used Skald before, so they are considered onboarded and never see
+  // the flow. Only a genuinely fresh profile (no token, no local mode, no stored
+  // flag) falls through to false and triggers <Onboarding>.
+  const [onboarded, setOnboardedRaw] = useState(() => {
+    const explicit = localStorage.getItem('skald.onboarded');
+    if (explicit !== null) return explicit === 'true';
+    return !!localStorage.getItem('skald.authToken') || localStorage.getItem('skald.localMode') === 'true';
+  });
+  const setOnboarded = useCallback((on: boolean) => {
+    localStorage.setItem('skald.onboarded', String(on));
+    setOnboardedRaw(on);
   }, []);
 
   // ── Library ─────────────────────────────────────────────────────────────────
@@ -1403,6 +1424,7 @@ export function useOnyxState(): OnyxState {
     user, setUser,
     isAdmin: user?.type === 'admin' || user?.type === 'root',
     localMode, setLocalMode,
+    onboarded, setOnboarded,
     library, libraries, activeLibrary, setActiveLibrary, libraryLoading, isOffline, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, applyServerProgress, listeningStats, bookmarks, setBookmarks, currentLibraryId,
     downloads, setDownloads,
     isLocalPlayback, setIsLocalPlayback,

@@ -14,13 +14,13 @@ use tokio_util::sync::CancellationToken;
 // cancelled by its item_id from the cancel_download command.
 pub type DownloadCancelRegistry = Arc<Mutex<HashMap<String, CancellationToken>>>;
 
-// Resolves the downloads directory under the app's local-data folder.
-// Factored here (rather than commands.rs) so session.rs can also reach it
-// without a circular dependency — commands → session, session → downloads.
+// Resolves the downloads directory. Delegates to the paths module so a user
+// relocation (set_downloads_dir) is honoured here too; the default remains
+// <data_local>/Skald/downloads. Factored here (rather than commands.rs) so
+// session.rs can also reach it without a circular dependency —
+// commands → session, session → downloads.
 pub fn downloads_dir() -> Result<std::path::PathBuf, String> {
-    directories::ProjectDirs::from("com", "skald", "Skald")
-        .map(|dirs| dirs.data_local_dir().join("downloads"))
-        .ok_or_else(|| "Could not determine downloads directory".to_string())
+    crate::paths::downloads_dir()
 }
 
 #[derive(Serialize, Deserialize, Clone)]

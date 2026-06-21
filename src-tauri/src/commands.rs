@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 use tauri::Emitter; // .emit() on AppHandle is a trait method — must be in scope
 use tokio_util::sync::CancellationToken;
 
-use crate::{api::AbsClient, audio, auth, cover_cache, downloads, eq::EqSettings, models::{self, BackupsResponse, CustomMetadataProvider, LoggerData, NotificationSettings, NotificationsResponse, ServerSettings, TasksResponse}, session::SessionManager, socket};
+use crate::{api::AbsClient, audio, auth, cover_cache, downloads, eq::EqSettings, models::{self, BackupsResponse, CustomMetadataProvider, LoggerData, NotificationSettings, NotificationsResponse, ServerSettings, TasksResponse}, paths, session::SessionManager, socket};
 
 // Close an async file handle and delete the file from disk.
 // On Windows, an open file handle prevents remove_file from succeeding, so the
@@ -1427,9 +1427,8 @@ pub fn register_shortcuts(
 
 #[tauri::command]
 pub fn get_cache_dir() -> Result<String, String> {
-    directories::ProjectDirs::from("com", "skald", "Skald")
-        .map(|dirs| dirs.cache_dir().to_string_lossy().into_owned())
-        .ok_or_else(|| "Could not determine cache directory".to_string())
+    // Delegates to paths so a user relocation (set_cache_dir) is reflected here.
+    Ok(paths::cache_dir()?.to_string_lossy().into_owned())
 }
 
 /// Absolute path of the downloads directory — where offline audio files actually
@@ -1449,6 +1448,103 @@ pub fn reveal_downloads_dir() -> Result<(), String> {
         .arg(&dir)
         .spawn()
         .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// Recursively copy a directory tree (used as the cross-volume fallback for
+// move_dir_contents — std::fs::rename fails across drives on Windows).
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(dst).map_err(|e| format!("Create dir failed: {e}"))?;
+    for entry in std::fs::read_dir(src).map_err(|e| format!("Read dir failed: {e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let s = entry.path();
+        let d = dst.join(entry.file_name());
+        if s.is_dir() {
+            copy_dir_all(&s, &d)?;
+        } else {
+            std::fs::copy(&s, &d).map_err(|e| format!("Copy failed: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+// Move everything inside `from` into `to`, creating `to` first. A fast rename is
+// attempted per child; on failure (e.g. a different volume) it falls back to a
+// recursive copy + delete so relocation works across drives. A non-existent
+// source is a no-op (nothing has been downloaded/cached yet).
+fn move_dir_contents(from: &std::path::Path, to: &std::path::Path) -> Result<(), String> {
+    if !from.exists() {
+        return Ok(());
+    }
+    std::fs::create_dir_all(to).map_err(|e| format!("Create dir failed: {e}"))?;
+    for entry in std::fs::read_dir(from).map_err(|e| format!("Read dir failed: {e}"))? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let src = entry.path();
+        let dst = to.join(entry.file_name());
+        if std::fs::rename(&src, &dst).is_err() {
+            if src.is_dir() {
+                copy_dir_all(&src, &dst)?;
+                std::fs::remove_dir_all(&src).map_err(|e| format!("Remove failed: {e}"))?;
+            } else {
+                std::fs::copy(&src, &dst).map_err(|e| format!("Copy failed: {e}"))?;
+                std::fs::remove_file(&src).map_err(|e| format!("Remove failed: {e}"))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Relocate the downloads root to `path` (First-Launch Onboarding roadmap, Phase 4
+/// / gap #1). Moves existing downloads + the registry into the new folder, rewrites
+/// each registry record's absolute file_path from the old prefix to the new one so
+/// offline playback still resolves, then persists the override last — once saved,
+/// all future resolutions point at the new location.
+#[tauri::command]
+pub fn set_downloads_dir(path: String) -> Result<(), String> {
+    let new = std::path::PathBuf::from(path.trim());
+    if new.as_os_str().is_empty() {
+        return Err("A folder is required.".into());
+    }
+    let old = downloads::downloads_dir()?;
+    if old == new {
+        return Ok(()); // no change — leave everything as-is
+    }
+    log::info!(target: "skald::app", "set_downloads_dir start");
+    move_dir_contents(&old, &new)?;
+    // Repoint registry file paths (old prefix → new prefix). load/save operate on
+    // the directory we pass, so read+write the registry now living under `new`.
+    let old_s = old.to_string_lossy().to_string();
+    let new_s = new.to_string_lossy().to_string();
+    let mut records = downloads::load_registry(&new);
+    for r in records.iter_mut() {
+        if let Some(rest) = r.file_path.strip_prefix(&old_s) {
+            r.file_path = format!("{new_s}{rest}");
+        }
+    }
+    downloads::save_registry(&new, &records)?;
+    paths::set_downloads_override(&new_s)?;
+    log::info!(target: "skald::app", "set_downloads_dir success — {} record(s) repointed", records.len());
+    Ok(())
+}
+
+/// Relocate the cover/library cache root to `path` (Onboarding roadmap, Phase 4 /
+/// gap #1; Settings-only per Resolved decisions #2). Moves existing cache files
+/// (covers, library cache, chapter caches) then persists the override. No registry
+/// rewrite is needed — cache entries are resolved by computed path each lookup.
+#[tauri::command]
+pub fn set_cache_dir(path: String) -> Result<(), String> {
+    let new = std::path::PathBuf::from(path.trim());
+    if new.as_os_str().is_empty() {
+        return Err("A folder is required.".into());
+    }
+    let old = paths::cache_dir()?;
+    if old == new {
+        return Ok(());
+    }
+    log::info!(target: "skald::app", "set_cache_dir start");
+    move_dir_contents(&old, &new)?;
+    paths::set_cache_override(&new.to_string_lossy())?;
+    log::info!(target: "skald::app", "set_cache_dir success");
     Ok(())
 }
 

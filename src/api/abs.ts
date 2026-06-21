@@ -813,6 +813,18 @@ export function revealDownloadsDir(): Promise<void> {
   return invoke('reveal_downloads_dir');
 }
 
+/** Relocate the downloads root: moves existing files, repoints the registry, and
+ *  persists the override so all future resolutions use the new path. */
+export function setDownloadsDir(path: string): Promise<void> {
+  return invoke('set_downloads_dir', { path });
+}
+
+/** Relocate the cover/library cache root: moves existing files + persists the
+ *  override. Exposed in Settings only (not onboarding) per Resolved decisions #2. */
+export function setCacheDir(path: string): Promise<void> {
+  return invoke('set_cache_dir', { path });
+}
+
 /** Open an arbitrary local folder in the OS file explorer. */
 export function revealPath(path: string): Promise<void> {
   return invoke('reveal_path', { path });
