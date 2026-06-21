@@ -71,7 +71,7 @@ export default function AddBooksStep({ st, library, onContinue }: AddBooksStepPr
   async function addNow() {
     if (!library) return;
     const picked = await open({
-      directory: false, multiple: true, title: 'Choose audiobook files or folders to add',
+      directory: false, multiple: true, title: 'Choose audiobook files to add',
       filters: [{ name: 'Audio', extensions: ['m4b', 'm4a', 'mp3', 'flac', 'ogg', 'opus', 'aac', 'wav'] }],
     });
     const sources = Array.isArray(picked) ? picked : picked ? [picked] : [];
@@ -100,12 +100,13 @@ export default function AddBooksStep({ st, library, onContinue }: AddBooksStepPr
 
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
         <RouteCard badge="Automatic" title="Drop into Staging">
-          Copy audiobooks into the library's <span style={{ color: 'rgba(235,231,223,0.85)' }}>Staging</span> folder.
-          Skald reads each book's tags and chapters and files it under Author / Series / Title — automatically.
+          Copy audiobooks — files <em>or whole book folders</em> — into the library's{' '}
+          <span style={{ color: 'rgba(235,231,223,0.85)' }}>Staging</span> folder. Skald reads each book's tags and
+          chapters and files it under Author / Series / Title automatically.
         </RouteCard>
         <RouteCard badge="Manual" title="Add books button">
           Use <span style={{ color: 'rgba(235,231,223,0.85)' }}>Add books…</span> (here, and in Settings → Local
-          Library) to pick files or folders directly. Same filing, on demand.
+          Library) to pick audiobook files directly. Same filing, on demand.
         </RouteCard>
       </div>
 

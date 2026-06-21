@@ -1468,6 +1468,29 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), Stri
     Ok(())
 }
 
+// Normalize a path for comparison: lowercased, forward slashes folded to back
+// slashes, trailing separators trimmed. Windows paths are case-insensitive, so
+// this lets us reliably detect "same folder" and "nested folder" regardless of
+// casing or a trailing slash from the OS folder picker.
+fn norm_path(p: &std::path::Path) -> String {
+    p.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase()
+}
+
+// Classify the relationship between a current root `old` and a requested `new`:
+// returns Ok(true) when they are the same folder (caller should no-op), Err when
+// one is nested inside the other (moving would drop a directory into itself), and
+// Ok(false) when they are safely disjoint.
+fn relocation_same_or_reject(old: &std::path::Path, new: &std::path::Path) -> Result<bool, String> {
+    let (o, n) = (norm_path(old), norm_path(new));
+    if o == n {
+        return Ok(true);
+    }
+    if n.starts_with(&format!("{o}\\")) || o.starts_with(&format!("{n}\\")) {
+        return Err("Pick a folder that isn't inside (or a parent of) the current one.".into());
+    }
+    Ok(false)
+}
+
 // Move everything inside `from` into `to`, creating `to` first. A fast rename is
 // attempted per child; on failure (e.g. a different volume) it falls back to a
 // recursive copy + delete so relocation works across drives. A non-existent
@@ -1506,8 +1529,8 @@ pub fn set_downloads_dir(path: String) -> Result<(), String> {
         return Err("A folder is required.".into());
     }
     let old = downloads::downloads_dir()?;
-    if old == new {
-        return Ok(()); // no change — leave everything as-is
+    if relocation_same_or_reject(&old, &new)? {
+        return Ok(()); // same folder — leave everything as-is
     }
     log::info!(target: "skald::app", "set_downloads_dir start");
     move_dir_contents(&old, &new)?;
@@ -1538,7 +1561,7 @@ pub fn set_cache_dir(path: String) -> Result<(), String> {
         return Err("A folder is required.".into());
     }
     let old = paths::cache_dir()?;
-    if old == new {
+    if relocation_same_or_reject(&old, &new)? {
         return Ok(());
     }
     log::info!(target: "skald::app", "set_cache_dir start");

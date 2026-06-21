@@ -25,6 +25,14 @@ function formatGain(g: number): string {
 const GRAPH_H = 150;   // svg plot height (matches the band-slider track height)
 const GRAPH_MAX = 12;  // ± dB shown on the graph / band scale
 
+// Number of lowest band sliders to hide. The bottom of LibVLC's 10-band scale is
+// sub-bass (31.25 Hz at index 0) — inaudible on most playback systems and below
+// the speech range, so the control does effectively nothing on audiobook content.
+// We drop it from both the sliders and the response graph; the band still exists
+// in the backend (it stays at whatever presets/Reset set it to, ~flat), we just
+// stop exposing a control that "barely affects the audio".
+const HIDDEN_LOW_BANDS = 1;
+
 /** Catmull-Rom → cubic-bezier smoothing through the band points. */
 function smoothPath(pts: Array<[number, number]>): string {
   if (pts.length < 2) return pts.length ? `M ${pts[0][0]} ${pts[0][1]}` : '';
@@ -209,7 +217,7 @@ export default function AudioSection() {
       {/* ── Signal chain panel ── */}
       <Panel label="Signal chain" bodyStyle={{ padding: '2px 20px 18px' }}>
           {/* Equalizer master toggle */}
-          <Row label="Equalizer" hint="10-band DSP equalizer powered by LibVLC. Changes apply live.">
+          <Row label="Equalizer" hint="9-band DSP equalizer powered by LibVLC. Changes apply live.">
             {eqSettings !== null && <Toggle on={eqEnabled} onChange={handleToggleEq} />}
           </Row>
 
@@ -249,7 +257,7 @@ export default function AudioSection() {
             {frequencies.length > 0 && (
               <div style={{ paddingTop: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                  <span style={eyebrowStyle}>10-Band EQ</span>
+                  <span style={eyebrowStyle}>9-Band EQ</span>
                   <button
                     onClick={handleResetFlat}
                     style={{
@@ -262,8 +270,9 @@ export default function AudioSection() {
                   </button>
                 </div>
 
-                {/* Live response curve */}
-                <EqGraph bands={localBands} />
+                {/* Live response curve — sliced to the visible bands so the curve
+                    lines up with the slider columns below it. */}
+                <EqGraph bands={localBands.slice(HIDDEN_LOW_BANDS)} />
 
                 {/* Band sliders with a left dB scale aligned to the tracks */}
                 <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
@@ -278,9 +287,12 @@ export default function AudioSection() {
                     <div style={{ height: VAL_H }} />
                   </div>
 
-                  {/* Sliders */}
+                  {/* Sliders — the lowest HIDDEN_LOW_BANDS columns are omitted; the
+                      real band index `i` is preserved so value binding/commit and
+                      the backend band mapping stay correct. */}
                   <div style={{ flex: 1, display: 'flex', gap: 4 }}>
-                    {frequencies.map((hz, i) => {
+                    {frequencies.slice(HIDDEN_LOW_BANDS).map((hz, j) => {
+                      const i = j + HIDDEN_LOW_BANDS;
                       const gain = localBands[i] ?? 0;
                       return (
                         <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>

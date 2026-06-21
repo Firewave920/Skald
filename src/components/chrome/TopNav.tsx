@@ -244,13 +244,22 @@ export default function TopNav({ st }: TopNavProps) {
             </button>
             {scopeOpen && (
               <div style={{
-                position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 100, minWidth: 110,
-                background: 'var(--onyx-bg)', border: '1px solid var(--onyx-glass-edge)', borderRadius: 8,
-                boxShadow: '0 12px 32px rgba(0,0,0,0.6)', padding: 4,
+                position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 100, minWidth: 130,
+                // Same frosted panel surface as the library switcher menu above:
+                // tinted translucent fill behind the blur, gold accent edge, deep
+                // shadow + inner highlight — so the two menus read as one family.
+                background: st.translucent ? 'rgba(19, 19, 22, 0.88)' : 'var(--onyx-panel)',
+                backdropFilter: st.translucent ? 'blur(40px) saturate(120%)' : 'none',
+                WebkitBackdropFilter: st.translucent ? 'blur(40px) saturate(120%)' : 'none',
+                border: '1px solid var(--onyx-accent-edge)', borderRadius: 10,
+                boxShadow: '0 24px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05)',
+                padding: 5, overflow: 'hidden',
               }}>
                 {SCOPES.map(s => {
                   const active = s.value === st.searchScope;
                   const hover = hoverScope === s.value;
+                  // Hover = solid accent fill; current = accent text + check —
+                  // matching the library switcher's item states exactly.
                   return (
                     <button
                       key={s.value}
@@ -259,15 +268,15 @@ export default function TopNav({ st }: TopNavProps) {
                       onMouseLeave={() => setHoverScope(prev => (prev === s.value ? null : prev))}
                       style={{
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-                        width: '100%', textAlign: 'left', padding: '7px 9px', borderRadius: 6,
+                        width: '100%', textAlign: 'left', padding: '8px 11px', borderRadius: 8,
                         background: hover ? 'var(--onyx-accent)' : 'transparent',
                         color: hover ? 'var(--onyx-bg)' : (active ? 'var(--onyx-accent)' : 'var(--onyx-text)'),
-                        border: 'none', cursor: 'pointer', fontFamily: mono, fontSize: 10.5, letterSpacing: '0.04em',
-                        fontWeight: active ? 600 : 400,
+                        border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5,
+                        fontWeight: active ? 600 : 500,
                       }}
                     >
                       {s.label}
-                      {active && <Icon name="check" size={11} />}
+                      {active && <Icon name="check" size={12} />}
                     </button>
                   );
                 })}

@@ -266,7 +266,7 @@ export default function LocalLibrarySection({ st }: LocalLibrarySectionProps) {
                         onClick={() => addBooks(lib)}
                         disabled={adding === lib.id}
                         style={btn(adding === lib.id)}
-                        title="Pick audiobook files or folders to import directly into this library."
+                        title="Pick audiobook files to import directly into this library. (To add whole book folders, drop them into the Staging folder below.)"
                       >
                         {adding === lib.id ? 'Adding…' : 'Add books…'}
                       </button>

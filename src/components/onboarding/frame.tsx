@@ -4,6 +4,7 @@
 // The right column is split into a scrolling content region (header + step body)
 // and a fixed footer that the host fills with Back / progress dots / Skip.
 import type { ReactNode } from 'react';
+import Titlebar from '../chrome/Titlebar';
 import lyreIcon from '../../assets/lyre.png';
 
 // Typography constants — identical tokens to Login.tsx so the two screens match.
@@ -84,6 +85,11 @@ export default function StepFrame({ eyebrow, title, subtitle, children, footer, 
       position: 'fixed', inset: 0, display: 'flex', overflow: 'hidden',
       background: '#0b0b0e', color: '#ebe7df', fontFamily: SANS,
     }}>
+      {/* Window chrome — spans the full width and provides the drag region + the
+          minimize/close controls (the window has no native decorations). Without
+          this the onboarding window can't be moved or closed. Mirrors Login.tsx. */}
+      <Titlebar isDark minimal />
+
       {/* ── LEFT PANEL — manuscript column (brand, fixed across all steps) ── */}
       <div style={{
         position: 'relative', width: 268, flexShrink: 0, overflow: 'hidden',

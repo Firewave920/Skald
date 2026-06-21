@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-// Audiobook-focused EQ presets. Bands map to LibVLC's fixed 10-band centres:
-// 60, 170, 310, 600, 1k, 3k, 6k, 12k, 14k, 16k Hz.
+// Audiobook-focused EQ presets. Bands map to LibVLC's fixed 10-band centres
+// (ISO octave set, as reported by libvlc_audio_equalizer_get_band_frequency):
+// 31.25, 62.5, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz. (Index 0 — 31.25 Hz — is
+// hidden in the Audio settings UI; see HIDDEN_LOW_BANDS in AudioSection.tsx.)
 pub struct Preset {
     pub name: &'static str,
     pub preamp: f32,
