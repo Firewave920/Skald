@@ -1484,12 +1484,21 @@ impl AbsClient {
 
     /// POST /api/session/{id}/close — closes a single session by ID.
     /// Used to clean up ghost sessions left from previous app runs.
+    ///
+    /// CRITICAL: send an EMPTY body, never a sync payload. ABS's close handler does
+    /// `if (syncData && !Object.keys(syncData).length) syncData = null`, and
+    /// closeSession only writes media progress when syncData is non-null. A payload
+    /// like `{currentTime:0}` therefore RESETS the item's progress to 0 — verified
+    /// against server/managers/PlaybackSessionManager.js (closeSession) +
+    /// SessionController.js (close). An empty `{}` collapses to null server-side, so
+    /// the ghost session is reaped without touching the user's saved position.
     pub async fn close_session_by_id(&self, session_id: &str) -> Result<(), String> {
         let resp = self
             .http
             .post(format!("{}/api/session/{session_id}/close", self.root()))
             .header("Authorization", self.auth_header()?)
-            .json(&serde_json::json!({ "currentTime": 0, "timeListened": 0 }))
+            // Empty object → ABS treats syncData as null → progress is NOT overwritten.
+            .json(&serde_json::json!({}))
             .send()
             .await
             .map_err(|e| e.to_string())?;

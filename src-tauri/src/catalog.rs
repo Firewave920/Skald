@@ -14,9 +14,17 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::{ingest, scanner};
 use std::path::Path;
+
+// Schema DDL + one-time migrations are idempotent but only need to run once per
+// process. Re-running the full CREATE TABLE / migration batch on every open() —
+// including the per-second progress writes during local playback — is wasted work.
+// Guarded by a Mutex<bool> (rather than std::sync::Once) so a failed first init is
+// retried on the next open() instead of being permanently skipped.
+static SCHEMA_READY: Mutex<bool> = Mutex::new(false);
 
 // Managed subfolders created inside every local library root. Organized books
 // live under Audiobooks/Author/Series/Title; Staging is the intake inbox;
@@ -47,7 +55,20 @@ fn open() -> Result<Connection, String> {
         std::fs::create_dir_all(parent).map_err(|e| format!("create catalog dir: {e}"))?;
     }
     let conn = Connection::open(&path).map_err(|e| format!("open catalog: {e}"))?;
-    init_schema(&conn)?;
+    // busy_timeout is per-connection: apply it to every connection so a write held
+    // by another connection waits rather than failing immediately with SQLITE_BUSY.
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|e| format!("set busy_timeout: {e}"))?;
+    // Run the schema/migration batch exactly once per process (see SCHEMA_READY).
+    // WAL journal mode is persistent at the DB level, so it carries to later
+    // connections without re-running here.
+    {
+        let mut ready = SCHEMA_READY.lock().unwrap();
+        if !*ready {
+            init_schema(&conn)?; // on error, `ready` stays false → retried next open()
+            *ready = true;
+        }
+    }
     Ok(conn)
 }
 

@@ -311,10 +311,46 @@ impl SessionManager {
         let local_library_tick = local_library;
 
         tokio::spawn(async move {
+            // Persist resume progress at most every PERSIST_EVERY seconds — the UI
+            // tick stays at 1 Hz, but 1 Hz disk writes are needless for a resume
+            // position. The exact final position is still captured on book-switch /
+            // stop (the `pending` flush when the loop ends) and on app exit (the
+            // ExitRequested handler in lib.rs writes current_time directly).
+            const PERSIST_EVERY: u32 = 5;
+            // Write the latest position to the catalog (local-library item) or the
+            // offline queue (downloaded ABS book). Uses the CAPTURED id/pos — never a
+            // re-read of the shared player — so a flush after a book-switch still
+            // records THIS book, even though the player may already hold the next one.
+            let persist = |pos: f64, dur: f64| {
+                if local_library_tick {
+                    let _ = crate::catalog::set_progress(&item_id_tick, episode_id_tick.as_deref(), pos, dur, false);
+                } else if let Some(ref dl_dir) = dl_dir_tick {
+                    let entry = crate::downloads::OfflineProgressEntry {
+                        item_id: item_id_tick.clone(),
+                        current_time: pos,
+                        duration: dur,
+                        progress: if dur > 0.0 { pos / dur } else { 0.0 },
+                        is_finished: false,
+                        // Stable timestamp without pulling in chrono — same
+                        // precision as chrono::Utc::now().timestamp_millis().
+                        recorded_at: std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis() as i64,
+                    };
+                    let _ = crate::downloads::upsert_progress_entry(dl_dir, entry);
+                }
+            };
+
             let mut interval = tokio::time::interval(Duration::from_secs(1));
+            let mut ticks: u32 = 0;
+            // Most recent (pos, dur) not yet persisted; flushed when the loop ends so
+            // a throttled write is never lost on book-switch/stop.
+            let mut pending: Option<(f64, f64)> = None;
             loop {
                 interval.tick().await;
                 if !active_tick.load(Ordering::Relaxed) {
+                    if let Some((pos, dur)) = pending.take() { persist(pos, dur); }
                     break;
                 }
                 let (pos, dur, playing) = {
@@ -336,27 +372,12 @@ impl SessionManager {
                         "isPlaying":   playing,
                     }),
                 );
-                // Persist progress on every tick so nothing is lost if the app
-                // closes mid-session. Local-library items → SQLite catalog (never
-                // synced to a server); downloaded ABS books → offline queue (which
-                // flushes to the server on reconnect).
-                if local_library_tick {
-                    let _ = crate::catalog::set_progress(&item_id_tick, episode_id_tick.as_deref(), pos, dur, false);
-                } else if let Some(ref dl_dir) = dl_dir_tick {
-                    let entry = crate::downloads::OfflineProgressEntry {
-                        item_id: item_id_tick.clone(),
-                        current_time: pos,
-                        duration: dur,
-                        progress: if dur > 0.0 { pos / dur } else { 0.0 },
-                        is_finished: false,
-                        // Stable timestamp without pulling in chrono — same
-                        // precision as chrono::Utc::now().timestamp_millis().
-                        recorded_at: std::time::SystemTime::now()
-                            .duration_since(std::time::UNIX_EPOCH)
-                            .unwrap_or_default()
-                            .as_millis() as i64,
-                    };
-                    let _ = crate::downloads::upsert_progress_entry(dl_dir, entry);
+                // Throttled persistence: remember this tick, write on the boundary.
+                pending = Some((pos, dur));
+                ticks += 1;
+                if ticks % PERSIST_EVERY == 0 {
+                    persist(pos, dur);
+                    pending = None;
                 }
             }
         });

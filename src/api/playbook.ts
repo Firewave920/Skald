@@ -47,6 +47,13 @@ export async function playBook(
     if (libItem) st.setPlayingItem(libItem);
     log.info('playback', 'playBook', { bookId, offline: !!localFilePath, local: isLocalLibrary, override: startTimeOverride !== undefined });
     if (localFilePath) {
+      // Close any session left open from a previous ONLINE book first. play_local
+      // (below) nulls the session id, after which closeActiveSession would no-op —
+      // so without this, switching from a streamed book to a downloaded one would
+      // orphan an open session on the ABS server.
+      await closeActiveSession().catch(e =>
+        log.error('playback', 'closeActiveSession (offline switch) failed', { err: String(e) }),
+      );
       // Clear any stale online session state — there is no server session in the
       // offline path, so these flags must not mislead other components.
       st.setSessionReady(false);
@@ -192,6 +199,11 @@ export async function playEpisode(
     // its progress lives in the catalog keyed per (podcast, episode).
     const localPath = (episode as unknown as { localPath?: string }).localPath;
     if (st.activeLibrary?.source === 'local' && localPath) {
+      // Close any open online session first (see playBook) so switching to a
+      // local episode doesn't orphan a server session.
+      await closeActiveSession().catch(e =>
+        log.error('playback', 'closeActiveSession (local episode switch) failed', { err: String(e) }),
+      );
       st.setSessionReady(false);
       st.setSessionId('');
       let startTime = startTimeOverride;
