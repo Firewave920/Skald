@@ -2,8 +2,10 @@ import { useState, useEffect, useCallback, useRef, Dispatch, SetStateAction } fr
 import { listen } from '@tauri-apps/api/event';
 import type { LibraryItem, MediaProgress, ListeningStats, Bookmark as AbsBookmark, User, DownloadRecord, ServerSettings, Task, Library, PodcastEpisode } from '../api/abs';
 import { type AdvFilter, type SearchScope, EMPTY_ADV_FILTER } from '../lib/shelfFilters';
-import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, seekAudio, fetchServerSettings, getLocalLibraries, getLocalLibraryItems, getLocalLibraryProgress, scanLocalLibrary, getLocalPodcastItems } from '../api/abs';
+import { login, fetchLibraries, fetchLibraryItems, fetchItem, saveToken, fetchListeningStats, getMe, closeAllOpenSessions, getDownloads, saveLibraryCache, loadLibraryCache, flushOfflineProgress, saveChapterCache, loadChapterCache, markServerDeleted, playAudio, pauseAudio, seekAudio, downloadItem, removeDownload, fetchServerSettings, getLocalLibraries, getLocalLibraryItems, getLocalLibraryProgress, scanLocalLibrary, getLocalPodcastItems } from '../api/abs';
 import { log } from '../lib/log';
+import { skipSeconds, rewindSeconds } from '../lib/playbackPrefs';
+import { nextInSeries } from '../lib/series';
 
 export type { ServerSettings };
 
@@ -1133,6 +1135,15 @@ export function useOnyxState(): OnyxState {
   // Live position for the global keyboard-seek handler (which is registered once
   // with a stable dep array and would otherwise capture a stale position).
   const positionRef         = useRef(position);
+  // Live refs for the book-finished observer (auto-download-next / remove-on-finish),
+  // which fires from the once-registered playback-tick listener below.
+  const libraryItemsRef     = useRef(library);
+  const downloadsRef        = useRef(downloads);
+  const serverUrlRef        = useRef(serverUrl);
+  // The item id whose finish we've already acted on, so the observer fires once
+  // per finish (the tick repeats while the player sits at the end). Re-armed when
+  // the position drops back below the end (a replay / new book).
+  const finishedHandledRef  = useRef<string>('');
   useEffect(() => {
     currentBookIdRef.current    = currentBookId;
     currentEpisodeIdRef.current = currentEpisodeId;
@@ -1140,7 +1151,49 @@ export function useOnyxState(): OnyxState {
     currentLibraryIdRef.current = currentLibraryId;
     isLocalPlaybackRef.current  = isLocalPlayback;
     positionRef.current         = position;
+    libraryItemsRef.current     = library;
+    downloadsRef.current        = downloads;
+    serverUrlRef.current        = serverUrl;
   });
+
+  // Book-finished observer (Settings → Downloads → Behaviour). Fired once when a
+  // book reaches its end (see the tick listener). Episodes are excluded (the
+  // download registry is book-only). Both actions are best-effort and gated on
+  // their opt-in toggles; failures are logged, never thrown.
+  const handleBookFinished = useCallback((itemId: string) => {
+    // A4 — remove the local download after finishing, unless the user keeps them.
+    // Default is KEEP (key absent or 'true'); only 'false' triggers removal.
+    const keep = localStorage.getItem('onyx.downloads.keepAfterFinish') !== 'false';
+    if (!keep && downloadsRef.current.some(d => d.itemId === itemId)) {
+      removeDownload(itemId)
+        .then(() => {
+          setDownloads(prev => prev.filter(d => d.itemId !== itemId));
+          setToast({ message: 'Removed finished download', type: 'info' });
+          log.info('downloads', 'auto-removed finished download', { itemId });
+        })
+        .catch(e => log.warn('downloads', 'auto-remove on finish failed', { err: String(e) }));
+    }
+
+    // A3 — auto-download the next book in the series (ABS books only; needs server).
+    if (localStorage.getItem('onyx.downloads.autoNextInSeries') === 'true') {
+      const finished = libraryItemsRef.current.find(b => b.id === itemId);
+      // Local-library items have no server counterpart to download from — skip.
+      if (finished && !finished.localPath) {
+        const next = nextInSeries(finished, libraryItemsRef.current);
+        if (next && !downloadsRef.current.some(d => d.itemId === next.id)) {
+          const title = next.media?.metadata?.title ?? next.id;
+          downloadItem(serverUrlRef.current, next.id, `${title}.zip`, title, bookAuthor(next))
+            .then(() => {
+              setToast({ message: `Downloading next in series: ${title}`, type: 'success' });
+              log.info('downloads', 'auto-download next in series', { from: itemId, next: next.id });
+            })
+            .catch(e => log.warn('downloads', 'auto-download next failed', { err: String(e) }));
+        }
+      }
+    }
+  // Reads everything via refs / localStorage / stable setters → safe to memoize once.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -1150,6 +1203,21 @@ export function useOnyxState(): OnyxState {
         setPosition(payload.currentTime);
         setPlaying(payload.isPlaying);
         if (payload.duration > 0) setTickDuration(payload.duration);
+
+        // Book-finished observer (auto-download-next / remove-on-finish). The tick
+        // commits currentTime = duration on a true end (see session.rs), giving one
+        // uniform finish signal across online / downloaded / local playback. Books
+        // only (episodes are not in the download registry); fire once per finish.
+        const finishId = currentBookIdRef.current;
+        if (finishId && !currentEpisodeIdRef.current && payload.duration > 0) {
+          const atEnd = payload.currentTime >= payload.duration - 1.5;
+          if (atEnd && finishedHandledRef.current !== finishId) {
+            finishedHandledRef.current = finishId;
+            handleBookFinished(finishId);
+          } else if (!atEnd && finishedHandledRef.current === finishId) {
+            finishedHandledRef.current = ''; // re-armed (restarted / scrubbed back)
+          }
+        }
 
         // Local playback has no server `progress-updated` echo to refresh the
         // in-memory progress store, so mirror the catalog write the Rust tick is
@@ -1404,7 +1472,19 @@ export function useOnyxState(): OnyxState {
       if (e.code === 'Space') {
         e.preventDefault();
         if (playingRef.current) { pauseAudio().catch(console.error); setPlaying(false); }
-        else { playAudio().catch(console.error); setPlaying(true); }
+        else {
+          // Resume: apply the auto-rewind-on-resume preference, mirroring
+          // resumePlayback() in playbook.ts (this handler lives inside the hook
+          // and has no assembled `st` to pass, so the small logic is inlined).
+          const rw = rewindSeconds();
+          if (rw > 0 && positionRef.current > 0) {
+            const target = Math.max(0, positionRef.current - rw);
+            setPosition(target);
+            seekAudio(target).catch(console.error);
+          }
+          playAudio().catch(console.error);
+          setPlaying(true);
+        }
       }
       // Arrow seek: move the audio engine too, not just the UI. Without the
       // seekAudio call the playhead snapped back on the next playback-tick because
@@ -1412,12 +1492,12 @@ export function useOnyxState(): OnyxState {
       // on the shelf is a no-op. Read the live position from the ref (the handler
       // is registered once, so a captured `position` would be stale).
       if (e.code === 'ArrowLeft'  && !e.metaKey && !e.ctrlKey && currentBookIdRef.current) {
-        const np = Math.max(0, positionRef.current - 30);
+        const np = Math.max(0, positionRef.current - skipSeconds());
         setPosition(np);
         seekAudio(np).catch(console.error);
       }
       if (e.code === 'ArrowRight' && !e.metaKey && !e.ctrlKey && currentBookIdRef.current) {
-        const np = Math.min(bookSecs, positionRef.current + 30);
+        const np = Math.min(bookSecs, positionRef.current + skipSeconds());
         setPosition(np);
         seekAudio(np).catch(console.error);
       }

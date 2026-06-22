@@ -10,7 +10,7 @@ import { log } from '../../lib/log';
 import type { DownloadRecord } from '../../api/abs';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import Cover from '../Cover';
-import { SectionHead, Row, MONO, SERIF, Panel } from './shared';
+import { SectionHead, Row, MONO, SERIF, Panel, Toggle, useLocal } from './shared';
 
 // Subtle metadata chip (e.g. size / relative date on a download row).
 function Chip({ children }: { children: React.ReactNode }) {
@@ -19,16 +19,6 @@ function Chip({ children }: { children: React.ReactNode }) {
       fontFamily: MONO, fontSize: 10, letterSpacing: '0.03em', color: 'var(--onyx-text-dim)',
       background: 'rgba(255,255,255,0.04)', border: '1px solid var(--onyx-glass-edge)',
       borderRadius: 5, padding: '2px 7px', whiteSpace: 'nowrap',
-    }}>{children}</span>
-  );
-}
-
-// Muted outline badge used in a panel header (e.g. "Coming soon").
-function MutedBadge({ children }: { children: React.ReactNode }) {
-  return (
-    <span style={{
-      fontFamily: MONO, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase',
-      color: 'var(--onyx-text-mute)', border: '1px solid var(--onyx-line)', borderRadius: 4, padding: '3px 8px',
     }}>{children}</span>
   );
 }
@@ -53,24 +43,6 @@ function relativeTime(ms: number): string {
   const months = Math.floor(days / 30);
   if (months < 12) return `${months}mo ago`;
   return `${Math.floor(months / 12)}y ago`;
-}
-
-// Small pill badge for features that are planned but not yet implemented.
-function WipBadge() {
-  return (
-    <span style={{
-      fontFamily: MONO,
-      fontSize: 9,
-      letterSpacing: '0.08em',
-      textTransform: 'uppercase' as const,
-      color: 'var(--onyx-text-mute)',
-      border: '1px solid var(--onyx-line)',
-      borderRadius: 4,
-      padding: '2px 6px',
-    }}>
-      WIP
-    </span>
-  );
 }
 
 // Read-only path field + Open/Change buttons for a relocatable storage root.
@@ -126,6 +98,12 @@ export default function DownloadsSection({ st }: Props) {
   const [pendingClearAll, setPendingClearAll] = useState(false);
   // Active transfers keyed by itemId — populated/cleared by download-progress events.
   const [inProgress, setInProgress] = useState<Map<string, InProgressEntry>>(new Map());
+
+  // Download behaviour preferences — read by the book-finished observer in onyx.ts.
+  // autoNextInSeries defaults off; keepAfterFinish defaults ON (preserve current
+  // behaviour — nothing is auto-removed unless the user opts in by turning it off).
+  const [autoNextInSeries, setAutoNextInSeries] = useLocal('onyx.downloads.autoNextInSeries', false);
+  const [keepAfterFinish, setKeepAfterFinish]   = useLocal('onyx.downloads.keepAfterFinish', true);
 
   // Load the downloads dir path and completed downloads on mount. getDownloads
   // validates the registry against disk (pruning files deleted outside the app),
@@ -434,13 +412,13 @@ export default function DownloadsSection({ st }: Props) {
         )}
       </Panel>
 
-      {/* ── Behaviour (planned) ────────────────────────────────────────────── */}
-      <Panel label="Behaviour" action={<MutedBadge>Coming soon</MutedBadge>}>
-        <Row label="Auto-download next in series" hint="Automatically queue the next book when you finish one.">
-          <WipBadge />
+      {/* ── Behaviour ──────────────────────────────────────────────────────── */}
+      <Panel label="Behaviour">
+        <Row label="Auto-download next in series" hint="When you finish a book, automatically download the next one in its series (server libraries only).">
+          <Toggle on={autoNextInSeries} onChange={setAutoNextInSeries} />
         </Row>
-        <Row label="Keep downloads after finishing" hint="Retain the local file instead of removing it on completion.">
-          <WipBadge />
+        <Row label="Keep downloads after finishing" hint="Keep the local file when you finish a book. Turn off to free space by removing it automatically.">
+          <Toggle on={keepAfterFinish} onChange={setKeepAfterFinish} />
         </Row>
       </Panel>
 

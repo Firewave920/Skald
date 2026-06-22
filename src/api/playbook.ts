@@ -4,8 +4,9 @@
 // server position (or an explicit override), start audio, and sync the UI.
 import type { OnyxState } from '../state/onyx';
 import type { PodcastEpisode } from './abs';
-import { closeActiveSession, openPlaybackSession, playAudio, pauseAudio, setVolume as setAudioVolume, playLocalFile, getOfflineProgress, getLocalProgress } from './abs';
+import { closeActiveSession, openPlaybackSession, playAudio, pauseAudio, setVolume as setAudioVolume, playLocalFile, getOfflineProgress, getLocalProgress, seekAudio } from './abs';
 import { log } from '../lib/log';
+import { rewindSeconds } from '../lib/playbackPrefs';
 
 // Guard against concurrent playBook calls.
 // openPlaybackSession is async and slow — a second click during the await
@@ -287,8 +288,25 @@ export async function togglePlayback(st: OnyxState): Promise<void> {
     await pauseAudio().catch(console.error);
     st.setPlaying(false);
   } else {
-    // Currently paused → resume LibVLC and reflect it immediately
-    await playAudio().catch(console.error);
-    st.setPlaying(true);
+    // Currently paused → resume (applies the auto-rewind-on-resume preference)
+    await resumePlayback(st);
   }
+}
+
+// Resume the CURRENT (already-loaded) book, applying the user's
+// "auto-rewind on resume" preference (Settings → Playback). Route every
+// paused→playing transition of the current book through this so the rewind is
+// applied uniformly and exactly once. Do NOT use this to cold-start a different
+// book — playBook resolves its own resume position and must not be rewound.
+export async function resumePlayback(st: OnyxState): Promise<void> {
+  const rewind = rewindSeconds();
+  if (rewind > 0 && st.position > 0) {
+    // Step back a few seconds so the listener re-hears the lead-up to where they
+    // paused. Clamp at 0; seekAudio moves LibVLC, setPosition keeps the UI in sync.
+    const target = Math.max(0, st.position - rewind);
+    await seekAudio(target).catch(console.error);
+    st.setPosition(target);
+  }
+  await playAudio().catch(console.error);
+  st.setPlaying(true);
 }

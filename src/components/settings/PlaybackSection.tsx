@@ -12,26 +12,6 @@ export interface PlaybackSectionProps {
   st: OnyxState; // needed by ListeningSessionsSection for serverUrl and user type
 }
 
-function WipBadge() {
-  return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      padding: '2px 8px',
-      borderRadius: 999,
-      background: 'var(--onyx-accent-dim)',
-      color: 'var(--onyx-accent)',
-      fontSize: 10,
-      fontFamily: MONO,
-      letterSpacing: '0.05em',
-      whiteSpace: 'nowrap' as const,
-      marginLeft: 8,
-    }}>
-      Work in progress
-    </span>
-  );
-}
-
 export default function PlaybackSection({ st }: PlaybackSectionProps) {
   // Active subtab — persisted so the user returns to the same tab on re-open.
   const [tab, setTab] = useState<PlaybackTab>(() => {
@@ -113,21 +93,15 @@ export default function PlaybackSection({ st }: PlaybackSectionProps) {
           </Row>
 
           <Row label="Skip duration" hint="Used by the −/+ skip buttons and ←/→ keys.">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <SegGroup>
-                {SKIP.map(v => <Seg key={v} active={v === skipDur} onClick={() => setSkipDur(v)}>{v}</Seg>)}
-              </SegGroup>
-              <WipBadge />
-            </div>
+            <SegGroup>
+              {SKIP.map(v => <Seg key={v} active={v === skipDur} onClick={() => setSkipDur(v)}>{v}</Seg>)}
+            </SegGroup>
           </Row>
 
           <Row label="Auto-rewind on resume" hint="Step backwards a few seconds when you resume after a pause.">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <SegGroup>
-                {REWIND.map(v => <Seg key={v} active={v === rewindOnResume} onClick={() => setRewindOnResume(v)}>{v}</Seg>)}
-              </SegGroup>
-              <WipBadge />
-            </div>
+            <SegGroup>
+              {REWIND.map(v => <Seg key={v} active={v === rewindOnResume} onClick={() => setRewindOnResume(v)}>{v}</Seg>)}
+            </SegGroup>
           </Row>
 
           <Row label="Auto-play next chapter" hint="Continue without pausing when a chapter ends.">

@@ -28,7 +28,8 @@ import MiniPlayer from '../components/player/MiniPlayer';
 // for consistent resume-from-saved-position and UI-sync behaviour.
 // togglePlayback is used by the local playback branch to pause/resume
 // without touching session state.
-import { playBook, playEpisode, togglePlayback } from '../api/playbook';
+import { playBook, playEpisode, togglePlayback, resumePlayback } from '../api/playbook';
+import { skipSeconds } from '../lib/playbackPrefs';
 
 const SERIF = '"Source Serif 4", "Iowan Old Style", Georgia, serif';
 const MONO = "'JetBrains Mono', ui-monospace, monospace";
@@ -650,8 +651,8 @@ export default function Player({ st }: PlayerProps) {
         // Session already open and playing — just pause.
         await pauseAudio();
       } else {
-        // Session already open but paused — resume from current position.
-        await playAudio();
+        // Session already open but paused — resume (applies auto-rewind-on-resume).
+        await resumePlayback(st);
       }
     } catch (err) {
       console.error('[Player] play/pause failed:', err);
@@ -935,7 +936,7 @@ export default function Player({ st }: PlayerProps) {
               {/* Center group — primary transport controls; flex: 1 with centered content
                   ensures play/pause/skip always sit at the geometric center of the row */}
               <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 14 }}>
-                <button onClick={() => seekAudio(Math.max(0, st.position - 30)).catch(console.error)} title="Back 30s" style={isCompact ? { ...transportBtn(), width: 28, height: 28 } : transportBtn()}>
+                <button onClick={() => seekAudio(Math.max(0, st.position - skipSeconds())).catch(console.error)} title={`Back ${skipSeconds()}s`} style={isCompact ? { ...transportBtn(), width: 28, height: 28 } : transportBtn()}>
                   <Icon name="skip-back" size={isCompact ? 14 : 20} />
                 </button>
                 <button
@@ -947,7 +948,7 @@ export default function Player({ st }: PlayerProps) {
                     <Icon name={st.playing ? 'pause' : 'play'} size={isCompact ? 15 : 26} />
                   </span>
                 </button>
-                <button onClick={() => seekAudio(Math.min(st.bookSecs, st.position + 30)).catch(console.error)} title="Forward 30s" style={isCompact ? { ...transportBtn(), width: 28, height: 28 } : transportBtn()}>
+                <button onClick={() => seekAudio(Math.min(st.bookSecs, st.position + skipSeconds())).catch(console.error)} title={`Forward ${skipSeconds()}s`} style={isCompact ? { ...transportBtn(), width: 28, height: 28 } : transportBtn()}>
                   <Icon name="skip-forward" size={isCompact ? 14 : 20} />
                 </button>
               </div>

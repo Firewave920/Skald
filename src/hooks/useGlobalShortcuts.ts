@@ -2,14 +2,14 @@ import { useEffect, useRef } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import {
   registerShortcuts,
-  playAudio,
-  pauseAudio,
   seekAudio,
   setVolume as setAudioVolume,
 } from '../api/abs';
 // muteAudio/unmuteAudio share identical logic with the VolumeControl button
 // so both input paths behave the same and LibVLC is always in sync with the UI.
-import { muteAudio, unmuteAudio } from '../api/playbook';
+// togglePlayback is the canonical pause/resume (applies auto-rewind-on-resume).
+import { muteAudio, unmuteAudio, togglePlayback } from '../api/playbook';
+import { skipSeconds } from '../lib/playbackPrefs';
 import type { OnyxState } from '../state/onyx';
 import type { ShortcutBinding } from '../api/abs';
 
@@ -32,16 +32,6 @@ function loadBindings(): ShortcutBinding[] {
     if (raw) return JSON.parse(raw) as ShortcutBinding[];
   } catch { /* fall through */ }
   return DEFAULT_SHORTCUTS;
-}
-
-function readSkipSecs(): number {
-  try {
-    const raw = localStorage.getItem('onyx.playback.skip') ?? '"30s"';
-    const str = JSON.parse(raw) as string;
-    return parseInt(str.replace('s', ''), 10) || 30;
-  } catch {
-    return 30;
-  }
 }
 
 export function useGlobalShortcuts(st: OnyxState): void {
@@ -67,19 +57,16 @@ export function useGlobalShortcuts(st: OnyxState): void {
     }
 
     listen('shortcut-play_pause', () => {
-      if (stRef.current.playing) {
-        pauseAudio().catch(console.error);
-      } else {
-        playAudio().catch(console.error);
-      }
+      // Canonical toggle — pauses, or resumes with auto-rewind-on-resume applied.
+      togglePlayback(stRef.current).catch(console.error);
     }).then(fn => unlisteners.push(fn)).catch(console.error);
 
     on('shortcut-skip_forward', () => {
-      seekAudio(stRef.current.position + readSkipSecs()).catch(console.error);
+      seekAudio(stRef.current.position + skipSeconds()).catch(console.error);
     });
 
     on('shortcut-skip_back', () => {
-      seekAudio(Math.max(0, stRef.current.position - readSkipSecs())).catch(console.error);
+      seekAudio(Math.max(0, stRef.current.position - skipSeconds())).catch(console.error);
     });
 
     on('shortcut-volume_up', () => {
