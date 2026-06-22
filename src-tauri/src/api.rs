@@ -815,7 +815,7 @@ impl AbsClient {
         start_time: Option<f64>,
     ) -> Result<PlaySession, String> {
         let mut body = serde_json::json!({
-            "deviceInfo": { "clientName": "Skald", "clientVersion": "0.1.0" },
+            "deviceInfo": { "clientName": "Skald", "clientVersion": "1.0.0" },
             "mediaPlayer": "vlc",
             "supportedMimeTypes": ["audio/mpeg", "audio/ogg", "audio/aac", "audio/flac", "audio/wav"],
             "forceDirectPlay": true,
