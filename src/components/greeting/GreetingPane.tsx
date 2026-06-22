@@ -459,7 +459,15 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
 
   // ── Fetch both payloads on mount ─────────────────────────────────────────
   useEffect(() => {
-    if (!st.serverUrl) return;
+    if (!st.serverUrl) {
+      // Local-only mode has no server stats endpoints (listening-stats are
+      // ABS-only). Clear the spinners so the panes show their empty states
+      // ("No recent sessions", zeros) instead of hanging on "Loading…". The
+      // footer counts below are derived from local library state regardless.
+      setLoadingUser(false);
+      setLoadingLib(false);
+      return;
+    }
     let cancelled = false;
 
     // User stats: GET /api/me/listening-stats
