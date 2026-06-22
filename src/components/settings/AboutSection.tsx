@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { getVersion } from '@tauri-apps/api/app';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { save } from '@tauri-apps/plugin-dialog';
 import lyreIcon from '../../assets/lyre.png';
@@ -128,6 +129,11 @@ function LicensesModal({ onClose }: { onClose: () => void }) {
 
 export default function AboutSection({ st }: { st: OnyxState }) {
   const [showLicenses, setShowLicenses] = useState(false);
+  // Read the app version from Tauri (sourced from tauri.conf.json) so the About
+  // header never goes stale on a version bump. Empty until resolved (~instant);
+  // the label falls back to just "Onyx" for that first frame.
+  const [version, setVersion] = useState('');
+  useEffect(() => { getVersion().then(setVersion).catch(() => {}); }, []);
 
   // Re-run the full first-launch flow (Onboarding roadmap, Resolved decisions #4).
   // Clearing the flag re-opens <Onboarding> via the gate in App.tsx; existing
@@ -148,7 +154,7 @@ export default function AboutSection({ st }: { st: OnyxState }) {
         />
         <div>
           <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 500 }}>Skald<span style={{ color: 'var(--onyx-accent)' }}>.</span></div>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 2 }}>v1.0.0 · Onyx</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 2 }}>{version ? `v${version} · Onyx` : 'Onyx'}</div>
           <div style={{ fontSize: 12, color: 'var(--onyx-text-dim)', marginTop: 6, maxWidth: 480 }}>A native desktop client for Audiobookshelf.</div>
         </div>
       </div>
