@@ -148,14 +148,10 @@ export default function AboutSection({ st }: { st: OnyxState }) {
         />
         <div>
           <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 500 }}>Skald<span style={{ color: 'var(--onyx-accent)' }}>.</span></div>
-          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 2 }}>v0.1.0 · Onyx · alpha</div>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: 'var(--onyx-text-mute)', marginTop: 2 }}>v1.0.0 · Onyx</div>
           <div style={{ fontSize: 12, color: 'var(--onyx-text-dim)', marginTop: 6, maxWidth: 480 }}>A native desktop client for Audiobookshelf.</div>
         </div>
       </div>
-
-      <Row label="Check for updates" hint="Automatic checks run every 24h.">
-        <button style={ghostBtn}>Check now</button>
-      </Row>
 
       <Row label="Open source licenses" hint="Third-party components bundled with Skald and their licenses.">
         <button style={ghostBtn} onClick={() => setShowLicenses(true)}>View</button>
