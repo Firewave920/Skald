@@ -296,7 +296,7 @@ export default function TopNav({ st }: TopNavProps) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 11, fontWeight: 700, flexShrink: 0,
         }}
-      >{(st.user?.username?.[0] ?? '?').toUpperCase()}</button>
+      >{((st.user?.username || st.localDisplayName)?.[0] ?? '?').toUpperCase()}</button>
     </Glass>
 
     {/* Add-books flow — match each scanned book, then file it into the tree.

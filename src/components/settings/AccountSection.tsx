@@ -721,13 +721,10 @@ export default function AccountSection({ st, onSignOut }: AccountSectionProps) {
   // simplified profile: an editable display name, no account type / password.
   const hasAbs = !!st.authToken && !!st.serverUrl;
 
-  // Local-only display name, persisted in localStorage. Stands in for the ABS
-  // username (avatar + library greeting) when there is no server connected.
-  const [localName, setLocalName] = useState(() => localStorage.getItem('onyx.local.displayName') ?? '');
-  const saveLocalName = (v: string) => {
-    setLocalName(v);
-    localStorage.setItem('onyx.local.displayName', v);
-  };
+  // Local-only display name lives in shared state (persisted to localStorage) so
+  // the TopNav avatar and library greeting react to edits here immediately.
+  const localName = st.localDisplayName;
+  const saveLocalName = st.setLocalDisplayName;
 
   // Profile display values — used in the avatar block for all users.
   const displayName = hasAbs ? (st.user?.username ?? '') : localName;

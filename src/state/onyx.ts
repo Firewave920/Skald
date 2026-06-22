@@ -266,6 +266,8 @@ export interface OnyxState {
   // just like an auth token does, so non-ABS users can use local libraries.
   localMode: boolean;
   setLocalMode: (on: boolean) => void;
+  localDisplayName: string;
+  setLocalDisplayName: (name: string) => void;
   // True once the first-launch onboarding flow has been completed (or skipped).
   // Gates <Onboarding> ahead of the auth/local gate in App.tsx. Existing users
   // (an auth token or local mode already present) are treated as onboarded so the
@@ -528,6 +530,15 @@ export function useOnyxState(): OnyxState {
   const setLocalMode = useCallback((on: boolean) => {
     localStorage.setItem('skald.localMode', String(on));
     setLocalModeRaw(on);
+  }, []);
+
+  // Local-only display name (no ABS account). Persisted to localStorage and held
+  // in shared state so the Account pane, the TopNav avatar, and the library
+  // greeting all reflect edits reactively.
+  const [localDisplayName, setLocalDisplayNameRaw] = useState(() => localStorage.getItem('onyx.local.displayName') ?? '');
+  const setLocalDisplayName = useCallback((name: string) => {
+    localStorage.setItem('onyx.local.displayName', name);
+    setLocalDisplayNameRaw(name);
   }, []);
 
   // First-launch onboarding completion. When no explicit flag is stored yet, we
@@ -1521,6 +1532,7 @@ export function useOnyxState(): OnyxState {
     user, setUser,
     isAdmin: user?.type === 'admin' || user?.type === 'root',
     localMode, setLocalMode,
+    localDisplayName, setLocalDisplayName,
     onboarded, setOnboarded,
     library, libraries, activeLibrary, setActiveLibrary, libraryLoading, isOffline, updateLibraryItem, removeLibraryItem, refreshLibrary, mediaProgress, setMediaProgress, applyServerProgress, listeningStats, bookmarks, setBookmarks, currentLibraryId,
     downloads, setDownloads,
