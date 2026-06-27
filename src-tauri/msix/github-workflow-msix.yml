@@ -1,0 +1,56 @@
+# Skald MSIX build (Microsoft Store — "Path B"). TEMPLATE — not active.
+#
+# This repo has no CI pipeline yet. To enable: copy this file to
+# .github/workflows/msix.yml and add the repository secrets referenced below.
+# It produces an UNSIGNED .msix as a build artifact (Microsoft signs at Partner
+# Center ingestion) and does NOT submit — submission stays manual. It is fully
+# independent of the NSIS/GitHub-Releases path (Path A), which is unaffected.
+#
+# Secrets to add (Settings -> Secrets and variables -> Actions):
+#   MSIX_IDENTITY_NAME          e.g. 1234Publisher.Skald   (Partner Center)
+#   MSIX_PUBLISHER              e.g. CN=ABCD1234-...        (Partner Center)
+#   MSIX_PUBLISHER_DISPLAY_NAME e.g. Your Name
+
+name: Build MSIX
+
+on:
+  push:
+    tags: ['v*']          # build on release tags; adjust to taste
+  workflow_dispatch: {}    # and on-demand
+
+jobs:
+  msix:
+    runs-on: windows-latest   # ships the Windows SDK (makeappx) + MSVC toolchain
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Produce the release layout the packaging script consumes
+      # (src-tauri/target/release). `tauri build` also builds the frontend.
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tauri build
+
+      # Hand-pack the .msix with the four-part version derived from
+      # tauri.conf.json and the Partner Center identity from secrets.
+      - name: Build MSIX
+        shell: pwsh
+        run: |
+          ./src-tauri/msix/build-msix.ps1 `
+            -IdentityName "${{ secrets.MSIX_IDENTITY_NAME }}" `
+            -Publisher "${{ secrets.MSIX_PUBLISHER }}" `
+            -PublisherDisplayName "${{ secrets.MSIX_PUBLISHER_DISPLAY_NAME }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skald-msix
+          path: src-tauri/target/Skald_*.msix
+          if-no-files-found: error

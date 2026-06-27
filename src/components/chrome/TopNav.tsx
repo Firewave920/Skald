@@ -184,8 +184,10 @@ export default function TopNav({ st }: TopNavProps) {
           </div>
         );
       })()}
-        {/* Add books — local libraries only. Pick a folder → match → file. */}
-        {st.activeLibrary?.source === 'local' && (
+        {/* Add books — local *book* libraries only. Pick a folder → match → file.
+            Local podcast libraries use the "+ Subscribe" (by RSS) affordance
+            instead, so this button is hidden for them. */}
+        {st.activeLibrary?.source === 'local' && st.activeLibrary?.mediaType !== 'podcast' && (
           <button
             onClick={() => void addBooks()}
             title="Add books to this library"

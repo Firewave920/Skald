@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Skald — MSIX package manifest (Microsoft Store, "Path B").
+
+  This is a TEMPLATE. build-msix.ps1 substitutes the __TOKEN__ values at pack
+  time; do not hand-edit the tokens. The identity tokens are PLACEHOLDERS until a
+  Microsoft Partner Center account exists and the app name is reserved — Partner
+  Center assigns the real Identity/Name, Publisher, and PublisherDisplayName, and
+  rejects a package whose identity doesn't match the reservation. Pass them to the
+  script (-IdentityName / -Publisher / -PublisherDisplayName) once known.
+
+  Full-trust Win32 model: the app is a normal desktop binary (LibVLC, child
+  processes ffprobe/tone, Credential Manager) declared via runFullTrust +
+  Windows.FullTrustApplication, NOT a sandboxed UWP app.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <!-- ProcessorArchitecture is set by the script (-Architecture, default x64).
+       Version is four-part (MSIX requirement) derived from tauri.conf.json. -->
+  <Identity
+    Name="__IDENTITY_NAME__"
+    Publisher="__PUBLISHER__"
+    Version="__VERSION__"
+    ProcessorArchitecture="__ARCH__" />
+
+  <Properties>
+    <!-- Package display name MUST be one of your Partner Center *reserved* names.
+         "Skald" alone isn't reserved (it was unavailable), so this uses the
+         reserved "Skald for Audiobookshelf". The Start-tile / in-app name is set
+         separately on VisualElements below and can stay the "Skald" brand. -->
+    <DisplayName>Skald for Audiobookshelf</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <!-- 10.0.17763 (1809) is the floor for full-trust Desktop Bridge packages.
+         MaxVersionTested is advisory; bump as you validate on newer builds. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <!-- Executable matches the binary in target/release (cargo package name
+         "skald" -> skald.exe). EntryPoint=Windows.FullTrustApplication is the
+         full-trust desktop entry point. -->
+    <Application Id="Skald" Executable="skald.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Skald"
+        Description="A native desktop client for Audiobookshelf."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <!-- Only the small tile is set. The large (Square310x310Logo) and wide
+             (Wide310x150Logo) tiles are omitted: MSIX requires a Wide310x150Logo
+             whenever a Square310x310Logo is present, and tauri icon generates
+             neither. To enable the large/wide Start tiles, add a Wide310x150Logo
+             (and Square310x310Logo) PNG to icons/, copy them in build-msix.ps1,
+             and reference both here. -->
+        <uap:DefaultTile Square71x71Logo="Assets\Square71x71Logo.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Full-trust desktop app. runFullTrust is a restricted capability the Store
+         grants for Win32/Desktop Bridge packages. -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Reaching a remote ABS server over the internet. -->
+    <Capability Name="internetClient" />
+    <!-- Reaching a self-hosted ABS server on the LAN (private network). -->
+    <Capability Name="privateNetworkClientServer" />
+    <!-- NOTE: broadFileSystemAccess (a restricted capability needing Store
+         justification) is deliberately NOT declared. Add it only if Phase 3
+         testing shows offline downloads / local-library scanning break under the
+         default package-accessible locations. -->
+  </Capabilities>
+</Package>

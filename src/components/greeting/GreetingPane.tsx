@@ -440,6 +440,12 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
     hr < 12 ? 'Good morning'   :
     hr < 17 ? 'Good afternoon' :
     hr < 21 ? 'Good evening'   : 'Still up';
+
+  // Display the name with each word's leading letter capitalized — usernames
+  // (e.g. from ABS) are often all-lowercase, and "Good morning, javier" reads
+  // unpolished. Only the first letter of each word is touched, so mixed-case
+  // names (McDonald, O'Brien) are preserved.
+  const displayName = name.replace(/(^|[\s'-])(\p{L})/gu, (_, sep, ch: string) => sep + ch.toUpperCase());
   // "TUESDAY, JUNE 2" — locale-formatted and uppercased.
   const dateLine = now.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
@@ -546,7 +552,7 @@ export default function GreetingPane({ st, name }: GreetingPaneProps) {
         letterSpacing: '-0.015em',
         color: 'var(--onyx-text)',
       }}>
-        {greeting},<br />{name}<span style={{ color: 'var(--onyx-accent)' }}>.</span>
+        {greeting},<br />{displayName}<span style={{ color: 'var(--onyx-accent)' }}>.</span>
       </div>
 
       {/* Segmented toggle — Your stats / Library stats */}

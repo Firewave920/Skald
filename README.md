@@ -71,4 +71,6 @@ pnpm exec tsc --noEmit  # frontend type-check (safe while the app is running)
 
 Skald is licensed under the **GNU General Public License v3.0** — see [`LICENSE`](LICENSE).
 
-Audiobookshelf is a separate project; Skald is an independent client and is not affiliated with or endorsed by the Audiobookshelf project.
+## Acknowledgements & trademarks
+
+Skald is an **unofficial, third-party client** and is **not affiliated with, sponsored by, or endorsed by the Audiobookshelf project.** "Audiobookshelf" is the name of that separate project, used here only to describe compatibility, in accordance with its [third-party app guidelines](https://audiobookshelf.org/docs/faq/app/). Skald uses its own name and icon and does not use the Audiobookshelf logo.

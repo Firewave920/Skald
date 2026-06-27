@@ -50,3 +50,9 @@ Mrmory/
 # to the repo root so it does NOT match src/assets/fonts/ (Git is case-
 # insensitive on Windows, so an unanchored "Fonts/" would catch "fonts/" too).
 /Fonts/
+Product Screenshots/Hero Shot.png
+Product Screenshots/Player Shot.png
+Product Screenshots/Podcasts Library.png
+Product Screenshots/Settings - Appearance.png
+Product Screenshots/Settings Audio.png
+src/assets/lyre-original.png
