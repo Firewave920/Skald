@@ -52,10 +52,16 @@
          "skald" -> skald.exe). EntryPoint=Windows.FullTrustApplication is the
          full-trust desktop entry point. -->
     <Application Id="Skald" Executable="skald.exe" EntryPoint="Windows.FullTrustApplication">
+      <!-- BackgroundColor is the plate behind the Start tile (Onyx bg, on-brand).
+           The taskbar / Alt-Tab / title-bar icon is instead rendered PLATE-FREE
+           from the Square44x44Logo.targetsize-*_altform-unplated.png variants that
+           build-msix.ps1 generates and indexes into resources.pri. Without those,
+           Windows plates the transparent icon with the system accent colour — the
+           blue square seen on Store installs. -->
       <uap:VisualElements
         DisplayName="Skald"
         Description="A native desktop client for Audiobookshelf."
-        BackgroundColor="transparent"
+        BackgroundColor="#0B0B0E"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
         <!-- Only the small tile is set. The large (Square310x310Logo) and wide

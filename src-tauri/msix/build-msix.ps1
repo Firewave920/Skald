@@ -79,6 +79,7 @@ $IconsDir  = Join-Path $SrcTauri 'icons'
 $Template  = Join-Path $MsixDir 'AppxManifest.xml'
 $Staging   = Join-Path $SrcTauri 'target\msix-layout'
 $OutputDir = Join-Path $SrcTauri 'target'
+$RepoRoot  = Split-Path $SrcTauri -Parent
 
 # -- Locate a Windows SDK tool (makeappx / signtool) --------------------------
 # Prefer PATH, else the newest x64 build under the Windows Kits bin dirs.
@@ -97,11 +98,34 @@ function Find-SdkTool([string]$Name) {
   return $null
 }
 
+# -- High-quality PNG downscale that preserves alpha (for generated tile assets)
+Add-Type -AssemblyName System.Drawing
+function New-ScaledPng([System.Drawing.Bitmap]$Source, [int]$Size, [string]$OutPath) {
+  $bmp = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+  $g = [System.Drawing.Graphics]::FromImage($bmp)
+  # SourceCopy keeps the source's own alpha rather than blending its translucent
+  # edges against the transparent-black background (which would dark-halo the icon).
+  $g.CompositingMode   = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+  $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+  $g.SmoothingMode     = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+  $g.PixelOffsetMode   = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+  $g.DrawImage($Source, 0, 0, $Size, $Size)
+  $g.Dispose()
+  $bmp.Save($OutPath, [System.Drawing.Imaging.ImageFormat]::Png)
+  $bmp.Dispose()
+}
+
 $MakeAppx = Find-SdkTool 'makeappx.exe'
 if ($null -eq $MakeAppx) {
   throw "makeappx.exe not found. Install the Windows 10/11 SDK (ships with the VS Build Tools 'Desktop development with C++' workload)."
 }
 Write-Host "makeappx: $MakeAppx"
+
+$MakePri = Find-SdkTool 'makepri.exe'
+if ($null -eq $MakePri) {
+  throw "makepri.exe not found. Install the Windows 10/11 SDK (same component as makeappx.exe)."
+}
+Write-Host "makepri:  $MakePri"
 
 # -- Derive the four-part version (MSIX requires four parts) -------------------
 if ([string]::IsNullOrWhiteSpace($Version)) {
@@ -146,6 +170,24 @@ foreach ($a in $Assets) {
   Copy-Item $src (Join-Path $AssetDir $a) -Force
 }
 
+# Unplated taskbar / Alt-Tab / title-bar icons. Windows "plates" packaged-app
+# icons; with no altform-unplated variant it paints the transparent icon on the
+# system accent colour (the blue square on Store installs). Generate the target-
+# size set — plated AND unplated — from the transparent master icon so MRM
+# (resources.pri, below) can hand the shell a plate-free, transparent icon.
+$IconSource = Join-Path $RepoRoot 'app-icon.png'
+if (-not (Test-Path $IconSource)) { $IconSource = Join-Path $IconsDir 'icon.png' }
+if (-not (Test-Path $IconSource)) {
+  throw "No transparent master icon (app-icon.png or icons/icon.png) to generate tile assets."
+}
+$srcBmp = New-Object System.Drawing.Bitmap $IconSource
+try {
+  foreach ($sz in 16, 24, 32, 48, 256) {
+    New-ScaledPng $srcBmp $sz (Join-Path $AssetDir "Square44x44Logo.targetsize-$sz.png")
+    New-ScaledPng $srcBmp $sz (Join-Path $AssetDir "Square44x44Logo.targetsize-${sz}_altform-unplated.png")
+  }
+} finally { $srcBmp.Dispose() }
+
 # -- Substitute manifest tokens -----------------------------------------------
 $manifest = Get-Content $Template -Raw
 $manifest = $manifest.Replace('__IDENTITY_NAME__', $IdentityName).
@@ -159,6 +201,18 @@ Set-Content -Path (Join-Path $Staging 'AppxManifest.xml') -Value $manifest -Enco
 if ($IdentityName -like '*Placeholder*' -or $Publisher -like '*Placeholder*') {
   Write-Warning "Using PLACEHOLDER identity. The package will pack and install locally (with -Sign) but Partner Center will reject it until you pass the reserved -IdentityName / -Publisher / -PublisherDisplayName."
 }
+
+# -- Build the resource index (resources.pri) ---------------------------------
+# MRM resolves the qualified asset filenames (scale / targetsize / altform) ONLY
+# when a resources.pri indexes them. Without this the unplated icons above are
+# invisible to the shell and the taskbar reverts to the accent-plated icon.
+# The config lives outside $Staging so it isn't packed into the .msix.
+$PriConfig = Join-Path $OutputDir 'priconfig.xml'
+Write-Host "Indexing resources -> resources.pri"
+& $MakePri createconfig /cf $PriConfig /dq en-US /o
+if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed (exit $LASTEXITCODE)." }
+& $MakePri new /pr $Staging /cf $PriConfig /mn (Join-Path $Staging 'AppxManifest.xml') /of (Join-Path $Staging 'resources.pri') /o
+if ($LASTEXITCODE -ne 0) { throw "makepri new failed (exit $LASTEXITCODE)." }
 
 # -- Pack ---------------------------------------------------------------------
 $OutFile = Join-Path $OutputDir "Skald_${Version}_${Architecture}.msix"
